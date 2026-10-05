@@ -22,6 +22,7 @@ const els = {
   searchInput: $("searchInput"),
   resultList: $("resultList"),
   rosterTabs: $("rosterTabs"),
+  quickLists: $("quickLists"),
   rosterTitle: $("rosterTitle"),
   emptyDetail: $("emptyDetail"),
   detailCard: $("detailCard"),
@@ -33,6 +34,7 @@ const els = {
   voiceStatus: $("voiceStatus"),
   voiceHint: $("voiceHint"),
   modeToggle: $("modeToggle"),
+  focusButton: $("focusButton"),
   pinButton: $("pinButton"),
   toast: $("toast")
 };
@@ -55,7 +57,8 @@ function bindEvents() {
   els.clearRoster.addEventListener("click", clearRosters);
   els.searchInput.addEventListener("input", () => renderResults(els.searchInput.value));
   els.modeToggle.addEventListener("click", toggleMode);
-  els.pinButton.addEventListener("click", () => toast("Pinned items are coming during beta."));
+  els.focusButton?.addEventListener("click", toggleFocusMode);
+  els.pinButton.addEventListener("click", toggleSelectedPin);
   ["pointerdown", "touchstart"].forEach(evt => els.talkButton.addEventListener(evt, startListening, {passive:false}));
   ["pointerup", "pointercancel", "pointerleave", "touchend"].forEach(evt => els.talkButton.addEventListener(evt, stopListening, {passive:false}));
 }
@@ -471,6 +474,7 @@ function renderAll() {
   renderTabs();
   const roster = state.rosters[state.activeRoster];
   els.rosterTitle.textContent = roster.name;
+  renderQuickLists();
   renderResults(els.searchInput.value);
 }
 
@@ -527,6 +531,8 @@ function scoreMatch(unit, q) {
 
 function selectUnit(unit) {
   state.selected = unit;
+  rememberRecentUnit(unit);
+  renderQuickLists();
   renderResults(els.searchInput.value);
   renderDetail(unit);
 }
@@ -542,6 +548,7 @@ function renderDetail(unit) {
   els.detailCard.classList.remove("hidden");
   els.detailType.textContent = (unit.type || "Unit").toUpperCase();
   els.detailName.textContent = unit.name;
+  updatePinButton();
 
   els.detailStats.innerHTML = unit.stats.length
     ? unit.stats.map(stat => `
@@ -552,6 +559,8 @@ function renderDetail(unit) {
     : '<div class="stat"><span>PROFILE</span><strong>Imported</strong></div>';
 
   const sections = [];
+  const woundTracker = renderWoundTracker(unit);
+  if (woundTracker) sections.push(woundTracker);
 
   if (unit.profiles?.length) {
     sections.push(renderWeaponSection(unit.profiles));
@@ -563,6 +572,7 @@ function renderDetail(unit) {
 
   els.detailSections.innerHTML = sections.join("") ||
     '<section class="detail-section"><div class="empty-section">No additional profiles were found in this entry.</div></section>';
+  bindDynamicDetailControls();
 }
 
 function renderWeaponSection(profiles) {
@@ -809,12 +819,246 @@ function setListening(active) {
 function chooseBestVoiceMatch(transcript) {
   const roster = state.rosters[state.activeRoster];
   if (!roster) return;
+
   const q = normalize(transcript);
-  const ranked = roster.units.map(unit => ({unit, score:scoreMatch(unit,q)})).sort((a,b) => b.score-a.score);
+
+  if (handleVoiceCommand(q)) {
+    els.voiceHint.textContent = transcript;
+    return;
+  }
+
+  const ranked = roster.units
+    .map(unit => ({unit, score:scoreMatch(unit,q)}))
+    .sort((a,b) => b.score-a.score);
+
   if (ranked[0]?.score > 0) {
     selectUnit(ranked[0].unit);
     els.voiceHint.textContent = ranked[0].unit.name;
   }
+}
+
+function handleVoiceCommand(q) {
+  if (!state.selected && !/next|previous|back/.test(q)) return false;
+
+  if (/^(show )?(weapons?|guns?|melee|ranged)$/.test(q)) {
+    scrollToDetailSection(".weapon-section");
+    return true;
+  }
+  if (/^(show )?(abilities|ability|rules?)$/.test(q)) {
+    scrollToDetailSection(".ability-section");
+    return true;
+  }
+  if (/^(show )?(wounds?|health)$/.test(q)) {
+    scrollToDetailSection(".wound-tracker");
+    return true;
+  }
+  if (/^(next|next unit)$/.test(q)) {
+    moveSelection(1);
+    return true;
+  }
+  if (/^(previous|previous unit|back)$/.test(q)) {
+    moveSelection(-1);
+    return true;
+  }
+  if (/^(pin|pin unit|favourite|favorite)$/.test(q)) {
+    toggleSelectedPin();
+    return true;
+  }
+  if (/^(reset wounds|full health|heal fully)$/.test(q)) {
+    resetWounds();
+    return true;
+  }
+
+  const damageMatch = q.match(/^(?:take|lose|minus) (\d+) wounds?$/);
+  if (damageMatch) {
+    adjustWounds(-Number(damageMatch[1]));
+    return true;
+  }
+
+  const healMatch = q.match(/^(?:heal|gain|plus) (\d+) wounds?$/);
+  if (healMatch) {
+    adjustWounds(Number(healMatch[1]));
+    return true;
+  }
+
+  return false;
+}
+
+function scrollToDetailSection(selector) {
+  document.querySelector(selector)?.scrollIntoView({behavior:"smooth", block:"start"});
+}
+
+function moveSelection(direction) {
+  const roster = state.rosters[state.activeRoster];
+  if (!roster?.units?.length) return;
+  const current = state.selected ? roster.units.findIndex(u => u.id === state.selected.id) : -1;
+  const next = current < 0 ? 0 : (current + direction + roster.units.length) % roster.units.length;
+  selectUnit(roster.units[next]);
+}
+
+function rosterStorageKey(prefix) {
+  const roster = state.rosters[state.activeRoster];
+  return roster ? "tv_" + prefix + "_" + roster.id : null;
+}
+
+function getStoredIds(prefix) {
+  const key = rosterStorageKey(prefix);
+  if (!key) return [];
+  try { return JSON.parse(localStorage.getItem(key) || "[]"); }
+  catch { return []; }
+}
+
+function setStoredIds(prefix, ids) {
+  const key = rosterStorageKey(prefix);
+  if (!key) return;
+  try { localStorage.setItem(key, JSON.stringify(ids)); } catch {}
+}
+
+function rememberRecentUnit(unit) {
+  const ids = getStoredIds("recent").filter(id => id !== unit.id);
+  ids.unshift(unit.id);
+  setStoredIds("recent", ids.slice(0, 5));
+}
+
+function toggleSelectedPin() {
+  if (!state.selected) return;
+  const ids = getStoredIds("pins");
+  const index = ids.indexOf(state.selected.id);
+  if (index >= 0) {
+    ids.splice(index, 1);
+    toast("Unpinned " + state.selected.name);
+  } else {
+    ids.unshift(state.selected.id);
+    toast("Pinned " + state.selected.name);
+  }
+  setStoredIds("pins", ids.slice(0, 12));
+  updatePinButton();
+  renderQuickLists();
+}
+
+function updatePinButton() {
+  if (!els.pinButton) return;
+  if (!state.selected) {
+    els.pinButton.textContent = "Pin";
+    return;
+  }
+  const pinned = getStoredIds("pins").includes(state.selected.id);
+  els.pinButton.textContent = pinned ? "Pinned" : "Pin";
+  els.pinButton.classList.toggle("active", pinned);
+}
+
+function renderQuickLists() {
+  if (!els.quickLists) return;
+  const roster = state.rosters[state.activeRoster];
+  if (!roster) {
+    els.quickLists.innerHTML = "";
+    return;
+  }
+
+  const byId = new Map(roster.units.map(unit => [unit.id, unit]));
+  const pinned = getStoredIds("pins").map(id => byId.get(id)).filter(Boolean);
+  const recent = getStoredIds("recent").map(id => byId.get(id)).filter(Boolean);
+
+  const group = (label, units, icon) => units.length ? `
+    <div class="quick-group">
+      <span class="quick-label">${icon} ${label}</span>
+      <div class="quick-chips">
+        ${units.map(unit => `<button class="quick-chip" data-unit-id="${escapeHtml(unit.id)}">${escapeHtml(unit.name)}</button>`).join("")}
+      </div>
+    </div>` : "";
+
+  els.quickLists.innerHTML =
+    group("Pinned", pinned, "★") +
+    group("Recent", recent, "↺");
+
+  els.quickLists.querySelectorAll("[data-unit-id]").forEach(button => {
+    button.addEventListener("click", () => {
+      const unit = byId.get(button.dataset.unitId);
+      if (unit) selectUnit(unit);
+    });
+  });
+}
+
+function getMaxWounds(unit) {
+  const stat = (unit?.stats || []).find(s => normalize(s.label) === "w");
+  const value = stat ? parseInt(String(stat.value), 10) : NaN;
+  return Number.isFinite(value) && value > 0 ? value : null;
+}
+
+function woundKey(unit = state.selected) {
+  const roster = state.rosters[state.activeRoster];
+  return roster && unit ? "tv_wounds_" + roster.id + "_" + unit.id : null;
+}
+
+function getCurrentWounds(unit = state.selected) {
+  const max = getMaxWounds(unit);
+  if (!max) return null;
+  const key = woundKey(unit);
+  const stored = key ? Number(localStorage.getItem(key)) : NaN;
+  return Number.isFinite(stored) ? Math.max(0, Math.min(max, stored)) : max;
+}
+
+function setCurrentWounds(value, unit = state.selected) {
+  const max = getMaxWounds(unit);
+  const key = woundKey(unit);
+  if (!max || !key) return;
+  localStorage.setItem(key, String(Math.max(0, Math.min(max, value))));
+}
+
+function adjustWounds(delta) {
+  if (!state.selected) return;
+  const current = getCurrentWounds();
+  if (current == null) {
+    toast("No numeric Wounds stat found for this unit.");
+    return;
+  }
+  setCurrentWounds(current + delta);
+  renderDetail(state.selected);
+}
+
+function resetWounds() {
+  if (!state.selected) return;
+  const max = getMaxWounds(state.selected);
+  if (!max) return;
+  setCurrentWounds(max);
+  renderDetail(state.selected);
+  toast("Wounds reset");
+}
+
+function renderWoundTracker(unit) {
+  const max = getMaxWounds(unit);
+  if (!max) return "";
+  const current = getCurrentWounds(unit);
+
+  return `
+    <section class="detail-section wound-tracker">
+      <div class="section-heading-row">
+        <h3>Wounds</h3>
+        <span class="section-count">${current}/${max}</span>
+      </div>
+      <div class="wound-controls">
+        <button type="button" class="wound-button" data-wound-change="-1">−</button>
+        <div class="wound-value">
+          <strong>${current}</strong>
+          <span>/ ${max}</span>
+        </div>
+        <button type="button" class="wound-button" data-wound-change="1">+</button>
+        <button type="button" class="ghost-button compact wound-reset">Reset</button>
+      </div>
+    </section>`;
+}
+
+function bindDynamicDetailControls() {
+  document.querySelectorAll("[data-wound-change]").forEach(button => {
+    button.addEventListener("click", () => adjustWounds(Number(button.dataset.woundChange)));
+  });
+  document.querySelector(".wound-reset")?.addEventListener("click", resetWounds);
+}
+
+function toggleFocusMode() {
+  document.body.classList.toggle("focus-mode");
+  const active = document.body.classList.contains("focus-mode");
+  if (els.focusButton) els.focusButton.textContent = active ? "Exit focus" : "Focus";
 }
 
 function toggleMode() {
