@@ -36,13 +36,17 @@ const els = {
   modeToggle: $("modeToggle"),
   focusButton: $("focusButton"),
   pinButton: $("pinButton"),
-  toast: $("toast")
+  toast: $("toast"),
+  firstRunModal: $("firstRunModal"),
+  firstRunFullData: $("firstRunFullData"),
+  firstRunImport: $("firstRunImport")
 };
 
 function boot() {
   applyMode();
   restore();
   bindEvents();
+  showFirstRunIfNeeded();
   setupSpeech();
   if ("serviceWorker" in navigator) navigator.serviceWorker.register("./sw.js").catch(() => {});
 }
@@ -59,8 +63,27 @@ function bindEvents() {
   els.modeToggle.addEventListener("click", toggleMode);
   els.focusButton?.addEventListener("click", toggleFocusMode);
   els.pinButton.addEventListener("click", toggleSelectedPin);
+  els.firstRunFullData?.addEventListener("click", () => {
+    dismissFirstRun();
+    loadFull40kData();
+  });
+  els.firstRunImport?.addEventListener("click", () => {
+    dismissFirstRun();
+    els.fileInput.click();
+  });
   ["pointerdown", "touchstart"].forEach(evt => els.talkButton.addEventListener(evt, startListening, {passive:false}));
   ["pointerup", "pointercancel", "pointerleave", "touchend"].forEach(evt => els.talkButton.addEventListener(evt, stopListening, {passive:false}));
+}
+
+function showFirstRunIfNeeded() {
+  if (!els.firstRunModal) return;
+  const seen = localStorage.getItem("tv_first_run_seen") === "1";
+  if (!seen) els.firstRunModal.classList.remove("hidden");
+}
+
+function dismissFirstRun() {
+  localStorage.setItem("tv_first_run_seen", "1");
+  els.firstRunModal?.classList.add("hidden");
 }
 
 async function handleFiles(event) {
