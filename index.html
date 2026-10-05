@@ -22,6 +22,7 @@
       </a>
       <div class="top-actions">
         <button id="modeToggle" class="ghost-button" type="button">Table mode</button>
+        <button id="fullDataButton" class="ghost-button" type="button">Load full 40K data</button>
         <button id="importButton" class="primary-button" type="button">Import roster</button>
         <input id="fileInput" type="file" accept=".json,.rosz,.ros,.txt,application/json,text/plain" hidden />
       </div>
@@ -34,9 +35,10 @@
         <p class="lede">Import a roster you already own, then search it by voice or text while you play. Your roster stays on this device.</p>
         <div class="welcome-actions">
           <button id="welcomeImport" class="primary-button large" type="button">Import roster</button>
+          <button id="fullDataWelcome" class="ghost-button large" type="button">Load full 40K data</button>
           <button id="loadDemo" class="ghost-button large" type="button">Try demo data</button>
         </div>
-        <p class="fine-print">Tabletop Voice does not include game rules or army data. Imported content is supplied by you.</p>
+        <p class="fine-print">Import your own New Recruit roster, or optionally pull the current community-maintained 40K dataset from BSData. Remote data is fetched on demand and is not bundled with Tabletop Voice.</p>
       </section>
 
       <section id="workspace" class="workspace hidden" aria-live="polite">
