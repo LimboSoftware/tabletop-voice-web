@@ -16,6 +16,8 @@ const els = {
   importButton: $("importButton"),
   welcomeImport: $("welcomeImport"),
   loadDemo: $("loadDemo"),
+  fullDataButton: $("fullDataButton"),
+  fullDataWelcome: $("fullDataWelcome"),
   clearRoster: $("clearRoster"),
   searchInput: $("searchInput"),
   resultList: $("resultList"),
@@ -48,6 +50,8 @@ function bindEvents() {
   els.welcomeImport.addEventListener("click", () => els.fileInput.click());
   els.fileInput.addEventListener("change", handleFiles);
   els.loadDemo.addEventListener("click", loadDemo);
+  els.fullDataButton?.addEventListener("click", loadFull40kData);
+  els.fullDataWelcome?.addEventListener("click", loadFull40kData);
   els.clearRoster.addEventListener("click", clearRosters);
   els.searchInput.addEventListener("input", () => renderResults(els.searchInput.value));
   els.modeToggle.addEventListener("click", toggleMode);
@@ -80,126 +84,350 @@ async function handleFiles(event) {
 function parseRosterFile(text, fileName) {
   let raw;
   try { raw = JSON.parse(text); }
-  catch {
-    throw new Error("This beta currently expects a JSON roster export.");
+  catch { throw new Error("New Recruit JSON export expected."); }
+
+  if (!raw?.roster) {
+    throw new Error("This does not look like a New Recruit roster JSON export.");
   }
 
-  const root = raw.roster || raw;
-  const name = root.name || raw.name || fileName.replace(/\.[^.]+$/, "");
-  const faction = pickString(root, ["faction", "factionName", "catalogueName"]) || "Imported roster";
-  const units = extractEntities(root);
+  const root = raw.roster;
+  const units = [];
+  for (const force of root.forces || []) {
+    for (const selection of force.selections || []) {
+      const unit = parseNewRecruitSelection(selection);
+      if (unit) units.push(unit);
+    }
+  }
 
-  if (!units.length) throw new Error("No unit-like entries found.");
+  if (!units.length) throw new Error("No units were found in this New Recruit roster.");
 
+  const pts = (root.costs || []).find(c => String(c.name).toLowerCase() === "pts")?.value;
   return {
     id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random()),
-    name,
-    faction,
-    units,
+    name: root.name || fileName.replace(/\.[^.]+$/, ""),
+    faction: (root.forces || [])[0]?.catalogueName || (root.forces || [])[0]?.name || "New Recruit roster",
+    source: "new-recruit",
+    points: pts ?? null,
+    units: dedupeBy(units, u => u.id || u.name),
     importedAt: Date.now()
   };
 }
 
-function extractEntities(root) {
+function parseNewRecruitSelection(selection) {
+  const allProfiles = collectProfiles(selection);
+  const unitProfiles = allProfiles.filter(p => p?.typeName === "Unit");
+  if (!unitProfiles.length) return null;
+
+  const primaryUnitProfile =
+    unitProfiles.find(p => normalize(p.name) === normalize(selection.name)) ||
+    unitProfiles[0];
+
+  const weapons = allProfiles
+    .filter(p => p?.typeName === "Ranged Weapons" || p?.typeName === "Melee Weapons")
+    .map(profileToDisplay);
+
+  const abilityProfiles = allProfiles
+    .filter(p => p?.typeName === "Abilities")
+    .map(p => ({
+      name: p.name || "Ability",
+      text: characteristicValue((p.characteristics || [])[0])
+    }));
+
+  const rules = collectRules(selection);
+  const abilities = dedupeBy([...abilityProfiles, ...rules], r => normalize(r.name + "|" + r.text));
+
+  const stats = (primaryUnitProfile.characteristics || []).map(c => ({
+    label: c.name || "",
+    value: characteristicValue(c)
+  })).filter(x => x.label && x.value !== "");
+
+  const pts = (selection.costs || []).find(c => String(c.name).toLowerCase() === "pts")?.value;
+  if (pts != null) stats.push({label:"Pts", value:String(pts)});
+
+  const name = selection.name || primaryUnitProfile.name || "Unit";
+  return {
+    id: selection.id || primaryUnitProfile.id || name,
+    name,
+    type: "Unit",
+    stats,
+    rules: abilities,
+    profiles: dedupeBy(weapons, p => normalize(p.name + "|" + JSON.stringify(p.values))),
+    searchText: normalize([
+      name,
+      primaryUnitProfile.name,
+      weapons.map(w => w.name),
+      abilities.map(a => a.name)
+    ].flat().join(" "))
+  };
+}
+
+function collectProfiles(node) {
   const found = [];
-  const seen = new Set();
-
-  function walk(node, path = []) {
-    if (!node || typeof node !== "object") return;
-    const name = pickString(node, ["name", "customName"]);
-    const type = pickString(node, ["type", "selectionType", "kind", "category"]);
-    const stats = extractStats(node);
-    const rules = extractRules(node);
-    const profiles = extractProfiles(node);
-
-    const looksLikeUnit =
-      name &&
-      name.length < 120 &&
-      (/(unit|model|character|vehicle|monster)/i.test(type || "") || stats.length >= 3 || profiles.length > 0);
-
-    if (looksLikeUnit) {
-      const key = `${path.join("/")}/${name}`;
-      if (!seen.has(key)) {
-        seen.add(key);
-        found.push({
-          id: key,
-          name,
-          type: type || "Unit",
-          stats,
-          rules,
-          profiles,
-          searchText: normalize([name, type, rules.map(r => r.name), profiles.map(p => p.name)].flat().join(" "))
-        });
-      }
+  function walk(value) {
+    if (!value || typeof value !== "object") return;
+    if (Array.isArray(value)) {
+      value.forEach(walk);
+      return;
     }
-
-    if (Array.isArray(node)) {
-      node.forEach((item, i) => walk(item, path.concat(i)));
-    } else {
-      Object.entries(node).forEach(([k, v]) => {
-        if (typeof v === "object") walk(v, path.concat(k));
+    if (Array.isArray(value.profiles)) {
+      value.profiles.forEach(p => {
+        if (p && typeof p === "object") found.push(p);
       });
     }
+    if (Array.isArray(value.selections)) value.selections.forEach(walk);
   }
-
-  walk(root);
-  return found.sort((a,b) => a.name.localeCompare(b.name));
+  walk(node);
+  return found;
 }
 
-function extractStats(node) {
-  const stats = [];
-  const candidates = [node.characteristics, node.stats, node.profile, node.attributes].filter(Boolean);
+function collectRules(node) {
+  const found = [];
+  function walk(value) {
+    if (!value || typeof value !== "object") return;
+    if (Array.isArray(value)) {
+      value.forEach(walk);
+      return;
+    }
+    for (const rule of value.rules || []) {
+      if (!rule || rule.hidden) continue;
+      found.push({name: rule.name || "Rule", text: rule.description || ""});
+    }
+    if (Array.isArray(value.selections)) value.selections.forEach(walk);
+  }
+  walk(node);
+  return dedupeBy(found, r => normalize(r.name + "|" + r.text));
+}
 
-  for (const candidate of candidates) {
-    if (Array.isArray(candidate)) {
-      for (const item of candidate) {
-        if (item && typeof item === "object") {
-          const label = pickString(item, ["name", "typeName", "label"]);
-          const value = pickString(item, ["value", "characteristic", "current"]);
-          if (label && value && String(value).length < 30) stats.push({label, value});
+function characteristicValue(characteristic) {
+  if (!characteristic || typeof characteristic !== "object") return "";
+  const value = characteristic.$text ?? characteristic.value ?? characteristic.characteristic ?? "";
+  return value == null ? "" : String(value);
+}
+
+function profileToDisplay(profile) {
+  return {
+    name: profile.name || "Profile",
+    type: profile.typeName || "",
+    values: (profile.characteristics || []).map(c => ({
+      label: c.name || "",
+      value: characteristicValue(c)
+    })).filter(x => x.label)
+  };
+}
+
+const BSDATA_REPO = "BSData/wh40k-11e";
+const BSDATA_BRANCH = "main";
+const BSDATA_API = "https://api.github.com/repos/" + BSDATA_REPO + "/contents?ref=" + BSDATA_BRANCH;
+const BSDATA_RAW = "https://raw.githubusercontent.com/" + BSDATA_REPO + "/refs/heads/" + BSDATA_BRANCH + "/";
+
+async function loadFull40kData() {
+  if (state.fullDataLoading) return;
+  state.fullDataLoading = true;
+  setFullDataButtons(true, "Loading 40K…");
+  toast("Fetching current 40K data from BSData…");
+
+  try {
+    const listingResponse = await fetch(BSDATA_API, {headers:{"Accept":"application/vnd.github+json"}});
+    if (!listingResponse.ok) throw new Error("Could not read the BSData file list.");
+    const listing = await listingResponse.json();
+
+    const files = listing
+      .filter(item => item.type === "file" && item.name.endsWith(".json"))
+      .filter(item => !item.name.startsWith("Library - Astartes Heresy Legends"))
+      .map(item => item.name);
+
+    const documents = [];
+    const concurrency = 6;
+    let cursor = 0;
+
+    async function worker() {
+      while (cursor < files.length) {
+        const index = cursor++;
+        const name = files[index];
+        setFullDataButtons(true, "Loading " + (index + 1) + "/" + files.length);
+        const url = BSDATA_RAW + encodeURIComponent(name).replace(/%2F/g, "/");
+        const response = await fetch(url);
+        if (!response.ok) continue;
+        try {
+          documents.push({name, data: await response.json()});
+        } catch (error) {
+          console.warn("Skipped invalid BSData JSON", name, error);
         }
       }
-    } else if (candidate && typeof candidate === "object") {
-      for (const [label, value] of Object.entries(candidate)) {
-        if (["string","number"].includes(typeof value) && String(value).length < 30) stats.push({label, value:String(value)});
+    }
+
+    await Promise.all(Array.from({length:concurrency}, worker));
+    const roster = buildFull40kRoster(documents);
+
+    if (!roster.units.length) throw new Error("The BSData files downloaded but no unit entries could be resolved.");
+
+    const oldIndex = state.rosters.findIndex(r => r.id === "bsdata-full-40k");
+    if (oldIndex >= 0) state.rosters.splice(oldIndex, 1);
+
+    state.rosters.push(roster);
+    state.activeRoster = state.rosters.length - 1;
+    state.selected = null;
+    els.searchInput.value = "";
+    persist();
+    renderAll();
+    renderDetail(null);
+    toast("Loaded " + roster.units.length + " 40K unit entries");
+  } catch (error) {
+    console.error(error);
+    toast(error.message || "Could not load full 40K data.");
+  } finally {
+    state.fullDataLoading = false;
+    setFullDataButtons(false, "Load full 40K data");
+  }
+}
+
+function setFullDataButtons(disabled, label) {
+  [els.fullDataButton, els.fullDataWelcome].filter(Boolean).forEach(button => {
+    button.disabled = disabled;
+    button.textContent = label;
+  });
+}
+
+function buildFull40kRoster(documents) {
+  const idMap = new Map();
+  const links = [];
+
+  function indexNode(node, sourceName) {
+    if (!node || typeof node !== "object") return;
+    if (Array.isArray(node)) {
+      node.forEach(item => indexNode(item, sourceName));
+      return;
+    }
+
+    if (node.id) {
+      if (!idMap.has(node.id)) idMap.set(node.id, {node, sourceName});
+    }
+
+    if (Array.isArray(node.entryLinks)) {
+      for (const link of node.entryLinks) {
+        if (link?.type === "selectionEntry" && link?.targetId && link?.name) {
+          links.push({link, sourceName});
+        }
       }
+    }
+
+    for (const [key, value] of Object.entries(node)) {
+      if (key === "entryLinks") continue;
+      if (value && typeof value === "object") indexNode(value, sourceName);
     }
   }
 
-  return dedupeBy(stats, x => `${x.label}:${x.value}`).slice(0, 12);
-}
+  documents.forEach(doc => indexNode(doc.data, doc.name));
 
-function extractRules(node) {
-  const rules = [];
-  const candidates = [node.rules, node.abilities, node.specialRules].filter(Boolean);
-  for (const candidate of candidates) {
-    const list = Array.isArray(candidate) ? candidate : Object.values(candidate || {});
-    for (const item of list) {
-      if (typeof item === "string") rules.push({name:item, text:""});
-      else if (item && typeof item === "object") {
-        const name = pickString(item, ["name", "title", "typeName"]);
-        const text = pickString(item, ["description", "text", "value"]);
-        if (name || text) rules.push({name:name || "Ability", text:text || ""});
-      }
+  const units = [];
+  for (const {link, sourceName} of links) {
+    if (shouldSkipCatalogueEntry(link.name)) continue;
+    const resolved = idMap.get(link.targetId)?.node;
+    if (!resolved) {
+      units.push({
+        id:"bsdata-link-" + link.id,
+        name:link.name,
+        type:"Reference",
+        stats:costStats(link),
+        rules:[],
+        profiles:[],
+        searchText:normalize(link.name + " " + sourceName)
+      });
+      continue;
     }
+
+    const unit = parseBSDataUnit(resolved, link.name, sourceName, link);
+    if (unit) units.push(unit);
   }
-  return dedupeBy(rules, x => `${x.name}:${x.text}`).slice(0, 30);
+
+  const bestByName = new Map();
+  for (const unit of units) {
+    const key = normalize(unit.name);
+    const existing = bestByName.get(key);
+    const quality = unit.stats.length * 3 + unit.profiles.length * 2 + unit.rules.length;
+    const oldQuality = existing ? existing.stats.length * 3 + existing.profiles.length * 2 + existing.rules.length : -1;
+    if (!existing || quality > oldQuality) bestByName.set(key, unit);
+  }
+
+  return {
+    id:"bsdata-full-40k",
+    name:"Full 40K Data",
+    faction:"BSData / Warhammer 40,000 11th Edition",
+    source:"bsdata",
+    importedAt:Date.now(),
+    units:[...bestByName.values()].sort((a,b) => a.name.localeCompare(b.name))
+  };
 }
 
-function extractProfiles(node) {
+function parseBSDataUnit(node, displayName, sourceName, link) {
   const profiles = [];
-  const candidates = [node.profiles, node.weapons, node.profileInfo].filter(Boolean);
-  for (const candidate of candidates) {
-    const list = Array.isArray(candidate) ? candidate : Object.values(candidate || {});
-    for (const item of list) {
-      if (!item || typeof item !== "object") continue;
-      const name = pickString(item, ["name", "typeName", "title"]);
-      if (!name) continue;
-      const values = extractStats(item);
-      profiles.push({name, values});
+  const rules = [];
+
+  function walk(value) {
+    if (!value || typeof value !== "object") return;
+    if (Array.isArray(value)) {
+      value.forEach(walk);
+      return;
+    }
+
+    if (value.typeName && Array.isArray(value.characteristics)) profiles.push(value);
+
+    for (const rule of value.rules || []) {
+      if (!rule || rule.hidden) continue;
+      rules.push({name:rule.name || "Rule", text:rule.description || ""});
+    }
+
+    for (const child of Object.values(value)) {
+      if (child && typeof child === "object") walk(child);
     }
   }
-  return dedupeBy(profiles, x => x.name).slice(0, 40);
+  walk(node);
+
+  const unitProfile =
+    profiles.find(p => p.typeName === "Unit" && normalize(p.name) === normalize(displayName)) ||
+    profiles.find(p => p.typeName === "Unit");
+
+  const stats = unitProfile
+    ? (unitProfile.characteristics || []).map(c => ({label:c.name || "", value:characteristicValue(c)})).filter(x => x.label)
+    : costStats(node).length ? costStats(node) : costStats(link);
+
+  const weaponProfiles = profiles
+    .filter(p => p.typeName === "Ranged Weapons" || p.typeName === "Melee Weapons")
+    .map(profileToDisplay);
+
+  const abilityProfiles = profiles
+    .filter(p => p.typeName === "Abilities")
+    .map(p => ({name:p.name || "Ability", text:characteristicValue((p.characteristics || [])[0])}));
+
+  const allRules = dedupeBy([...abilityProfiles, ...rules], r => normalize(r.name + "|" + r.text));
+
+  return {
+    id:"bsdata-" + (node.id || link.id || normalize(displayName)),
+    name:displayName || unitProfile?.name || node.name || "Unit",
+    type:"Unit",
+    source:sourceName,
+    stats,
+    profiles:dedupeBy(weaponProfiles, p => normalize(p.name + "|" + JSON.stringify(p.values))),
+    rules:allRules,
+    searchText:normalize([
+      displayName,
+      node.name,
+      sourceName.replace(/\.json$/,""),
+      weaponProfiles.map(w => w.name),
+      allRules.map(r => r.name)
+    ].flat().join(" "))
+  };
+}
+
+function costStats(node) {
+  const costs = node?.costs || [];
+  return costs
+    .filter(c => c?.name && c?.value != null)
+    .map(c => ({label:c.name, value:String(c.value)}));
+}
+
+function shouldSkipCatalogueEntry(name) {
+  return /^(detachment|battle size|force disposition|show\/hide options|battle focus|army roster)$/i.test(String(name).trim());
 }
 
 function pickString(obj, keys) {
