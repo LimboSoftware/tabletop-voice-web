@@ -683,3 +683,124 @@ body.focus-mode .detail-panel {
     min-height: 0;
   }
 }
+
+
+/* Active army search selector */
+.active-armies-wrap {
+  padding: 12px 14px 10px;
+  border-bottom: 1px solid var(--line);
+  background: rgba(9,13,18,.35);
+}
+
+.active-armies-heading {
+  margin-bottom: 9px;
+}
+
+.active-armies-heading span {
+  display: block;
+  color: var(--accent);
+  font-size: .68rem;
+  font-weight: 800;
+  letter-spacing: .1em;
+}
+
+.active-armies-heading small {
+  display: block;
+  color: #7f8da0;
+  font-size: .72rem;
+  margin-top: 3px;
+}
+
+.active-army-selector {
+  display: grid;
+  gap: 7px;
+}
+
+.active-army-toggle {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 28px minmax(0,1fr);
+  gap: 9px;
+  align-items: center;
+  text-align: left;
+  border: 1px solid #2a3546;
+  background: #121922;
+  color: #dce5ee;
+  border-radius: 12px;
+  padding: 9px 10px;
+}
+
+.active-army-toggle:hover {
+  border-color: #3b4b61;
+}
+
+.active-army-toggle.active {
+  border-color: #3a7187;
+  background: rgba(56,189,248,.07);
+}
+
+.active-army-toggle.current {
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.active-army-check {
+  width: 23px;
+  height: 23px;
+  display: grid;
+  place-items: center;
+  border: 1px solid #3a475a;
+  border-radius: 7px;
+  color: #03151c;
+  background: #0e141c;
+  font-size: .8rem;
+  font-weight: 900;
+}
+
+.active-army-toggle.active .active-army-check {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.active-army-copy {
+  min-width: 0;
+}
+
+.active-army-copy strong,
+.active-army-copy small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.active-army-copy strong {
+  font-size: .84rem;
+}
+
+.active-army-copy small {
+  margin-top: 2px;
+  color: #7f8da0;
+  font-size: .68rem;
+}
+
+.result-roster {
+  color: var(--accent);
+}
+
+@media (max-width: 760px) {
+  .active-armies-wrap {
+    padding: 10px 12px 8px;
+  }
+
+  .active-army-selector {
+    display: flex;
+    overflow-x: auto;
+    gap: 8px;
+  }
+
+  .active-army-toggle {
+    min-width: 190px;
+    width: auto;
+    flex: 0 0 auto;
+  }
+}
