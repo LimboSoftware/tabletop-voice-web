@@ -77,6 +77,26 @@
             <div id="activeArmySelector" class="active-army-selector"></div>
           </div>
 
+          <div class="match-tools">
+            <div class="match-tool">
+              <span>ROUND</span>
+              <div class="stepper">
+                <button id="roundDown" type="button">−</button>
+                <strong id="roundValue">1</strong>
+                <button id="roundUp" type="button">+</button>
+              </div>
+            </div>
+            <div class="match-tool">
+              <span>CP</span>
+              <div class="stepper">
+                <button id="cpDown" type="button">−</button>
+                <strong id="cpValue">0</strong>
+                <button id="cpUp" type="button">+</button>
+              </div>
+            </div>
+            <button id="turnToggle" class="turn-toggle" type="button">Your turn</button>
+          </div>
+
           <div id="rosterTabs" class="roster-tabs"></div>
           <div id="quickLists" class="quick-lists"></div>
 
@@ -102,6 +122,7 @@
                 <h2 id="detailName"></h2>
               </div>
               <div class="detail-actions">
+                <button id="destroyedButton" class="ghost-button compact" type="button">Destroyed</button>
                 <button id="focusButton" class="ghost-button compact" type="button">Focus</button>
                 <button id="pinButton" class="ghost-button compact" type="button">Pin</button>
               </div>
