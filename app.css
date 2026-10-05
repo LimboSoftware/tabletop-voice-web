@@ -423,3 +423,162 @@ body.table-mode .profile-row { font-size: 1.08rem; }
     gap: 6px;
   }
 }
+
+
+/* Gameplay tools */
+.detail-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.ghost-button.active {
+  border-color: var(--accent-strong);
+  background: rgba(56,189,248,.12);
+  color: var(--accent);
+}
+
+.quick-lists {
+  padding: 10px 14px 4px;
+  display: grid;
+  gap: 10px;
+  border-bottom: 1px solid var(--line);
+}
+
+.quick-lists:empty {
+  display: none;
+}
+
+.quick-group {
+  min-width: 0;
+}
+
+.quick-label {
+  display: block;
+  margin-bottom: 6px;
+  color: #8290a2;
+  font-size: .68rem;
+  font-weight: 800;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.quick-chips {
+  display: flex;
+  gap: 7px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.quick-chip {
+  flex: 0 0 auto;
+  max-width: 190px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border: 1px solid #2a3546;
+  background: #131a23;
+  color: #dce5ee;
+  border-radius: 999px;
+  padding: 7px 10px;
+  font-size: .77rem;
+}
+
+.quick-chip:hover {
+  border-color: var(--accent-strong);
+  color: var(--accent);
+}
+
+.wound-tracker {
+  border-bottom: 1px solid var(--line);
+}
+
+.wound-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.wound-button {
+  width: 48px;
+  height: 48px;
+  border: 1px solid #334155;
+  border-radius: 14px;
+  background: #17202b;
+  color: #f5f7fa;
+  font-size: 1.7rem;
+  line-height: 1;
+}
+
+.wound-button:hover {
+  border-color: var(--accent-strong);
+  background: #1c2835;
+}
+
+.wound-value {
+  min-width: 108px;
+  text-align: center;
+  border: 1px solid #2c394b;
+  background: #10161e;
+  border-radius: 14px;
+  padding: 9px 14px;
+}
+
+.wound-value strong {
+  font-size: 1.7rem;
+}
+
+.wound-value span {
+  color: #8190a2;
+  margin-left: 4px;
+}
+
+body.focus-mode .roster-panel,
+body.focus-mode .topbar {
+  display: none;
+}
+
+body.focus-mode main {
+  width: min(1500px, 100%);
+  padding-top: 18px;
+}
+
+body.focus-mode .workspace {
+  display: block;
+}
+
+body.focus-mode .detail-panel {
+  max-width: 1180px;
+  margin: 0 auto;
+}
+
+@media (max-width: 760px) {
+  .quick-lists {
+    padding: 8px 12px 2px;
+  }
+
+  .quick-chip {
+    max-width: 160px;
+  }
+
+  .detail-actions {
+    gap: 6px;
+  }
+
+  .detail-actions .ghost-button {
+    padding: 8px 10px;
+  }
+
+  .wound-controls {
+    gap: 8px;
+  }
+
+  .wound-button {
+    width: 44px;
+    height: 44px;
+  }
+
+  .wound-value {
+    min-width: 92px;
+  }
+}
