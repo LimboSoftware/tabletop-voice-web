@@ -15,13 +15,13 @@ const els = {
   fileInput: $("fileInput"),
   importButton: $("importButton"),
   welcomeImport: $("welcomeImport"),
-  loadDemo: $("loadDemo"),
   fullDataButton: $("fullDataButton"),
   fullDataWelcome: $("fullDataWelcome"),
   clearRoster: $("clearRoster"),
   searchInput: $("searchInput"),
   resultList: $("resultList"),
   rosterTabs: $("rosterTabs"),
+  activeArmySelector: $("activeArmySelector"),
   quickLists: $("quickLists"),
   rosterTitle: $("rosterTitle"),
   emptyDetail: $("emptyDetail"),
@@ -55,7 +55,6 @@ function bindEvents() {
   els.importButton.addEventListener("click", () => els.fileInput.click());
   els.welcomeImport.addEventListener("click", () => els.fileInput.click());
   els.fileInput.addEventListener("change", handleFiles);
-  els.loadDemo.addEventListener("click", loadDemo);
   els.fullDataButton?.addEventListener("click", loadFull40kData);
   els.fullDataWelcome?.addEventListener("click", loadFull40kData);
   els.clearRoster.addEventListener("click", clearRosters);
@@ -95,6 +94,7 @@ async function handleFiles(event) {
       const roster = parseRosterFile(text, file.name);
       state.rosters.push(roster);
       state.activeRoster = state.rosters.length - 1;
+      setRosterSearchActive(roster.id, true);
       persist();
       showApp();
       renderAll();
@@ -292,6 +292,7 @@ async function loadFull40kData() {
 
     state.rosters.push(roster);
     state.activeRoster = state.rosters.length - 1;
+    setRosterSearchActive(roster.id, true);
     state.selected = null;
     els.searchInput.value = "";
     persist();
@@ -494,11 +495,85 @@ function hideApp() {
 function renderAll() {
   if (!state.rosters.length) return hideApp();
   showApp();
+  renderActiveArmySelector();
   renderTabs();
   const roster = state.rosters[state.activeRoster];
   els.rosterTitle.textContent = roster.name;
   renderQuickLists();
   renderResults(els.searchInput.value);
+}
+
+function getActiveSearchRosterIds() {
+  try {
+    const stored = JSON.parse(localStorage.getItem("tv_active_search_rosters") || "[]");
+    if (Array.isArray(stored)) {
+      const valid = stored.filter(id => state.rosters.some(r => r.id === id));
+      if (valid.length) return valid;
+    }
+  } catch {}
+  const fallback = state.rosters[state.activeRoster]?.id;
+  return fallback ? [fallback] : [];
+}
+
+function setRosterSearchActive(rosterId, active) {
+  const current = new Set(getActiveSearchRosterIds());
+  if (active) current.add(rosterId);
+  else current.delete(rosterId);
+
+  if (!current.size && state.rosters.length) {
+    current.add(state.rosters[state.activeRoster]?.id || state.rosters[0].id);
+  }
+
+  try {
+    localStorage.setItem("tv_active_search_rosters", JSON.stringify([...current]));
+  } catch {}
+}
+
+function getSearchRosters() {
+  const ids = new Set(getActiveSearchRosterIds());
+  const selected = state.rosters
+    .map((roster, rosterIndex) => ({roster, rosterIndex}))
+    .filter(item => ids.has(item.roster.id));
+
+  if (selected.length) return selected;
+  const roster = state.rosters[state.activeRoster];
+  return roster ? [{roster, rosterIndex:state.activeRoster}] : [];
+}
+
+function renderActiveArmySelector() {
+  if (!els.activeArmySelector) return;
+  if (!state.rosters.length) {
+    els.activeArmySelector.innerHTML = "";
+    return;
+  }
+
+  const activeIds = new Set(getActiveSearchRosterIds());
+
+  els.activeArmySelector.innerHTML = state.rosters.map((roster, index) => {
+    const active = activeIds.has(roster.id);
+    const current = index === state.activeRoster;
+    return `
+      <button type="button"
+        class="active-army-toggle${active ? " active" : ""}${current ? " current" : ""}"
+        data-roster-id="${escapeHtml(roster.id)}"
+        aria-pressed="${active ? "true" : "false"}">
+        <span class="active-army-check">${active ? "✓" : ""}</span>
+        <span class="active-army-copy">
+          <strong>${escapeHtml(roster.name)}</strong>
+          <small>${escapeHtml(roster.faction || roster.source || "Roster")}</small>
+        </span>
+      </button>`;
+  }).join("");
+
+  els.activeArmySelector.querySelectorAll("[data-roster-id]").forEach(button => {
+    button.addEventListener("click", () => {
+      const id = button.dataset.rosterId;
+      const isActive = getActiveSearchRosterIds().includes(id);
+      setRosterSearchActive(id, !isActive);
+      renderActiveArmySelector();
+      renderResults(els.searchInput.value);
+    });
+  });
 }
 
 function renderTabs() {
@@ -520,26 +595,44 @@ function renderTabs() {
 }
 
 function renderResults(query = "") {
-  const roster = state.rosters[state.activeRoster];
-  if (!roster) return;
+  const currentRoster = state.rosters[state.activeRoster];
+  if (!currentRoster) return;
+
   const q = normalize(query);
-  let units = roster.units;
+  let results = [];
+
   if (q) {
-    units = units
-      .map(unit => ({unit, score: scoreMatch(unit, q)}))
-      .filter(x => x.score > 0)
-      .sort((a,b) => b.score - a.score)
-      .map(x => x.unit);
+    for (const {roster, rosterIndex} of getSearchRosters()) {
+      for (const unit of roster.units || []) {
+        const score = scoreMatch(unit, q);
+        if (score > 0) results.push({unit, roster, rosterIndex, score});
+      }
+    }
+    results.sort((a,b) => b.score - a.score || a.unit.name.localeCompare(b.unit.name));
+  } else {
+    results = (currentRoster.units || []).map(unit => ({
+      unit,
+      roster: currentRoster,
+      rosterIndex: state.activeRoster,
+      score: 0
+    }));
   }
+
   els.resultList.innerHTML = "";
-  units.slice(0, 80).forEach(unit => {
+  results.slice(0, 100).forEach(result => {
+    const {unit, roster, rosterIndex} = result;
     const button = document.createElement("button");
-    button.className = "result-item" + (state.selected?.id === unit.id ? " active" : "");
-    button.innerHTML = `<strong>${escapeHtml(unit.name)}</strong><small>${escapeHtml(unit.type || "Unit")}</small>`;
-    button.addEventListener("click", () => selectUnit(unit));
+    button.className = "result-item" + (state.selected?.id === unit.id && state.activeRoster === rosterIndex ? " active" : "");
+    button.innerHTML = `
+      <strong>${escapeHtml(unit.name)}</strong>
+      <small>${escapeHtml(unit.type || "Unit")}${q && getSearchRosters().length > 1 ? ` · <span class="result-roster">${escapeHtml(roster.name)}</span>` : ""}</small>`;
+    button.addEventListener("click", () => selectUnitFromRoster(unit, rosterIndex));
     els.resultList.appendChild(button);
   });
-  if (!units.length) els.resultList.innerHTML = '<div class="result-item"><small>No matching roster entries.</small></div>';
+
+  if (!results.length) {
+    els.resultList.innerHTML = '<div class="result-item"><small>No matching entries in the selected armies.</small></div>';
+  }
 }
 
 function scoreMatch(unit, q) {
@@ -558,6 +651,18 @@ function selectUnit(unit) {
   renderQuickLists();
   renderResults(els.searchInput.value);
   renderDetail(unit);
+}
+
+function selectUnitFromRoster(unit, rosterIndex) {
+  if (Number.isInteger(rosterIndex) && rosterIndex >= 0 && rosterIndex < state.rosters.length) {
+    state.activeRoster = rosterIndex;
+  }
+  selectUnit(unit);
+  renderActiveArmySelector();
+  renderTabs();
+  const roster = state.rosters[state.activeRoster];
+  if (roster) els.rosterTitle.textContent = roster.name;
+  persist();
 }
 
 function renderDetail(unit) {
@@ -840,8 +945,7 @@ function setListening(active) {
 }
 
 function chooseBestVoiceMatch(transcript) {
-  const roster = state.rosters[state.activeRoster];
-  if (!roster) return;
+  if (!state.rosters.length) return;
 
   const q = normalize(transcript);
 
@@ -850,12 +954,16 @@ function chooseBestVoiceMatch(transcript) {
     return;
   }
 
-  const ranked = roster.units
-    .map(unit => ({unit, score:scoreMatch(unit,q)}))
-    .sort((a,b) => b.score-a.score);
+  const ranked = [];
+  for (const {roster, rosterIndex} of getSearchRosters()) {
+    for (const unit of roster.units || []) {
+      ranked.push({unit, rosterIndex, score:scoreMatch(unit,q)});
+    }
+  }
+  ranked.sort((a,b) => b.score-a.score);
 
   if (ranked[0]?.score > 0) {
-    selectUnit(ranked[0].unit);
+    selectUnitFromRoster(ranked[0].unit, ranked[0].rosterIndex);
     els.voiceHint.textContent = ranked[0].unit.name;
   }
 }
@@ -1127,38 +1235,6 @@ function clearRosters() {
   localStorage.removeItem("tv_activeRoster");
   hideApp();
   toast("Imported rosters removed");
-}
-
-function loadDemo() {
-  state.rosters = [{
-    id:"demo",
-    name:"Demo Strike Force",
-    faction:"Demo",
-    importedAt:Date.now(),
-    units:[
-      {
-        id:"demo/ember-guard", name:"Ember Guard", type:"Unit",
-        stats:[{label:"M",value:'6"'},{label:"T",value:"4"},{label:"Sv",value:"3+"},{label:"W",value:"2"},{label:"Ld",value:"6+"},{label:"OC",value:"1"}],
-        profiles:[
-          {name:"Thermal carbine",values:[{label:"Range",value:'18"'},{label:"A",value:"2"},{label:"BS",value:"3+"},{label:"S",value:"8"},{label:"AP",value:"-3"}]},
-          {name:"Combat blade",values:[{label:"Range",value:"Melee"},{label:"A",value:"3"},{label:"WS",value:"3+"},{label:"S",value:"4"},{label:"AP",value:"-1"}]}
-        ],
-        rules:[{name:"Target lock",text:"Demo rule text used only to show the interface."}],
-        searchText:"ember guard thermal carbine combat blade target lock"
-      },
-      {
-        id:"demo/iron-beast", name:"Iron Beast", type:"Vehicle",
-        stats:[{label:"M",value:'10"'},{label:"T",value:"10"},{label:"Sv",value:"2+"},{label:"W",value:"12"},{label:"Ld",value:"6+"},{label:"OC",value:"3"}],
-        profiles:[{name:"Heavy accelerator",values:[{label:"Range",value:'36"'},{label:"A",value:"4"},{label:"BS",value:"3+"},{label:"S",value:"10"},{label:"AP",value:"-2"}]}],
-        rules:[{name:"Armoured hull",text:"Demo ability."}],
-        searchText:"iron beast vehicle heavy accelerator armoured hull"
-      }
-    ]
-  }];
-  state.activeRoster = 0;
-  persist();
-  renderAll();
-  toast("Loaded demo roster");
 }
 
 function toast(message) {
