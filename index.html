@@ -55,7 +55,6 @@
         <div class="welcome-actions">
           <button id="welcomeImport" class="primary-button large" type="button">Import roster</button>
           <button id="fullDataWelcome" class="ghost-button large" type="button">Load full 40K data</button>
-          <button id="loadDemo" class="ghost-button large" type="button">Try demo data</button>
         </div>
         <p class="fine-print">Import your own New Recruit roster, or optionally pull the current community-maintained 40K dataset from BSData. Remote data is fetched on demand and is not bundled with Tabletop Voice.</p>
       </section>
@@ -68,6 +67,14 @@
               <h2 id="rosterTitle">My roster</h2>
             </div>
             <button id="clearRoster" class="icon-button" type="button" aria-label="Clear imported roster">×</button>
+          </div>
+
+          <div class="active-armies-wrap">
+            <div class="active-armies-heading">
+              <span>SEARCH ARMIES</span>
+              <small>Select which loaded armies voice/text search should use</small>
+            </div>
+            <div id="activeArmySelector" class="active-army-selector"></div>
           </div>
 
           <div id="rosterTabs" class="roster-tabs"></div>
