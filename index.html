@@ -146,6 +146,22 @@
       </button>
     </footer>
 
+
+    <div id="voiceShortlistModal" class="voice-shortlist-modal hidden" role="dialog" aria-modal="true" aria-labelledby="voiceShortlistTitle">
+      <div class="voice-shortlist-card">
+        <div class="voice-shortlist-heading">
+          <div>
+            <p class="eyebrow">VOICE MATCH</p>
+            <h2 id="voiceShortlistTitle">Which one did you mean?</h2>
+            <p id="voiceHeardText" class="voice-heard"></p>
+          </div>
+          <button id="voiceShortlistClose" class="icon-button" type="button" aria-label="Close voice suggestions">×</button>
+        </div>
+        <div id="voiceShortlistResults" class="voice-shortlist-results"></div>
+        <p class="voice-shortlist-help">Choose a unit, or use <strong>Teach</strong> to remember what the speech recogniser heard as an alias for that unit next time.</p>
+      </div>
+    </div>
+
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
   </div>
 
