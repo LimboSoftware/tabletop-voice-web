@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <meta name="theme-color" content="#111318" />
+  <meta name="description" content="Tabletop Voice — voice-first roster reference for tabletop games." />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" href="icon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="app.css" />
+  <title>Tabletop Voice</title>
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <a class="brand" href="#" aria-label="Tabletop Voice home">
+        <span class="brand-mark">TV</span>
+        <span>
+          <strong>Tabletop Voice</strong>
+          <small>Public Beta</small>
+        </span>
+      </a>
+      <div class="top-actions">
+        <button id="modeToggle" class="ghost-button" type="button">Table mode</button>
+        <button id="importButton" class="primary-button" type="button">Import roster</button>
+        <input id="fileInput" type="file" accept=".json,.rosz,.ros,.txt,application/json,text/plain" hidden />
+      </div>
+    </header>
+
+    <main>
+      <section id="welcome" class="welcome-card">
+        <p class="eyebrow">FREE PUBLIC BETA</p>
+        <h1>Your roster.<br />Just ask.</h1>
+        <p class="lede">Import a roster you already own, then search it by voice or text while you play. Your roster stays on this device.</p>
+        <div class="welcome-actions">
+          <button id="welcomeImport" class="primary-button large" type="button">Import roster</button>
+          <button id="loadDemo" class="ghost-button large" type="button">Try demo data</button>
+        </div>
+        <p class="fine-print">Tabletop Voice does not include game rules or army data. Imported content is supplied by you.</p>
+      </section>
+
+      <section id="workspace" class="workspace hidden" aria-live="polite">
+        <aside class="roster-panel">
+          <div class="panel-heading">
+            <div>
+              <span class="section-label">ROSTERS</span>
+              <h2 id="rosterTitle">My roster</h2>
+            </div>
+            <button id="clearRoster" class="icon-button" type="button" aria-label="Clear imported roster">×</button>
+          </div>
+
+          <div id="rosterTabs" class="roster-tabs"></div>
+
+          <label class="search-wrap" for="searchInput">
+            <span>Search units, weapons or abilities</span>
+            <input id="searchInput" type="search" autocomplete="off" placeholder="e.g. Fire Dragons" />
+          </label>
+
+          <div id="resultList" class="result-list"></div>
+        </aside>
+
+        <section class="detail-panel">
+          <div id="emptyDetail" class="empty-detail">
+            <div class="mic-orb small">🎙</div>
+            <h2>Ask for a unit</h2>
+            <p>Hold the button below and say a unit, weapon or ability name.</p>
+          </div>
+
+          <article id="detailCard" class="detail-card hidden">
+            <div class="detail-heading">
+              <div>
+                <span id="detailType" class="section-label">UNIT</span>
+                <h2 id="detailName"></h2>
+              </div>
+              <button id="pinButton" class="ghost-button compact" type="button">Pin</button>
+            </div>
+            <div id="detailStats" class="stat-grid"></div>
+            <div id="detailSections" class="detail-sections"></div>
+          </article>
+        </section>
+      </section>
+    </main>
+
+    <footer id="voiceDock" class="voice-dock hidden">
+      <div class="voice-status">
+        <strong id="voiceStatus">Ready</strong>
+        <span id="voiceHint">Hold to talk</span>
+      </div>
+      <button id="talkButton" class="talk-button" type="button" aria-label="Hold to talk">
+        <span class="mic-icon">🎙</span>
+        <span>HOLD TO ASK</span>
+      </button>
+    </footer>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
