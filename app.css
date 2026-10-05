@@ -109,3 +109,290 @@ body.table-mode .profile-row { font-size: 1.08rem; }
   .voice-status { display: none; }
   .talk-button { width: 100%; min-width: 0; font-size: .95rem; padding: 18px; }
 }
+
+
+/* Datacard readability refresh */
+.detail-card {
+  min-height: 100%;
+  max-width: 1180px;
+  margin: 0 auto;
+}
+
+.detail-heading {
+  padding: 26px 28px;
+}
+
+.detail-heading h2 {
+  font-size: clamp(1.8rem, 2.4vw, 3rem);
+  line-height: 1.05;
+  letter-spacing: -.025em;
+}
+
+.stat-grid {
+  gap: 12px;
+  padding: 20px 28px 22px;
+}
+
+.stat {
+  min-width: 0;
+  padding: 16px 18px;
+  border-radius: 16px;
+  background: #141b24;
+  border-color: #2a3546;
+}
+
+.stat span {
+  font-size: .72rem;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  color: #9fb0c4;
+}
+
+.stat strong {
+  font-size: 1.65rem;
+  line-height: 1.05;
+  margin-top: 8px;
+}
+
+.detail-sections {
+  padding: 0 28px 34px;
+}
+
+.detail-section {
+  padding: 26px 0;
+}
+
+.section-heading-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.section-heading-row h3 {
+  margin: 0;
+  font-size: 1.25rem;
+  letter-spacing: -.01em;
+}
+
+.section-count {
+  display: inline-grid;
+  place-items: center;
+  min-width: 25px;
+  height: 25px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: #1c2633;
+  border: 1px solid #2c394b;
+  color: #9fb0c4;
+  font-size: .72rem;
+  font-weight: 800;
+}
+
+.weapon-table-wrap {
+  overflow-x: auto;
+  border: 1px solid #293444;
+  border-radius: 16px;
+  background: #111720;
+}
+
+.weapon-table {
+  width: 100%;
+  min-width: 830px;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.weapon-table th,
+.weapon-table td {
+  padding: 13px 14px;
+  text-align: center;
+  border-bottom: 1px solid #25303f;
+}
+
+.weapon-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #17202b;
+  color: #9fb0c4;
+  font-size: .7rem;
+  line-height: 1;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  font-weight: 800;
+}
+
+.weapon-table th:first-child,
+.weapon-table td:first-child {
+  text-align: left;
+}
+
+.weapon-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.weapon-table tbody tr:nth-child(even) td {
+  background: rgba(255,255,255,.018);
+}
+
+.weapon-table tbody tr:hover td {
+  background: rgba(142,227,255,.045);
+}
+
+.weapon-name-column {
+  min-width: 230px;
+}
+
+.weapon-name {
+  min-width: 230px;
+}
+
+.weapon-name strong {
+  display: block;
+  color: #f4f7fa;
+  font-size: .98rem;
+  line-height: 1.25;
+}
+
+.weapon-name small {
+  display: block;
+  color: #75869a;
+  font-size: .68rem;
+  margin-top: 4px;
+  text-transform: uppercase;
+  letter-spacing: .07em;
+}
+
+.weapon-table td {
+  color: #e2e8ef;
+  font-size: .95rem;
+}
+
+.weapon-keywords {
+  min-width: 180px;
+  max-width: 270px;
+  color: #b8c6d6 !important;
+  text-align: left !important;
+  line-height: 1.45;
+}
+
+.ability-list {
+  display: grid;
+  gap: 12px;
+  max-width: 980px;
+}
+
+.ability-card {
+  padding: 17px 19px 18px;
+  border: 1px solid #293444;
+  border-radius: 15px;
+  background: #131a23;
+}
+
+.ability-card h4 {
+  margin: 0 0 8px;
+  color: #f3f6f9;
+  font-size: 1rem;
+  line-height: 1.25;
+  letter-spacing: -.01em;
+}
+
+.ability-text {
+  color: #c7d1dc;
+  font-size: .94rem;
+  line-height: 1.65;
+  max-width: 900px;
+}
+
+.ability-text p {
+  margin: 0 0 10px;
+}
+
+.ability-text p:last-child {
+  margin-bottom: 0;
+}
+
+.ability-text ul {
+  margin: 8px 0 0;
+  padding-left: 20px;
+}
+
+.ability-text li + li {
+  margin-top: 6px;
+}
+
+.empty-section {
+  color: var(--muted);
+  border: 1px dashed #2b3645;
+  border-radius: 14px;
+  padding: 18px;
+}
+
+@media (max-width: 760px) {
+  .detail-heading {
+    padding: 18px 16px;
+  }
+
+  .detail-heading h2 {
+    font-size: 1.65rem;
+  }
+
+  .stat-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+    padding: 12px 14px 16px;
+  }
+
+  .stat {
+    padding: 12px 10px;
+    text-align: center;
+  }
+
+  .stat strong {
+    font-size: 1.35rem;
+  }
+
+  .detail-sections {
+    padding: 0 14px 22px;
+    overflow: visible;
+  }
+
+  .detail-section {
+    padding: 20px 0;
+  }
+
+  .weapon-table-wrap {
+    margin-right: -14px;
+    border-radius: 14px 0 0 14px;
+    border-right: 0;
+  }
+
+  .weapon-table {
+    min-width: 760px;
+  }
+
+  .weapon-table th,
+  .weapon-table td {
+    padding: 11px 10px;
+  }
+
+  .weapon-name-column,
+  .weapon-name {
+    min-width: 190px;
+  }
+
+  .ability-list {
+    gap: 10px;
+  }
+
+  .ability-card {
+    padding: 15px 16px;
+  }
+
+  .ability-text {
+    font-size: .91rem;
+    line-height: 1.6;
+  }
+}
