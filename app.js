@@ -36,6 +36,14 @@ const els = {
   modeToggle: $("modeToggle"),
   focusButton: $("focusButton"),
   pinButton: $("pinButton"),
+  destroyedButton: $("destroyedButton"),
+  roundDown: $("roundDown"),
+  roundUp: $("roundUp"),
+  roundValue: $("roundValue"),
+  cpDown: $("cpDown"),
+  cpUp: $("cpUp"),
+  cpValue: $("cpValue"),
+  turnToggle: $("turnToggle"),
   toast: $("toast"),
   firstRunModal: $("firstRunModal"),
   firstRunFullData: $("firstRunFullData"),
@@ -48,6 +56,7 @@ function boot() {
   bindEvents();
   showFirstRunIfNeeded();
   setupSpeech();
+  renderMatchTools();
   if ("serviceWorker" in navigator) navigator.serviceWorker.register("./sw.js").catch(() => {});
 }
 
@@ -62,6 +71,12 @@ function bindEvents() {
   els.modeToggle.addEventListener("click", toggleMode);
   els.focusButton?.addEventListener("click", toggleFocusMode);
   els.pinButton.addEventListener("click", toggleSelectedPin);
+  els.destroyedButton?.addEventListener("click", toggleDestroyed);
+  els.roundDown?.addEventListener("click", () => adjustRound(-1));
+  els.roundUp?.addEventListener("click", () => adjustRound(1));
+  els.cpDown?.addEventListener("click", () => adjustCP(-1));
+  els.cpUp?.addEventListener("click", () => adjustCP(1));
+  els.turnToggle?.addEventListener("click", toggleTurn);
   els.firstRunFullData?.addEventListener("click", () => {
     dismissFirstRun();
     loadFull40kData();
@@ -623,9 +638,10 @@ function renderResults(query = "") {
     const {unit, roster, rosterIndex} = result;
     const button = document.createElement("button");
     button.className = "result-item" + (state.selected?.id === unit.id && state.activeRoster === rosterIndex ? " active" : "");
+    button.classList.toggle("destroyed", isUnitDestroyedInRoster(unit, rosterIndex));
     button.innerHTML = `
       <strong>${escapeHtml(unit.name)}</strong>
-      <small>${escapeHtml(unit.type || "Unit")}${q && getSearchRosters().length > 1 ? ` · <span class="result-roster">${escapeHtml(roster.name)}</span>` : ""}</small>`;
+      <small>${escapeHtml(unit.type || "Unit")}${q && getSearchRosters().length > 1 ? ` · <span class="result-roster">${escapeHtml(roster.name)}</span>` : ""}${isUnitDestroyedInRoster(unit, rosterIndex) ? " · DESTROYED" : ""}</small>`;
     button.addEventListener("click", () => selectUnitFromRoster(unit, rosterIndex));
     els.resultList.appendChild(button);
   });
@@ -633,6 +649,12 @@ function renderResults(query = "") {
   if (!results.length) {
     els.resultList.innerHTML = '<div class="result-item"><small>No matching entries in the selected armies.</small></div>';
   }
+}
+
+function isUnitDestroyedInRoster(unit, rosterIndex) {
+  const roster = state.rosters[rosterIndex];
+  if (!roster || !unit) return false;
+  return localStorage.getItem("tv_destroyed_" + roster.id + "_" + unit.id) === "1";
 }
 
 function scoreMatch(unit, q) {
@@ -677,6 +699,7 @@ function renderDetail(unit) {
   els.detailType.textContent = (unit.type || "Unit").toUpperCase();
   els.detailName.textContent = unit.name;
   updatePinButton();
+  updateDestroyedButton();
 
   els.detailStats.innerHTML = unit.stats.length
     ? unit.stats.map(stat => `
@@ -893,6 +916,79 @@ function formatRuleText(text = "") {
     .join("");
 }
 
+function getMatchState() {
+  try {
+    return {
+      round: Math.min(5, Math.max(1, Number(localStorage.getItem("tv_match_round") || 1))),
+      cp: Math.max(0, Number(localStorage.getItem("tv_match_cp") || 0)),
+      turn: localStorage.getItem("tv_match_turn") || "your"
+    };
+  } catch {
+    return {round:1, cp:0, turn:"your"};
+  }
+}
+
+function renderMatchTools() {
+  const match = getMatchState();
+  if (els.roundValue) els.roundValue.textContent = String(match.round);
+  if (els.cpValue) els.cpValue.textContent = String(match.cp);
+  if (els.turnToggle) {
+    els.turnToggle.textContent = match.turn === "your" ? "Your turn" : "Opponent turn";
+    els.turnToggle.classList.toggle("opponent", match.turn === "opponent");
+  }
+}
+
+function adjustRound(delta) {
+  const match = getMatchState();
+  const next = Math.min(5, Math.max(1, match.round + delta));
+  localStorage.setItem("tv_match_round", String(next));
+  renderMatchTools();
+  toast("Battle round " + next);
+}
+
+function adjustCP(delta) {
+  const match = getMatchState();
+  const next = Math.max(0, match.cp + delta);
+  localStorage.setItem("tv_match_cp", String(next));
+  renderMatchTools();
+}
+
+function toggleTurn() {
+  const match = getMatchState();
+  const next = match.turn === "your" ? "opponent" : "your";
+  localStorage.setItem("tv_match_turn", next);
+  renderMatchTools();
+  toast(next === "your" ? "Your turn" : "Opponent turn");
+}
+
+function destroyedKey(unit = state.selected) {
+  const roster = state.rosters[state.activeRoster];
+  return roster && unit ? "tv_destroyed_" + roster.id + "_" + unit.id : null;
+}
+
+function isDestroyed(unit = state.selected) {
+  const key = destroyedKey(unit);
+  return key ? localStorage.getItem(key) === "1" : false;
+}
+
+function toggleDestroyed() {
+  if (!state.selected) return;
+  const key = destroyedKey(state.selected);
+  if (!key) return;
+  const next = !isDestroyed(state.selected);
+  localStorage.setItem(key, next ? "1" : "0");
+  updateDestroyedButton();
+  renderResults(els.searchInput.value);
+  toast(next ? state.selected.name + " marked destroyed" : state.selected.name + " restored");
+}
+
+function updateDestroyedButton() {
+  if (!els.destroyedButton) return;
+  const destroyed = state.selected ? isDestroyed(state.selected) : false;
+  els.destroyedButton.textContent = destroyed ? "Destroyed ✓" : "Destroyed";
+  els.destroyedButton.classList.toggle("danger-active", destroyed);
+}
+
 function setupSpeech() {
   const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!Recognition) {
@@ -999,10 +1095,39 @@ function handleVoiceCommand(q) {
     resetWounds();
     return true;
   }
+  if (/^(destroyed|mark destroyed|unit destroyed)$/.test(q)) {
+    toggleDestroyed();
+    return true;
+  }
+  if (/^(your turn|my turn)$/.test(q)) {
+    localStorage.setItem("tv_match_turn", "your");
+    renderMatchTools();
+    return true;
+  }
+  if (/^(opponent turn|their turn)$/.test(q)) {
+    localStorage.setItem("tv_match_turn", "opponent");
+    renderMatchTools();
+    return true;
+  }
+  if (/^(next round|round up)$/.test(q)) {
+    adjustRound(1);
+    return true;
+  }
+  if (/^(previous round|round down)$/.test(q)) {
+    adjustRound(-1);
+    return true;
+  }
 
   const damageMatch = q.match(/^(?:take|lose|minus) (\d+) wounds?$/);
   if (damageMatch) {
     adjustWounds(-Number(damageMatch[1]));
+    return true;
+  }
+
+  const cpMatch = q.match(/^(?:set )?cp (\d+)$/);
+  if (cpMatch) {
+    localStorage.setItem("tv_match_cp", String(Number(cpMatch[1])));
+    renderMatchTools();
     return true;
   }
 
