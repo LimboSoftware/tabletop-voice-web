@@ -52,6 +52,7 @@
           </div>
 
           <div id="rosterTabs" class="roster-tabs"></div>
+          <div id="quickLists" class="quick-lists"></div>
 
           <label class="search-wrap" for="searchInput">
             <span>Search units, weapons or abilities</span>
@@ -74,7 +75,10 @@
                 <span id="detailType" class="section-label">UNIT</span>
                 <h2 id="detailName"></h2>
               </div>
-              <button id="pinButton" class="ghost-button compact" type="button">Pin</button>
+              <div class="detail-actions">
+                <button id="focusButton" class="ghost-button compact" type="button">Focus</button>
+                <button id="pinButton" class="ghost-button compact" type="button">Pin</button>
+              </div>
             </div>
             <div id="detailStats" class="stat-grid"></div>
             <div id="detailSections" class="detail-sections"></div>
