@@ -635,13 +635,95 @@ function renderAbilitySection(rules) {
         <span class="section-count">${rules.length}</span>
       </div>
       <div class="ability-list">
-        ${rules.map(rule => `
-          <article class="ability-card">
-            <h4>${escapeHtml(cleanRuleText(rule.name || "Rule"))}</h4>
-            ${rule.text ? `<div class="ability-text">${formatRuleText(rule.text)}</div>` : ""}
-          </article>`).join("")}
+        ${rules.map(rule => {
+          const summary = summariseRule(rule.name || "Rule", rule.text || "");
+          return `
+            <article class="ability-card compact-rule">
+              <h4>${escapeHtml(cleanRuleText(rule.name || "Rule"))}</h4>
+              ${summary ? `<p class="ability-summary">${escapeHtml(summary)}</p>` : ""}
+            </article>`;
+        }).join("")}
       </div>
     </section>`;
+}
+
+function summariseRule(name = "", text = "") {
+  const cleanName = normalize(cleanRuleText(name));
+  const cleaned = cleanRuleText(text);
+
+  const known = [
+    [/^blast$/, "Gain +1 Attack for every 5 models in the target unit."],
+    [/^lethal hits$/, "Critical Hits automatically wound the target."],
+    [/^sustained hits (\d+|d\d+)$/, match => "Critical Hits score " + match[1] + " extra hit" + (match[1] === "1" ? "" : "s") + "."],
+    [/^devastating wounds$/, "Critical Wounds inflict mortal wounds equal to the weapon's Damage."],
+    [/^twin linked$/, "Re-roll the Wound roll."],
+    [/^assault$/, "This weapon can be fired after the unit Advances."],
+    [/^pistol$/, "This weapon can be fired while the unit is within Engagement Range."],
+    [/^ignores cover$/, "Targets cannot benefit from Cover against this weapon."],
+    [/^indirect fire$/, "Can target units not visible to the attacker, with the normal Indirect Fire penalties."],
+    [/^hazardous$/, "After attacking, take a Hazardous test for each Hazardous weapon used."],
+    [/^torrent$/, "Attacks automatically hit."],
+    [/^lance$/, "If this unit charged, add 1 to the Wound roll."],
+    [/^melta (\d+)$/, match => "At half range, add " + match[1] + " to Damage."],
+    [/^rapid fire (\d+)$/, match => "At half range, gain " + match[1] + " extra Attack" + (match[1] === "1" ? "" : "s") + "."],
+    [/^anti (.+) (\d\+)$/, match => "Against " + titleCase(match[1]) + ", unmodified " + match[2] + " Wound rolls are Critical Wounds."],
+    [/^deadly demise d3$/, "When destroyed, roll a D6; on a 6, nearby units suffer D3 mortal wounds."],
+    [/^deadly demise (\d+)$/, match => "When destroyed, roll a D6; on a 6, nearby units suffer " + match[1] + " mortal wounds."],
+    [/^stealth$/, "Enemy ranged attacks against this unit suffer -1 to Hit."],
+    [/^deep strike$/, "This unit can be set up in Reserves and arrive more than 9\" from enemy models."],
+    [/^fights first$/, "This unit fights in the Fights First step."],
+    [/^scouts (\d+\")$/, match => "Before the battle starts, this unit can make a " + match[1] + " Scout move."],
+    [/^feel no pain (\d\+)$/, match => "Each time this model would lose a wound, ignore it on a " + match[1] + "."]
+  ];
+
+  for (const [pattern, summary] of known) {
+    const match = cleanName.match(pattern);
+    if (match) return typeof summary === "function" ? summary(match) : summary;
+  }
+
+  const withoutNotes = cleaned
+    .replace(/\*{0,3}Example:?[\s\S]*$/i, "")
+    .replace(/Designer'?s Note:?[\s\S]*$/i, "")
+    .replace(/This ability always takes the form[^.]*\.\s*/i, "")
+    .replace(/See [^.]+\.\s*/gi, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!withoutNotes) return "";
+
+  const sentences = withoutNotes.match(/[^.!?]+[.!?]+|[^.!?]+$/g) || [withoutNotes];
+
+  const useful = sentences
+    .map(x => x.trim())
+    .filter(Boolean)
+    .filter(x => !/^example\b/i.test(x))
+    .filter(x => !/^designer'?s note\b/i.test(x));
+
+  let summary = useful[0] || withoutNotes;
+
+  if (summary.length > 190 && useful.length > 1) {
+    summary = useful.slice(0, 2).join(" ");
+  }
+
+  summary = summary
+    .replace(/^Each time /i, "")
+    .replace(/^While /i, "While ")
+    .replace(/^At the start of /i, "At the start of ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (summary.length > 240) {
+    summary = summary.slice(0, 237).replace(/\s+\S*$/, "") + "…";
+  }
+
+  return summary;
+}
+
+function titleCase(value = "") {
+  return String(value)
+    .split(/\s+/)
+    .map(word => word ? word[0].toUpperCase() + word.slice(1).toLowerCase() : "")
+    .join(" ");
 }
 
 function cleanRuleText(text = "") {
