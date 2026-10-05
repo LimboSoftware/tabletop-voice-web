@@ -48,7 +48,11 @@ const els = {
   toast: $("toast"),
   firstRunModal: $("firstRunModal"),
   firstRunFullData: $("firstRunFullData"),
-  firstRunImport: $("firstRunImport")
+  firstRunImport: $("firstRunImport"),
+  voiceShortlistModal: $("voiceShortlistModal"),
+  voiceShortlistClose: $("voiceShortlistClose"),
+  voiceShortlistResults: $("voiceShortlistResults"),
+  voiceHeardText: $("voiceHeardText")
 };
 
 function boot() {
@@ -86,6 +90,10 @@ function bindEvents() {
   els.firstRunImport?.addEventListener("click", () => {
     dismissFirstRun();
     els.fileInput.click();
+  });
+  els.voiceShortlistClose?.addEventListener("click", closeVoiceShortlist);
+  els.voiceShortlistModal?.addEventListener("click", event => {
+    if (event.target === els.voiceShortlistModal) closeVoiceShortlist();
   });
   ["pointerdown", "touchstart"].forEach(evt => els.talkButton.addEventListener(evt, startListening, {passive:false}));
   ["pointerup", "pointercancel", "pointerleave", "touchend"].forEach(evt => els.talkButton.addEventListener(evt, stopListening, {passive:false}));
@@ -1219,23 +1227,53 @@ function setupSpeech() {
     els.voiceHint.textContent = "Voice recognition unavailable in this browser";
     return;
   }
+
   const recognition = new Recognition();
   recognition.continuous = false;
   recognition.interimResults = true;
+  recognition.maxAlternatives = 5;
   recognition.lang = navigator.language || "en-GB";
+
   recognition.onresult = (event) => {
-    let transcript = "";
-    for (let i = event.resultIndex; i < event.results.length; i++) transcript += event.results[i][0].transcript;
-    els.voiceHint.textContent = transcript || "Listening…";
-    els.searchInput.value = transcript;
-    renderResults(transcript);
-    if (event.results[event.results.length - 1].isFinal) chooseBestVoiceMatch(transcript);
+    let interim = "";
+    let finalAlternatives = null;
+
+    for (let i = event.resultIndex; i < event.results.length; i++) {
+      const result = event.results[i];
+      if (result.isFinal) {
+        finalAlternatives = Array.from(result)
+          .slice(0, 5)
+          .map(alt => ({
+            transcript: String(alt.transcript || "").trim(),
+            confidence: Number.isFinite(alt.confidence) ? alt.confidence : 0
+          }))
+          .filter(alt => alt.transcript);
+      } else {
+        interim += result[0]?.transcript || "";
+      }
+    }
+
+    if (interim) {
+      els.voiceHint.textContent = interim;
+      els.searchInput.value = interim;
+      renderResults(interim);
+    }
+
+    if (finalAlternatives?.length) {
+      const primary = finalAlternatives[0].transcript;
+      els.voiceHint.textContent = primary;
+      els.searchInput.value = primary;
+      renderResults(primary);
+      chooseBestVoiceMatch(finalAlternatives);
+    }
   };
+
   recognition.onend = () => setListening(false);
   recognition.onerror = (event) => {
     setListening(false);
     if (event.error !== "aborted") toast(`Voice: ${event.error}`);
   };
+
   state.recognition = recognition;
 }
 
@@ -1245,6 +1283,9 @@ function startListening(event) {
     if (!state.recognition) toast("Voice recognition is not supported by this browser.");
     return;
   }
+
+  closeVoiceShortlist();
+
   try {
     state.recognition.start();
     setListening(true);
@@ -1264,28 +1305,267 @@ function setListening(active) {
   if (!active && !els.voiceHint.textContent.trim()) els.voiceHint.textContent = "Hold to talk";
 }
 
-function chooseBestVoiceMatch(transcript) {
+function voiceAliasKey(rosterId, unitId) {
+  return "tv_voice_alias_" + rosterId + "_" + unitId;
+}
+
+function getVoiceAliases(rosterId, unitId) {
+  try {
+    const value = JSON.parse(localStorage.getItem(voiceAliasKey(rosterId, unitId)) || "[]");
+    return Array.isArray(value) ? value.filter(Boolean) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveVoiceAlias(rosterId, unitId, phrase) {
+  const cleaned = String(phrase || "").trim();
+  if (!cleaned) return;
+  const aliases = getVoiceAliases(rosterId, unitId);
+  if (!aliases.some(alias => normalize(alias) === normalize(cleaned))) aliases.unshift(cleaned);
+  localStorage.setItem(voiceAliasKey(rosterId, unitId), JSON.stringify(aliases.slice(0, 8)));
+}
+
+function voiceNormalize(value) {
+  return String(value || "")
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[’']/g, "")
+    .replace(/&/g, " and ")
+    .replace(/\bmk\s*(\d+)\b/g, " mark $1 ")
+    .replace(/\bii\b/g, " 2 ")
+    .replace(/\biii\b/g, " 3 ")
+    .replace(/\biv\b/g, " 4 ")
+    .replace(/\bv\b/g, " 5 ")
+    .replace(/ph/g, "f")
+    .replace(/qu/g, "k")
+    .replace(/x/g, "ks")
+    .replace(/c(?=[aou])/g, "k")
+    .replace(/c(?=[eiy])/g, "s")
+    .replace(/ae|oe/g, "e")
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function phoneticSkeleton(value) {
+  return voiceNormalize(value)
+    .replace(/\b(the|of|and|a|an)\b/g, " ")
+    .replace(/[aeiouy]/g, "")
+    .replace(/(.)\1+/g, "$1")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function levenshtein(a, b) {
+  a = String(a || "");
+  b = String(b || "");
+  if (a === b) return 0;
+  if (!a.length) return b.length;
+  if (!b.length) return a.length;
+
+  const prev = Array.from({length:b.length + 1}, (_, i) => i);
+  const curr = new Array(b.length + 1);
+
+  for (let i = 1; i <= a.length; i++) {
+    curr[0] = i;
+    for (let j = 1; j <= b.length; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      curr[j] = Math.min(
+        curr[j - 1] + 1,
+        prev[j] + 1,
+        prev[j - 1] + cost
+      );
+    }
+    for (let j = 0; j <= b.length; j++) prev[j] = curr[j];
+  }
+
+  return prev[b.length];
+}
+
+function stringSimilarity(a, b) {
+  a = String(a || "");
+  b = String(b || "");
+  const longest = Math.max(a.length, b.length);
+  if (!longest) return 1;
+  return 1 - levenshtein(a, b) / longest;
+}
+
+function tokenSimilarity(a, b) {
+  const aa = new Set(voiceNormalize(a).split(" ").filter(Boolean));
+  const bb = new Set(voiceNormalize(b).split(" ").filter(Boolean));
+  if (!aa.size || !bb.size) return 0;
+
+  let intersection = 0;
+  for (const word of aa) if (bb.has(word)) intersection++;
+  const union = new Set([...aa, ...bb]).size;
+  return union ? intersection / union : 0;
+}
+
+function scoreVoicePhrase(spoken, candidate) {
+  const q = voiceNormalize(spoken);
+  const n = voiceNormalize(candidate);
+  if (!q || !n) return 0;
+  if (q === n) return 1;
+
+  let score = 0;
+
+  if (n.startsWith(q) || q.startsWith(n)) score = Math.max(score, .88);
+  if (n.includes(q) || q.includes(n)) score = Math.max(score, .82);
+
+  const edit = stringSimilarity(q, n);
+  const tokens = tokenSimilarity(q, n);
+  const phonetic = stringSimilarity(phoneticSkeleton(q), phoneticSkeleton(n));
+
+  score = Math.max(
+    score,
+    edit * .84,
+    phonetic * .82,
+    tokens * .9,
+    edit * .45 + phonetic * .35 + tokens * .2
+  );
+
+  const qWords = q.split(" ").filter(Boolean);
+  const nWords = n.split(" ").filter(Boolean);
+  if (qWords.length === 1 && nWords.includes(qWords[0])) score = Math.max(score, .86);
+
+  return Math.max(0, Math.min(1, score));
+}
+
+function rankVoiceCandidates(alternatives) {
+  const results = new Map();
+
+  for (const {roster, rosterIndex} of getSearchRosters()) {
+    for (const unit of roster.units || []) {
+      const aliases = getVoiceAliases(roster.id, unit.id);
+      const candidates = [unit.name, ...aliases];
+      let bestScore = 0;
+      let bestTranscript = alternatives[0]?.transcript || "";
+      let matchedAlias = false;
+
+      alternatives.forEach((alt, altIndex) => {
+        const confidenceBoost = Math.max(0, Math.min(.05, (alt.confidence || 0) * .05));
+        candidates.forEach((candidate, candidateIndex) => {
+          let score = scoreVoicePhrase(alt.transcript, candidate);
+          if (candidateIndex > 0 && voiceNormalize(alt.transcript) === voiceNormalize(candidate)) score = 1;
+          score += confidenceBoost - altIndex * .012;
+          if (score > bestScore) {
+            bestScore = score;
+            bestTranscript = alt.transcript;
+            matchedAlias = candidateIndex > 0;
+          }
+        });
+      });
+
+      const key = roster.id + "::" + unit.id;
+      results.set(key, {
+        unit,
+        roster,
+        rosterIndex,
+        score: Math.min(1, bestScore),
+        transcript: bestTranscript,
+        matchedAlias
+      });
+    }
+  }
+
+  return [...results.values()]
+    .sort((a,b) => b.score - a.score || a.unit.name.localeCompare(b.unit.name));
+}
+
+function chooseBestVoiceMatch(input) {
   if (!state.rosters.length) return;
 
-  const q = normalize(transcript);
+  const alternatives = Array.isArray(input)
+    ? input
+    : [{transcript:String(input || ""), confidence:0}];
 
-  if (handleVoiceCommand(q)) {
-    els.voiceHint.textContent = transcript;
+  const primary = alternatives[0]?.transcript?.trim() || "";
+  const q = normalize(primary);
+
+  if (q && handleVoiceCommand(q)) {
+    els.voiceHint.textContent = primary;
     return;
   }
 
-  const ranked = [];
-  for (const {roster, rosterIndex} of getSearchRosters()) {
-    for (const unit of roster.units || []) {
-      ranked.push({unit, rosterIndex, score:scoreMatch(unit,q)});
-    }
-  }
-  ranked.sort((a,b) => b.score-a.score);
+  const ranked = rankVoiceCandidates(alternatives);
+  const top = ranked[0];
+  const second = ranked[1];
+  const margin = top ? top.score - (second?.score || 0) : 0;
 
-  if (ranked[0]?.score > 0) {
-    selectUnitFromRoster(ranked[0].unit, ranked[0].rosterIndex);
-    els.voiceHint.textContent = ranked[0].unit.name;
+  if (!top || top.score < .34) {
+    els.voiceHint.textContent = "No confident unit match";
+    toast("I couldn't confidently match that unit. Try again or type part of the name.");
+    return;
   }
+
+  const decisive =
+    top.score >= .94 ||
+    (top.score >= .86 && margin >= .10) ||
+    (top.matchedAlias && top.score >= .82);
+
+  if (decisive) {
+    closeVoiceShortlist();
+    selectUnitFromRoster(top.unit, top.rosterIndex);
+    els.voiceHint.textContent = top.unit.name;
+    return;
+  }
+
+  showVoiceShortlist(primary, ranked.slice(0, 5));
+}
+
+function showVoiceShortlist(heard, ranked) {
+  if (!els.voiceShortlistModal || !els.voiceShortlistResults) return;
+
+  state.voiceShortlist = ranked;
+  state.voiceHeard = heard;
+
+  els.voiceHeardText.textContent = heard ? `I heard: “${heard}”` : "I wasn't certain what you said.";
+  els.voiceShortlistResults.innerHTML = ranked.map((item, index) => {
+    const percent = Math.round(item.score * 100);
+    return `
+      <div class="voice-shortlist-item">
+        <button type="button" class="voice-choice" data-voice-choice="${index}">
+          <span class="voice-rank">${index + 1}</span>
+          <span class="voice-choice-copy">
+            <strong>${escapeHtml(item.unit.name)}</strong>
+            <small>${escapeHtml(item.roster.name)}</small>
+          </span>
+          <span class="voice-match-score">${percent}%</span>
+        </button>
+        <button type="button" class="voice-teach" data-voice-teach="${index}" title="Remember what was heard as an alias for this unit">Teach</button>
+      </div>`;
+  }).join("");
+
+  els.voiceShortlistResults.querySelectorAll("[data-voice-choice]").forEach(button => {
+    button.addEventListener("click", () => chooseVoiceShortlist(Number(button.dataset.voiceChoice), false));
+  });
+  els.voiceShortlistResults.querySelectorAll("[data-voice-teach]").forEach(button => {
+    button.addEventListener("click", () => chooseVoiceShortlist(Number(button.dataset.voiceTeach), true));
+  });
+
+  els.voiceShortlistModal.classList.remove("hidden");
+  els.voiceShortlistResults.querySelector("[data-voice-choice]")?.focus();
+}
+
+function chooseVoiceShortlist(index, teach) {
+  const item = state.voiceShortlist?.[index];
+  if (!item) return;
+
+  if (teach && state.voiceHeard) {
+    saveVoiceAlias(item.roster.id, item.unit.id, state.voiceHeard);
+    toast(`Voice alias learned for ${item.unit.name}`);
+  }
+
+  closeVoiceShortlist();
+  selectUnitFromRoster(item.unit, item.rosterIndex);
+  els.voiceHint.textContent = item.unit.name;
+}
+
+function closeVoiceShortlist() {
+  els.voiceShortlistModal?.classList.add("hidden");
+  state.voiceShortlist = null;
+  state.voiceHeard = "";
 }
 
 function handleVoiceCommand(q) {
