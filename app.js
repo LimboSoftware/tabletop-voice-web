@@ -1348,13 +1348,72 @@ function voiceNormalize(value) {
     .trim();
 }
 
-function phoneticSkeleton(value) {
+function phoneticWords(value) {
   return voiceNormalize(value)
     .replace(/\b(the|of|and|a|an)\b/g, " ")
+    .replace(/\bcorps\b/g, "kor")
+    .replace(/\bkorps\b/g, "kor")
+    .replace(/\bkorp\b/g, "kor")
+    .replace(/\bkrieg\b/g, "kreg")
+    .replace(/\bkh/g, "k")
+    .replace(/\bgh/g, "g")
+    .replace(/tion\b/g, "shun")
+    .replace(/sion\b/g, "zhun")
+    .replace(/ck/g, "k")
+    .replace(/dg/g, "j")
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function phoneticSkeleton(value) {
+  return phoneticWords(value)
     .replace(/[aeiouy]/g, "")
     .replace(/(.)\1+/g, "$1")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function phraseVariants(value) {
+  const words = phoneticWords(value).split(" ").filter(Boolean);
+  const variants = new Set();
+
+  if (!words.length) return [];
+
+  variants.add(words.join(" "));
+  variants.add(words.join(""));
+
+  for (let size = 1; size <= Math.min(4, words.length); size++) {
+    for (let start = 0; start + size <= words.length; start++) {
+      const slice = words.slice(start, start + size);
+      variants.add(slice.join(" "));
+      variants.add(slice.join(""));
+    }
+  }
+
+  return [...variants];
+}
+
+function bestVariantSimilarity(a, b) {
+  const aa = phraseVariants(a);
+  const bb = phraseVariants(b);
+  let best = 0;
+
+  for (const av of aa) {
+    for (const bv of bb) {
+      if (!av || !bv) continue;
+      if (av === bv) return 1;
+
+      const edit = stringSimilarity(av, bv);
+      best = Math.max(best, edit);
+
+      const short = av.length <= bv.length ? av : bv;
+      const long = av.length <= bv.length ? bv : av;
+      if (short.length >= 5 && long.startsWith(short)) best = Math.max(best, .94);
+    }
+  }
+
+  return best;
 }
 
 function levenshtein(a, b) {
@@ -1416,18 +1475,35 @@ function scoreVoicePhrase(spoken, candidate) {
   const edit = stringSimilarity(q, n);
   const tokens = tokenSimilarity(q, n);
   const phonetic = stringSimilarity(phoneticSkeleton(q), phoneticSkeleton(n));
+  const partialPhonetic = bestVariantSimilarity(q, n);
 
   score = Math.max(
     score,
     edit * .84,
     phonetic * .82,
     tokens * .9,
-    edit * .45 + phonetic * .35 + tokens * .2
+    partialPhonetic * .97,
+    edit * .34 + phonetic * .24 + tokens * .14 + partialPhonetic * .28
   );
 
-  const qWords = q.split(" ").filter(Boolean);
-  const nWords = n.split(" ").filter(Boolean);
+  const qWords = phoneticWords(q).split(" ").filter(Boolean);
+  const nWords = phoneticWords(n).split(" ").filter(Boolean);
+
   if (qWords.length === 1 && nWords.includes(qWords[0])) score = Math.max(score, .86);
+
+  // Speech engines often merge two fantasy words into one ordinary-looking word:
+  // "death korps" -> "deathcore". Give joined neighbouring words a strong chance.
+  const qJoined = qWords.join("");
+  for (let i = 0; i < nWords.length; i++) {
+    const one = nWords[i];
+    const two = (nWords[i] || "") + (nWords[i + 1] || "");
+    const three = two + (nWords[i + 2] || "");
+    for (const chunk of [one, two, three]) {
+      if (!chunk || qJoined.length < 5) continue;
+      const similarity = stringSimilarity(qJoined, chunk);
+      if (similarity >= .72) score = Math.max(score, similarity * .98);
+    }
+  }
 
   return Math.max(0, Math.min(1, score));
 }
