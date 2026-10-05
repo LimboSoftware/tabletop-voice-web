@@ -537,26 +537,140 @@ function renderDetail(unit) {
     els.detailCard.classList.add("hidden");
     return;
   }
+
   els.emptyDetail.classList.add("hidden");
   els.detailCard.classList.remove("hidden");
   els.detailType.textContent = (unit.type || "Unit").toUpperCase();
   els.detailName.textContent = unit.name;
 
   els.detailStats.innerHTML = unit.stats.length
-    ? unit.stats.map(stat => `<div class="stat"><span>${escapeHtml(stat.label)}</span><strong>${escapeHtml(stat.value)}</strong></div>`).join("")
+    ? unit.stats.map(stat => `
+        <div class="stat">
+          <span>${escapeHtml(stat.label)}</span>
+          <strong>${escapeHtml(stat.value)}</strong>
+        </div>`).join("")
     : '<div class="stat"><span>PROFILE</span><strong>Imported</strong></div>';
 
   const sections = [];
-  if (unit.profiles.length) {
-    sections.push(`<section class="detail-section"><h3>Profiles / weapons</h3>${unit.profiles.map(profile => {
-      const values = profile.values.slice(0,5);
-      return `<div class="profile-row"><strong>${escapeHtml(profile.name)}</strong>${values.map(v => `<span><small>${escapeHtml(v.label)}</small><br>${escapeHtml(v.value)}</span>`).join("")}</div>`;
-    }).join("")}</section>`);
+
+  if (unit.profiles?.length) {
+    sections.push(renderWeaponSection(unit.profiles));
   }
-  if (unit.rules.length) {
-    sections.push(`<section class="detail-section"><h3>Abilities / rules</h3>${unit.rules.map(rule => `<div class="rule-text"><strong>${escapeHtml(rule.name)}</strong>${rule.text ? `: ${escapeHtml(rule.text)}` : ""}</div>`).join("")}</section>`);
+
+  if (unit.rules?.length) {
+    sections.push(renderAbilitySection(unit.rules));
   }
-  els.detailSections.innerHTML = sections.join("") || '<section class="detail-section"><p class="rule-text">No additional profiles were found in this imported entry.</p></section>';
+
+  els.detailSections.innerHTML = sections.join("") ||
+    '<section class="detail-section"><div class="empty-section">No additional profiles were found in this entry.</div></section>';
+}
+
+function renderWeaponSection(profiles) {
+  const columns = ["Range", "A", "BS/WS", "S", "AP", "D", "Keywords"];
+
+  const rows = profiles.map(profile => {
+    const values = new Map(
+      (profile.values || []).map(item => [String(item.label || "").toLowerCase(), item.value ?? ""])
+    );
+
+    const get = label => {
+      const direct = values.get(label.toLowerCase());
+      return direct !== undefined && direct !== "" ? direct : "—";
+    };
+
+    const skill = get("BS") !== "—" ? get("BS") : get("WS");
+
+    return {
+      name: profile.name || "Weapon",
+      type: profile.type || "",
+      values: [
+        get("Range"),
+        get("A"),
+        skill,
+        get("S"),
+        get("AP"),
+        get("D"),
+        get("Keywords")
+      ]
+    };
+  });
+
+  return `
+    <section class="detail-section weapon-section">
+      <div class="section-heading-row">
+        <h3>Weapons</h3>
+        <span class="section-count">${rows.length}</span>
+      </div>
+      <div class="weapon-table-wrap">
+        <table class="weapon-table">
+          <thead>
+            <tr>
+              <th class="weapon-name-column">Weapon</th>
+              ${columns.map(column => `<th>${escapeHtml(column)}</th>`).join("")}
+            </tr>
+          </thead>
+          <tbody>
+            ${rows.map(row => `
+              <tr>
+                <td class="weapon-name">
+                  <strong>${escapeHtml(row.name)}</strong>
+                  ${row.type ? `<small>${escapeHtml(row.type.replace(" Weapons", ""))}</small>` : ""}
+                </td>
+                ${row.values.map((value, index) => `
+                  <td class="${index === 6 ? "weapon-keywords" : ""}">
+                    ${escapeHtml(value)}
+                  </td>`).join("")}
+              </tr>`).join("")}
+          </tbody>
+        </table>
+      </div>
+    </section>`;
+}
+
+function renderAbilitySection(rules) {
+  return `
+    <section class="detail-section ability-section">
+      <div class="section-heading-row">
+        <h3>Abilities & rules</h3>
+        <span class="section-count">${rules.length}</span>
+      </div>
+      <div class="ability-list">
+        ${rules.map(rule => `
+          <article class="ability-card">
+            <h4>${escapeHtml(cleanRuleText(rule.name || "Rule"))}</h4>
+            ${rule.text ? `<div class="ability-text">${formatRuleText(rule.text)}</div>` : ""}
+          </article>`).join("")}
+      </div>
+    </section>`;
+}
+
+function cleanRuleText(text = "") {
+  return String(text)
+    .replace(/\^\^/g, "")
+    .replace(/\*\*/g, "")
+    .replace(/\u00a0/g, " ")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function formatRuleText(text = "") {
+  const cleaned = cleanRuleText(text);
+  if (!cleaned) return "";
+
+  return cleaned
+    .split(/\n{2,}/)
+    .map(block => {
+      const lines = block.split("\n").map(line => line.trim()).filter(Boolean);
+      const bulletLines = lines.filter(line => /^[■•*-]\s*/.test(line));
+
+      if (bulletLines.length === lines.length && lines.length) {
+        return `<ul>${lines.map(line => `<li>${escapeHtml(line.replace(/^[■•*-]\s*/, ""))}</li>`).join("")}</ul>`;
+      }
+
+      return `<p>${lines.map(line => escapeHtml(line)).join("<br>")}</p>`;
+    })
+    .join("");
 }
 
 function setupSpeech() {
