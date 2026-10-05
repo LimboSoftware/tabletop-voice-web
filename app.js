@@ -36,6 +36,7 @@ const els = {
   modeToggle: $("modeToggle"),
   focusButton: $("focusButton"),
   pinButton: $("pinButton"),
+  compareButton: $("compareButton"),
   destroyedButton: $("destroyedButton"),
   roundDown: $("roundDown"),
   roundUp: $("roundUp"),
@@ -71,6 +72,7 @@ function bindEvents() {
   els.modeToggle.addEventListener("click", toggleMode);
   els.focusButton?.addEventListener("click", toggleFocusMode);
   els.pinButton.addEventListener("click", toggleSelectedPin);
+  els.compareButton?.addEventListener("click", toggleCompareBase);
   els.destroyedButton?.addEventListener("click", toggleDestroyed);
   els.roundDown?.addEventListener("click", () => adjustRound(-1));
   els.roundUp?.addEventListener("click", () => adjustRound(1));
@@ -699,6 +701,7 @@ function renderDetail(unit) {
   els.detailType.textContent = (unit.type || "Unit").toUpperCase();
   els.detailName.textContent = unit.name;
   updatePinButton();
+  updateCompareButton();
   updateDestroyedButton();
 
   els.detailStats.innerHTML = unit.stats.length
@@ -710,6 +713,10 @@ function renderDetail(unit) {
     : '<div class="stat"><span>PROFILE</span><strong>Imported</strong></div>';
 
   const sections = [];
+  const compare = renderCompareSection(unit);
+  if (compare) sections.push(compare);
+  const statuses = renderStatusSection(unit);
+  if (statuses) sections.push(statuses);
   const woundTracker = renderWoundTracker(unit);
   if (woundTracker) sections.push(woundTracker);
 
@@ -718,12 +725,224 @@ function renderDetail(unit) {
   }
 
   if (unit.rules?.length) {
+    sections.push(renderPhaseControls(unit.rules));
     sections.push(renderAbilitySection(unit.rules));
   }
 
   els.detailSections.innerHTML = sections.join("") ||
     '<section class="detail-section"><div class="empty-section">No additional profiles were found in this entry.</div></section>';
   bindDynamicDetailControls();
+}
+
+function compareStorageKey() {
+  return "tv_compare_base";
+}
+
+function getCompareBase() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(compareStorageKey()) || "null");
+    if (!raw) return null;
+    const rosterIndex = state.rosters.findIndex(r => r.id === raw.rosterId);
+    if (rosterIndex < 0) return null;
+    const roster = state.rosters[rosterIndex];
+    const unit = (roster.units || []).find(u => u.id === raw.unitId);
+    return unit ? {unit, roster, rosterIndex} : null;
+  } catch {
+    return null;
+  }
+}
+
+function toggleCompareBase() {
+  if (!state.selected) return;
+  const currentRoster = state.rosters[state.activeRoster];
+  const existing = getCompareBase();
+
+  if (existing && existing.unit.id === state.selected.id && existing.roster.id === currentRoster.id) {
+    localStorage.removeItem(compareStorageKey());
+    toast("Compare cleared");
+  } else {
+    localStorage.setItem(compareStorageKey(), JSON.stringify({
+      rosterId: currentRoster.id,
+      unitId: state.selected.id
+    }));
+    toast("Compare unit set: " + state.selected.name);
+  }
+  updateCompareButton();
+  renderDetail(state.selected);
+}
+
+function updateCompareButton() {
+  if (!els.compareButton) return;
+  const base = getCompareBase();
+  const roster = state.rosters[state.activeRoster];
+  const active = !!(base && state.selected && roster &&
+    base.unit.id === state.selected.id && base.roster.id === roster.id);
+  els.compareButton.textContent = active ? "Compare ✓" : "Compare";
+  els.compareButton.classList.toggle("active", active);
+}
+
+function statValue(unit, label) {
+  const hit = (unit?.stats || []).find(s => normalize(s.label) === normalize(label));
+  return hit ? String(hit.value) : "—";
+}
+
+function numericStat(unit, label) {
+  const raw = statValue(unit, label);
+  const n = parseInt(raw, 10);
+  return Number.isFinite(n) ? n : null;
+}
+
+function woundNeeded(strength, toughness) {
+  if (!Number.isFinite(strength) || !Number.isFinite(toughness) || toughness <= 0) return "—";
+  if (strength >= toughness * 2) return "2+";
+  if (strength > toughness) return "3+";
+  if (strength === toughness) return "4+";
+  if (strength * 2 <= toughness) return "6+";
+  return "5+";
+}
+
+function renderCompareSection(currentUnit) {
+  const base = getCompareBase();
+  const currentRoster = state.rosters[state.activeRoster];
+  if (!base || !currentUnit || !currentRoster) return "";
+  if (base.unit.id === currentUnit.id && base.roster.id === currentRoster.id) {
+    return `
+      <section class="detail-section compare-section compare-waiting">
+        <div class="section-heading-row">
+          <h3>Compare mode</h3>
+          <span class="section-count">1/2</span>
+        </div>
+        <p>Select another unit from any active army to compare it with <strong>${escapeHtml(base.unit.name)}</strong>.</p>
+      </section>`;
+  }
+
+  const labels = ["M","T","Sv","W","LD","OC","InSv"];
+  const targetT = numericStat(currentUnit, "T");
+  const weaponChecks = (base.unit.profiles || []).map(profile => {
+    const s = (profile.values || []).find(v => normalize(v.label) === "s");
+    const strength = s ? parseInt(String(s.value), 10) : NaN;
+    if (!Number.isFinite(strength) || !Number.isFinite(targetT)) return null;
+    return {
+      name: profile.name,
+      strength,
+      needed: woundNeeded(strength, targetT)
+    };
+  }).filter(Boolean).slice(0, 8);
+
+  return `
+    <section class="detail-section compare-section">
+      <div class="section-heading-row">
+        <h3>Compare</h3>
+        <button type="button" class="ghost-button compact compare-clear">Clear</button>
+      </div>
+      <div class="compare-grid">
+        <div class="compare-card">
+          <span class="compare-side">ATTACKER</span>
+          <h4>${escapeHtml(base.unit.name)}</h4>
+          <small>${escapeHtml(base.roster.name)}</small>
+          <div class="compare-stats">
+            ${labels.map(label => `<div><span>${escapeHtml(label)}</span><strong>${escapeHtml(statValue(base.unit,label))}</strong></div>`).join("")}
+          </div>
+        </div>
+        <div class="compare-card">
+          <span class="compare-side">TARGET</span>
+          <h4>${escapeHtml(currentUnit.name)}</h4>
+          <small>${escapeHtml(currentRoster.name)}</small>
+          <div class="compare-stats">
+            ${labels.map(label => `<div><span>${escapeHtml(label)}</span><strong>${escapeHtml(statValue(currentUnit,label))}</strong></div>`).join("")}
+          </div>
+        </div>
+      </div>
+      ${weaponChecks.length ? `
+        <div class="compare-weapons">
+          <strong>Wound rolls vs T${escapeHtml(targetT)}</strong>
+          ${weaponChecks.map(w => `<div><span>${escapeHtml(w.name)} · S${w.strength}</span><b>${w.needed}</b></div>`).join("")}
+        </div>` : ""}
+    </section>`;
+}
+
+const STATUS_OPTIONS = ["Advanced","Fell Back","Charged","Battle-shocked","In Reserve","Once-per-game used"];
+
+function statusKey(unit = state.selected) {
+  const roster = state.rosters[state.activeRoster];
+  return roster && unit ? "tv_status_" + roster.id + "_" + unit.id : null;
+}
+
+function getStatuses(unit = state.selected) {
+  const key = statusKey(unit);
+  if (!key) return [];
+  try {
+    const value = JSON.parse(localStorage.getItem(key) || "[]");
+    return Array.isArray(value) ? value : [];
+  } catch {
+    return [];
+  }
+}
+
+function toggleStatus(status) {
+  if (!state.selected) return;
+  const key = statusKey(state.selected);
+  if (!key) return;
+  const statuses = new Set(getStatuses(state.selected));
+  if (statuses.has(status)) statuses.delete(status);
+  else statuses.add(status);
+  localStorage.setItem(key, JSON.stringify([...statuses]));
+  renderDetail(state.selected);
+}
+
+function renderStatusSection(unit) {
+  const active = new Set(getStatuses(unit));
+  return `
+    <section class="detail-section status-section">
+      <div class="section-heading-row"><h3>Status</h3></div>
+      <div class="status-tags">
+        ${STATUS_OPTIONS.map(status => `
+          <button type="button" class="status-tag${active.has(status) ? " active" : ""}" data-status="${escapeHtml(status)}">
+            ${active.has(status) ? "✓ " : ""}${escapeHtml(status)}
+          </button>`).join("")}
+      </div>
+    </section>`;
+}
+
+const PHASES = ["All","Command","Movement","Shooting","Charge","Fight"];
+
+function getActivePhase() {
+  return localStorage.getItem("tv_phase_filter") || "All";
+}
+
+function setActivePhase(phase) {
+  localStorage.setItem("tv_phase_filter", PHASES.includes(phase) ? phase : "All");
+  if (state.selected) renderDetail(state.selected);
+}
+
+function inferRulePhase(rule) {
+  const text = normalize((rule?.name || "") + " " + (rule?.text || ""));
+  if (/command phase|command step/.test(text)) return "Command";
+  if (/movement phase|normal move|advance move|fall back|set up on the battlefield|reserves/.test(text)) return "Movement";
+  if (/shooting phase|selected to shoot|ranged attack|shoot/.test(text)) return "Shooting";
+  if (/charge phase|declares a charge|charge move/.test(text)) return "Charge";
+  if (/fight phase|selected to fight|pile in|consolidation|melee attack/.test(text)) return "Fight";
+  return "All";
+}
+
+function renderPhaseControls(rules) {
+  const active = getActivePhase();
+  const counts = Object.fromEntries(PHASES.map(p => [p, 0]));
+  for (const rule of rules || []) {
+    counts.All++;
+    const phase = inferRulePhase(rule);
+    if (phase !== "All") counts[phase]++;
+  }
+  return `
+    <section class="detail-section phase-filter-section">
+      <div class="section-heading-row"><h3>Phase filter</h3></div>
+      <div class="phase-filter">
+        ${PHASES.map(phase => `
+          <button type="button" class="phase-button${active === phase ? " active" : ""}" data-phase="${phase}">
+            ${phase}${counts[phase] ? ` <span>${counts[phase]}</span>` : ""}
+          </button>`).join("")}
+      </div>
+    </section>`;
 }
 
 function renderWeaponSection(profiles) {
@@ -789,21 +1008,26 @@ function renderWeaponSection(profiles) {
 }
 
 function renderAbilitySection(rules) {
+  const activePhase = getActivePhase();
+  const visibleRules = activePhase === "All"
+    ? rules
+    : rules.filter(rule => inferRulePhase(rule) === activePhase);
+
   return `
     <section class="detail-section ability-section">
       <div class="section-heading-row">
         <h3>Abilities & rules</h3>
-        <span class="section-count">${rules.length}</span>
+        <span class="section-count">${visibleRules.length}</span>
       </div>
       <div class="ability-list">
-        ${rules.map(rule => {
+        ${visibleRules.length ? visibleRules.map(rule => {
           const summary = summariseRule(rule.name || "Rule", rule.text || "");
           return `
             <article class="ability-card compact-rule">
               <h4>${escapeHtml(cleanRuleText(rule.name || "Rule"))}</h4>
               ${summary ? `<p class="ability-summary">${escapeHtml(summary)}</p>` : ""}
             </article>`;
-        }).join("")}
+        }).join("") : '<div class="empty-section">No abilities matched this phase.</div>'}
       </div>
     </section>`;
 }
@@ -1071,6 +1295,20 @@ function handleVoiceCommand(q) {
     scrollToDetailSection(".weapon-section");
     return true;
   }
+  if (/^(compare)$/.test(q)) {
+    toggleCompareBase();
+    return true;
+  }
+  const phaseMatch = q.match(/^(?:show )?(command|movement|shooting|charge|fight) phase$/);
+  if (phaseMatch) {
+    setActivePhase(titleCase(phaseMatch[1]));
+    scrollToDetailSection(".ability-section");
+    return true;
+  }
+  if (/^(show )?(all abilities|all rules)$/.test(q)) {
+    setActivePhase("All");
+    return true;
+  }
   if (/^(show )?(abilities|ability|rules?)$/.test(q)) {
     scrollToDetailSection(".ability-section");
     return true;
@@ -1305,6 +1543,17 @@ function renderWoundTracker(unit) {
 }
 
 function bindDynamicDetailControls() {
+  document.querySelectorAll("[data-status]").forEach(button => {
+    button.addEventListener("click", () => toggleStatus(button.dataset.status));
+  });
+  document.querySelectorAll("[data-phase]").forEach(button => {
+    button.addEventListener("click", () => setActivePhase(button.dataset.phase));
+  });
+  document.querySelector(".compare-clear")?.addEventListener("click", () => {
+    localStorage.removeItem(compareStorageKey());
+    updateCompareButton();
+    if (state.selected) renderDetail(state.selected);
+  });
   document.querySelectorAll("[data-wound-change]").forEach(button => {
     button.addEventListener("click", () => adjustWounds(Number(button.dataset.woundChange)));
   });
