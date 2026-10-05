@@ -804,3 +804,93 @@ body.focus-mode .detail-panel {
     flex: 0 0 auto;
   }
 }
+
+
+/* Match tracker */
+.match-tools {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 8px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--line);
+  background: rgba(10,14,20,.5);
+}
+
+.match-tool {
+  min-width: 0;
+}
+
+.match-tool > span {
+  display: block;
+  margin-bottom: 5px;
+  color: #7f8da0;
+  font-size: .64rem;
+  font-weight: 800;
+  letter-spacing: .08em;
+}
+
+.stepper {
+  display: grid;
+  grid-template-columns: 30px minmax(34px,1fr) 30px;
+  align-items: center;
+  border: 1px solid #2b3748;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #121922;
+}
+
+.stepper button {
+  height: 32px;
+  border: 0;
+  background: #18212c;
+  color: #dbe6ef;
+  font-size: 1rem;
+}
+
+.stepper strong {
+  text-align: center;
+  font-size: .9rem;
+}
+
+.turn-toggle {
+  align-self: end;
+  min-height: 34px;
+  border: 1px solid #35778e;
+  background: rgba(56,189,248,.10);
+  color: var(--accent);
+  border-radius: 10px;
+  padding: 0 10px;
+  font-size: .76rem;
+  font-weight: 800;
+}
+
+.turn-toggle.opponent {
+  border-color: #704552;
+  background: rgba(255,107,120,.08);
+  color: #ff9eaa;
+}
+
+.ghost-button.danger-active {
+  border-color: #8a3f4c;
+  background: rgba(255,107,120,.10);
+  color: #ff9eaa;
+}
+
+.result-item.destroyed {
+  opacity: .48;
+}
+
+.result-item.destroyed strong {
+  text-decoration: line-through;
+}
+
+@media (max-width: 760px) {
+  .match-tools {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .turn-toggle {
+    grid-column: 1 / -1;
+    min-height: 36px;
+  }
+}
