@@ -633,8 +633,16 @@ function applyMode() {
 }
 
 function persist() {
-  localStorage.setItem("tv_rosters", JSON.stringify(state.rosters));
-  localStorage.setItem("tv_activeRoster", String(state.activeRoster));
+  const persistentRosters = state.rosters.filter(r => r.source !== "bsdata");
+  try {
+    localStorage.setItem("tv_rosters", JSON.stringify(persistentRosters));
+    const active = state.rosters[state.activeRoster];
+    const persistentIndex = active ? persistentRosters.findIndex(r => r.id === active.id) : 0;
+    localStorage.setItem("tv_activeRoster", String(Math.max(0, persistentIndex)));
+  } catch (error) {
+    console.warn("Could not persist rosters", error);
+    toast("Roster loaded, but this browser could not save it locally.");
+  }
 }
 
 function restore() {
