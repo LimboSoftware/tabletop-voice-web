@@ -12,6 +12,25 @@
 </head>
 <body>
   <div class="app-shell">
+    <div id="firstRunModal" class="first-run-modal hidden" role="dialog" aria-modal="true" aria-labelledby="firstRunTitle">
+      <div class="first-run-card">
+        <p class="eyebrow">FREE PUBLIC BETA</p>
+        <h2 id="firstRunTitle">Choose how you want to use Tabletop Voice</h2>
+        <p class="first-run-intro">This beta is free while we test it with real games. You can either load the full 40K dataset for broad unit lookup, or keep things lightweight and only use the army list you export from New Recruit.</p>
+        <div class="first-run-options">
+          <button id="firstRunFullData" class="first-run-option" type="button">
+            <strong>Load full 40K data</strong>
+            <span>Browse and search the wider current dataset. This downloads community-maintained data on demand and may take a little longer.</span>
+          </button>
+          <button id="firstRunImport" class="first-run-option primary-choice" type="button">
+            <strong>Import New Recruit roster</strong>
+            <span>Use only your own exported army list. Faster, smaller, and ideal if you just want your match roster.</span>
+          </button>
+        </div>
+        <p class="first-run-note">You can switch approach later from the main screen. Nothing is locked during the beta.</p>
+      </div>
+    </div>
+
     <header class="topbar">
       <a class="brand" href="#" aria-label="Tabletop Voice home">
         <span class="brand-mark">TV</span>
