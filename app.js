@@ -23,6 +23,9 @@ const els = {
   searchInput: $("searchInput"),
   resultList: $("resultList"),
   rosterTabs: $("rosterTabs"),
+  rosterBrowser: $("rosterBrowser"),
+  backToRosterButton: $("backToRosterButton"),
+  voiceSearchWrap: $("voiceSearchWrap"),
   activeArmySelector: $("activeArmySelector"),
   quickLists: $("quickLists"),
   rosterTitle: $("rosterTitle"),
@@ -74,10 +77,6 @@ const els = {
   p1SecondaryTotal: $("p1SecondaryTotal"),
   p2PrimaryTotal: $("p2PrimaryTotal"),
   p2SecondaryTotal: $("p2SecondaryTotal"),
-  p1PrimaryMax: $("p1PrimaryMax"),
-  p1SecondaryMax: $("p1SecondaryMax"),
-  p2PrimaryMax: $("p2PrimaryMax"),
-  p2SecondaryMax: $("p2SecondaryMax"),
   scoreTurnLabel1: $("scoreTurnLabel1"),
   scoreTurnLabel2: $("scoreTurnLabel2"),
   diceCount: $("diceCount"),
@@ -129,6 +128,7 @@ function bindEvents() {
   });
   els.modeToggle.addEventListener("click", toggleMode);
   els.focusButton?.addEventListener("click", toggleFocusMode);
+  els.backToRosterButton?.addEventListener("click", backToRosterBrowser);
   els.pinButton.addEventListener("click", toggleSelectedPin);
   els.cpDown?.addEventListener("click", () => adjustCP(-1));
   els.cpUp?.addEventListener("click", () => adjustCP(1));
@@ -157,9 +157,6 @@ function bindEvents() {
   document.querySelectorAll("[data-score-turn]").forEach(button => {
     button.addEventListener("click", () => setScoreTurn(Number(button.dataset.scoreTurn)));
   });
-  [els.p1PrimaryMax, els.p1SecondaryMax, els.p2PrimaryMax, els.p2SecondaryMax]
-    .filter(Boolean)
-    .forEach(input => input.addEventListener("change", saveScoreMaxes));
   document.querySelectorAll("[data-dice-count]").forEach(button => {
     button.addEventListener("click", () => rollDice(
       Number(button.dataset.diceCount),
@@ -312,10 +309,18 @@ function parseNewRecruitSelection(selection) {
   if (pts != null) stats.push({label:"Pts", value:String(pts)});
 
   const name = selection.name || primaryUnitProfile.name || "Unit";
+  const categories = dedupeBy(
+    (selection.categories || [])
+      .map(category => String(category?.name || "").trim())
+      .filter(Boolean),
+    value => normalize(value)
+  );
+
   return {
     id: selection.id || primaryUnitProfile.id || name,
     name,
     type: "Unit",
+    categories,
     stats,
     rules: abilities,
     profiles: weapons,
