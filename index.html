@@ -100,6 +100,12 @@
               <p class="eyebrow">UNIT BROWSER</p>
               <h1>Choose a unit.</h1>
             </div>
+            <div class="unit-browser-cp" aria-label="Command Points">
+              <span>CP</span>
+              <button id="cpDown" type="button" aria-label="Remove command point">−</button>
+              <strong id="cpValue">0</strong>
+              <button id="cpUp" type="button" aria-label="Add command point">+</button>
+            </div>
           </div>
           <div id="rosterTabs" class="roster-tabs roster-mini-tabs"></div>
           <div id="quickLists" class="roster-unit-groups"></div>
@@ -218,16 +224,8 @@
           </section>
         </div>
 
-        <section class="match-state-card compact-match-state">
-          <div class="match-tool large-match-tool">
-            <span>CP</span>
-            <div class="stepper">
-              <button id="cpDown" type="button">−</button>
-              <strong id="cpValue">0</strong>
-              <button id="cpUp" type="button">+</button>
-            </div>
-          </div>
-          <button id="turnToggle" class="turn-toggle score-turn-toggle" type="button">Your turn</button>
+        <section class="score-turn-row">
+          <button id="turnToggle" class="turn-toggle score-turn-toggle" type="button">Player 1 turn</button>
           <span id="roundValue" class="hidden">1</span>
           <button id="roundDown" class="hidden" type="button">−</button>
           <button id="roundUp" class="hidden" type="button">+</button>
@@ -239,7 +237,7 @@
           <p class="eyebrow">DICE</p>
           <h1>Dice roller</h1>
           <p>Roll normally, or set a target such as 4+ to count successes automatically.</p>
-          <p class="voice-example">Voice example: “Roll 60 dice hitting on 4 plus” · “Reroll all misses”</p>
+          <p class="voice-example">Voice example: “Roll 6 dice hitting on 3” · “Roll 20 dice wounding on 4s” · “Reroll all misses”</p>
         </div>
         <section class="dice-card">
           <div class="dice-presets">
