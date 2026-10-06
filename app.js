@@ -726,7 +726,6 @@ async function loadFull40kData() {
 
     state.rosters.push(roster);
     state.activeRoster = state.rosters.length - 1;
-    activateRosterSearchScopes(roster);
     state.selected = null;
     els.searchInput.value = "";
     persist();
@@ -1100,7 +1099,7 @@ function getActiveSearchScopeIds() {
     }
   } catch {}
 
-  return scopes.map(scope => scope.id);
+  return [];
 }
 
 function setActiveSearchScopeIds(ids) {
@@ -1273,7 +1272,8 @@ function getUnitBrowserSources() {
   const seen = new Set();
 
   // Prefer New Recruit versions where a unit exists in both a list and a whole-army source.
-  for (const source of [...sources].sort((a,b) => (a.kind === "new-recruit" ? -1 : 1))) {
+  const sourceRank = source => source.kind === "new-recruit" ? 0 : 1;
+  for (const source of [...sources].sort((a,b) => sourceRank(a) - sourceRank(b))) {
     for (const entry of source.entries) {
       const key = normalize(entry.unit.name);
       if (seen.has(key)) continue;
