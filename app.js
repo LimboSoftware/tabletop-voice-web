@@ -1011,7 +1011,7 @@ async function getUnitBrowserReferenceData(source) {
     if (!Array.isArray(roster?.detachments)) {
       note = "Re-import this older New Recruit list once to detect its detachments.";
     } else if (!roster.detachments.length) {
-      note = "No selected detachment was detected in this list.";
+      note = "No selected detachment was detected. If this list should have one, re-import its New Recruit JSON after this update.";
     } else if (data && !stratagems.length) {
       note = "Detachment detected, but no matching current stratagems were found.";
     }
