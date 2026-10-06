@@ -1462,7 +1462,7 @@ function switchPage(page, options = {}) {
   document.querySelectorAll("[data-page-target]").forEach(button => {
     button.classList.toggle("active", button.dataset.pageTarget === page);
   });
-  els.navMoreButton?.classList.toggle("active", page === "guide");
+  els.navMoreButton?.classList.toggle("active", ["rules","guide"].includes(page));
 
   els.navMoreMenu?.classList.add("hidden");
   els.navMoreButton?.setAttribute("aria-expanded", "false");
