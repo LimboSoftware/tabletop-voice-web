@@ -7,6 +7,9 @@ const state = {
   listening: false,
   recognition: null,
   referenceData: {rules:[], stratagems:[]},
+  detachmentStratagems: [],
+  detachmentStratagemLoadKey: "",
+  detachmentStratagemLoading: false,
   scoreTurn: Math.min(5, Math.max(1, Number(localStorage.getItem("tv_score_turn") || 1))),
   unitBrowserSourceId: localStorage.getItem("tv_unit_browser_source") || "all",
   lastDiceRoll: null,
@@ -26,6 +29,8 @@ const els = {
   rosterTabs: $("rosterTabs"),
   rosterBrowser: $("rosterBrowser"),
   backToRosterButton: $("backToRosterButton"),
+  battleShockToggle: $("battleShockToggle"),
+  oncePerGameToggle: $("oncePerGameToggle"),
   voiceSearchWrap: $("voiceSearchWrap"),
   activeArmySelector: $("activeArmySelector"),
   quickLists: $("quickLists"),
@@ -130,6 +135,8 @@ function bindEvents() {
   els.modeToggle.addEventListener("click", toggleMode);
   els.focusButton?.addEventListener("click", toggleFocusMode);
   els.backToRosterButton?.addEventListener("click", backToRosterBrowser);
+  els.battleShockToggle?.addEventListener("click", () => toggleStatus("Battle-shocked"));
+  els.oncePerGameToggle?.addEventListener("click", () => toggleStatus("Once-per-game used"));
   els.pinButton.addEventListener("click", toggleSelectedPin);
   els.cpDown?.addEventListener("click", () => adjustCP(-1));
   els.cpUp?.addEventListener("click", () => adjustCP(1));
@@ -228,6 +235,7 @@ async function handleFiles(event) {
       const text = await file.text();
       const roster = parseRosterFile(text, file.name);
       state.rosters.push(roster);
+      state.detachmentStratagemLoadKey = "";
       state.activeRoster = state.rosters.length - 1;
       activateRosterSearchScopes(roster);
       persist();
@@ -240,6 +248,44 @@ async function handleFiles(event) {
     }
   }
   els.fileInput.value = "";
+}
+
+function extractSelectedDetachments(root) {
+  const found = [];
+
+  for (const force of root?.forces || []) {
+    const faction = force.catalogueName || force.name || "";
+
+    function walk(value) {
+      if (!value || typeof value !== "object") return;
+      if (Array.isArray(value)) {
+        value.forEach(walk);
+        return;
+      }
+
+      const count = Number(value.number);
+      const selected = !Number.isFinite(count) || count > 0;
+      const group = String(value.group || value.entryGroupName || "");
+
+      if (
+        selected &&
+        /detachment/i.test(group) &&
+        value.name &&
+        !/^detachment$/i.test(String(value.name).trim())
+      ) {
+        found.push({
+          name:String(value.name).trim(),
+          faction
+        });
+      }
+
+      for (const child of value.selections || []) walk(child);
+    }
+
+    walk(force.selections || []);
+  }
+
+  return dedupeBy(found, item => normalize(item.faction + "|" + item.name));
 }
 
 function parseRosterFile(text, fileName) {
@@ -269,6 +315,7 @@ function parseRosterFile(text, fileName) {
     faction: (root.forces || [])[0]?.catalogueName || (root.forces || [])[0]?.name || "New Recruit list",
     source: "new-recruit",
     points: pts ?? null,
+    detachments: extractSelectedDetachments(root),
     units: dedupeBy(units, u => u.id || u.name),
     referenceData: extractReferenceData(root, fileName),
     importedAt: Date.now()
@@ -1486,6 +1533,7 @@ function renderDetail(unit) {
   els.detailType.textContent = (unit.type || "Unit").toUpperCase();
   els.detailName.textContent = unit.name;
   els.backToRosterButton?.classList.toggle("hidden", getUnitBrowserSources().length === 0);
+  updateUnitTopStatuses(unit);
   updatePinButton();
 
   const statOrder = ["m","t","sv","w","ld","oc","insv"];
@@ -1525,9 +1573,6 @@ function renderDetail(unit) {
     sections.push(renderAbilitySection(unit.rules));
   }
 
-  const statuses = renderStatusSection(unit);
-  if (statuses) sections.push(statuses);
-
   els.detailSections.innerHTML = sections.join("") ||
     '<section class="detail-section"><div class="empty-section">No additional profiles were found in this entry.</div></section>';
   bindDynamicDetailControls();
@@ -1562,18 +1607,22 @@ function toggleStatus(status) {
   renderDetail(state.selected);
 }
 
-function renderStatusSection(unit) {
-  const active = new Set(getStatuses(unit));
-  return `
-    <section class="detail-section status-section">
-      <div class="section-heading-row"><h3>Status</h3></div>
-      <div class="status-tags">
-        ${STATUS_OPTIONS.map(status => `
-          <button type="button" class="status-tag${active.has(status) ? " active" : ""}" data-status="${escapeHtml(status)}">
-            ${active.has(status) ? "✓ " : ""}${escapeHtml(status)}
-          </button>`).join("")}
-      </div>
-    </section>`;
+function updateUnitTopStatuses(unit = state.selected) {
+  const active = new Set(unit ? getStatuses(unit) : []);
+  const battleShocked = active.has("Battle-shocked");
+  const onceUsed = active.has("Once-per-game used");
+
+  if (els.battleShockToggle) {
+    els.battleShockToggle.classList.toggle("active", battleShocked);
+    els.battleShockToggle.setAttribute("aria-pressed", battleShocked ? "true" : "false");
+    els.battleShockToggle.textContent = battleShocked ? "✓ Battle-shocked" : "Battle-shocked";
+  }
+
+  if (els.oncePerGameToggle) {
+    els.oncePerGameToggle.classList.toggle("active", onceUsed);
+    els.oncePerGameToggle.setAttribute("aria-pressed", onceUsed ? "true" : "false");
+    els.oncePerGameToggle.textContent = onceUsed ? "✓ Once-per-game used" : "Once-per-game used";
+  }
 }
 
 const PHASES = ["All","Command","Movement","Shooting","Charge","Fight"];
@@ -2955,9 +3004,6 @@ function backToRosterBrowser() {
 }
 
 function bindDynamicDetailControls() {
-  document.querySelectorAll("[data-status]").forEach(button => {
-    button.addEventListener("click", () => toggleStatus(button.dataset.status));
-  });
   document.querySelectorAll("[data-phase]").forEach(button => {
     button.addEventListener("click", () => setActivePhase(button.dataset.phase));
   });
