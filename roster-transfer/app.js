@@ -110,21 +110,30 @@ function parseJsonSummary(text, fileName) {
   };
 }
 
+function xmlDirectChildren(element, localName) {
+  return [...(element?.children || [])].filter(child => child.localName === localName);
+}
+
+function xmlContainerChildren(element, containerName, childName) {
+  const container = xmlDirectChildren(element, containerName)[0];
+  return container ? xmlDirectChildren(container, childName) : [];
+}
+
 function parseRosSummary(text, fileName) {
   const doc = new DOMParser().parseFromString(String(text || ""), "application/xml");
   if (doc.querySelector("parsererror")) throw new Error(fileName + " could not be read as ROS XML.");
 
   const roster = doc.documentElement?.localName === "roster"
     ? doc.documentElement
-    : doc.querySelector("roster");
+    : null;
 
   if (!roster) throw new Error(fileName + " does not look like a New Recruit ROS export.");
 
-  const pts = [...roster.querySelectorAll(":scope > costs > cost")]
+  const pts = xmlContainerChildren(roster, "costs", "cost")
     .find(cost => String(cost.getAttribute("name") || "").toLowerCase() === "pts")
     ?.getAttribute("value");
 
-  const force = roster.querySelector(":scope > forces > force");
+  const force = xmlContainerChildren(roster, "forces", "force")[0];
 
   return {
     rosterName:roster.getAttribute("name") || fileName.replace(/\.[^.]+$/, ""),
