@@ -849,7 +849,7 @@ async function ensureDetachmentStratagems() {
   state.detachmentStratagemLoading = false;
 
   if (state.currentPage === "strats") {
-    renderStratagems(els.stratSearch?.value || "", {skipLoad:true});
+    renderStratagems(els.stratSearch?.value || "");
   }
 }
 
@@ -1243,7 +1243,7 @@ function switchPage(page, options = {}) {
   document.querySelectorAll("[data-page-target]").forEach(button => {
     button.classList.toggle("active", button.dataset.pageTarget === page);
   });
-  els.navMoreButton?.classList.toggle("active", ["strats","rules","guide"].includes(page));
+  els.navMoreButton?.classList.toggle("active", page === "guide");
 
   els.navMoreMenu?.classList.add("hidden");
   els.navMoreButton?.setAttribute("aria-expanded", "false");
