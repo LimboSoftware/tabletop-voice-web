@@ -489,50 +489,6 @@ body.table-mode .profile-row { font-size: 1.08rem; }
   color: var(--accent);
 }
 
-.wound-tracker {
-  border-bottom: 1px solid var(--line);
-}
-
-.wound-controls {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.wound-button {
-  width: 48px;
-  height: 48px;
-  border: 1px solid #334155;
-  border-radius: 14px;
-  background: #17202b;
-  color: #f5f7fa;
-  font-size: 1.7rem;
-  line-height: 1;
-}
-
-.wound-button:hover {
-  border-color: var(--accent-strong);
-  background: #1c2835;
-}
-
-.wound-value {
-  min-width: 108px;
-  text-align: center;
-  border: 1px solid #2c394b;
-  background: #10161e;
-  border-radius: 14px;
-  padding: 9px 14px;
-}
-
-.wound-value strong {
-  font-size: 1.7rem;
-}
-
-.wound-value span {
-  color: #8190a2;
-  margin-left: 4px;
-}
-
 body.focus-mode .roster-panel,
 body.focus-mode .topbar {
   display: none;
