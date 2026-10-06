@@ -1348,13 +1348,51 @@ function voiceNormalize(value) {
     .trim();
 }
 
-function phoneticWords(value) {
+function speechSoundNormalize(value) {
   return voiceNormalize(value)
+    // Common speech-to-text equivalents for unusual tabletop/fantasy spellings.
+    .replace(/korps|corps|korp|corp|core/g, "kor")
+    .replace(/krieg|kreig|kreeg|creeg|creek|creed/g, "krig")
+    .replace(/draigo|drago/g, "drago")
+    .replace(/c'tan|ctan/g, "ktan")
+    .replace(/t'au|tau/g, "tau")
+    .replace(/aeldari|eldari/g, "eldari")
+    .replace(/drukhari|drukari|drukari/g, "drukari")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function speechCompact(value) {
+  return speechSoundNormalize(value)
     .replace(/\b(the|of|and|a|an)\b/g, " ")
-    .replace(/\bcorps\b/g, "kor")
-    .replace(/\bkorps\b/g, "kor")
-    .replace(/\bkorp\b/g, "kor")
-    .replace(/\bkrieg\b/g, "kreg")
+    .replace(/\s+/g, "")
+    .trim();
+}
+
+function prefixCoverage(spoken, candidate) {
+  const q = speechCompact(spoken);
+  const n = speechCompact(candidate);
+  if (!q || !n) return 0;
+  if (q === n) return 1;
+
+  const min = Math.min(q.length, n.length);
+  let same = 0;
+  while (same < min && q[same] === n[same]) same++;
+
+  const coverage = same / Math.max(1, q.length);
+  const candidateCoverage = same / Math.max(1, n.length);
+
+  // Prefer a transcript that accurately covers the beginning of a longer,
+  // unusual unit name over a different unit sharing only its first word.
+  if (coverage >= .9 && q.length >= 6) {
+    return Math.min(1, .88 + candidateCoverage * .12);
+  }
+  return coverage * .75 + candidateCoverage * .25;
+}
+
+function phoneticWords(value) {
+  return speechSoundNormalize(value)
+    .replace(/\b(the|of|and|a|an)\b/g, " ")
     .replace(/\bkh/g, "k")
     .replace(/\bgh/g, "g")
     .replace(/tion\b/g, "shun")
@@ -1476,14 +1514,18 @@ function scoreVoicePhrase(spoken, candidate) {
   const tokens = tokenSimilarity(q, n);
   const phonetic = stringSimilarity(phoneticSkeleton(q), phoneticSkeleton(n));
   const partialPhonetic = bestVariantSimilarity(q, n);
+  const soundEdit = stringSimilarity(speechCompact(q), speechCompact(n));
+  const prefix = prefixCoverage(q, n);
 
   score = Math.max(
     score,
-    edit * .84,
-    phonetic * .82,
-    tokens * .9,
-    partialPhonetic * .97,
-    edit * .34 + phonetic * .24 + tokens * .14 + partialPhonetic * .28
+    edit * .78,
+    phonetic * .78,
+    tokens * .72,
+    partialPhonetic * .9,
+    soundEdit * .96,
+    prefix * .99,
+    edit * .20 + phonetic * .18 + tokens * .10 + partialPhonetic * .16 + soundEdit * .20 + prefix * .16
   );
 
   const qWords = phoneticWords(q).split(" ").filter(Boolean);
@@ -1503,6 +1545,14 @@ function scoreVoicePhrase(spoken, candidate) {
       const similarity = stringSimilarity(qJoined, chunk);
       if (similarity >= .72) score = Math.max(score, similarity * .98);
     }
+  }
+
+  const qSoundWords = speechSoundNormalize(q).split(" ").filter(Boolean);
+  const nSoundWords = speechSoundNormalize(n).split(" ").filter(Boolean);
+  const sharedSoundWords = qSoundWords.filter(word => nSoundWords.includes(word));
+
+  if (qSoundWords.length >= 2 && sharedSoundWords.length === 1 && sharedSoundWords[0].length <= 6) {
+    score = Math.min(score, .72);
   }
 
   return Math.max(0, Math.min(1, score));
@@ -1575,10 +1625,17 @@ function chooseBestVoiceMatch(input) {
     return;
   }
 
+  const primaryTopScore = scoreVoicePhrase(primary, top.unit.name);
+  const strongSoundMatch =
+    speechCompact(primary).length >= 6 &&
+    (prefixCoverage(primary, top.unit.name) >= .90 ||
+     stringSimilarity(speechCompact(primary), speechCompact(top.unit.name)) >= .90);
+
   const decisive =
-    top.score >= .94 ||
-    (top.score >= .86 && margin >= .10) ||
-    (top.matchedAlias && top.score >= .82);
+    top.score >= .97 ||
+    (strongSoundMatch && top.score >= .90 && margin >= .08) ||
+    (primaryTopScore >= .92 && top.score >= .92 && margin >= .12) ||
+    (top.matchedAlias && top.score >= .88);
 
   if (decisive) {
     closeVoiceShortlist();
