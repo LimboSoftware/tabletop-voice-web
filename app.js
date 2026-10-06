@@ -684,7 +684,7 @@ async function loadFull40kData() {
     toast(error.message || "Could not load full 40K data.");
   } finally {
     state.fullDataLoading = false;
-    setFullDataButtons(false, "Load full 40K data");
+    setFullDataButtons(false, state.rosters.some(r => r.source === "bsdata") ? "Refresh all armies" : "Import all armies");
   }
 }
 
@@ -936,24 +936,29 @@ function hideApp() {
 }
 
 function renderDataSummary() {
+  const importedLists = state.rosters.filter(roster => roster.source === "new-recruit");
+  const hasFullData = state.rosters.some(roster => roster.source === "bsdata");
+
+  els.fullDataArmySection?.classList.toggle("hidden", !hasFullData);
+
+  if (els.fullDataButton) {
+    els.fullDataButton.textContent = hasFullData ? "Refresh all armies" : "Import all armies";
+  }
+
   if (!els.dataRosterSummary) return;
 
-  if (!state.rosters.length) {
-    els.dataRosterSummary.innerHTML = '<p>Nothing loaded yet.</p>';
+  if (!importedLists.length) {
+    els.dataRosterSummary.innerHTML = '<p class="muted-copy">No New Recruit lists loaded yet.</p>';
     return;
   }
 
-  els.dataRosterSummary.innerHTML = state.rosters.map(roster => {
-    const count = roster.units?.length || 0;
-    const label = roster.source === "bsdata" ? "Full 40K data" : "New Recruit";
-    return `
-      <div class="data-summary-row">
-        <div>
-          <strong>${escapeHtml(roster.name)}</strong>
-          <small>${escapeHtml(label)} · ${count} entries</small>
-        </div>
-      </div>`;
-  }).join("");
+  els.dataRosterSummary.innerHTML = importedLists.map(roster => `
+    <div class="data-summary-row">
+      <div>
+        <strong>${escapeHtml(roster.name)}</strong>
+        <small>New Recruit list · ${roster.units?.length || 0} units${roster.points != null ? " · " + escapeHtml(roster.points) + " pts" : ""}</small>
+      </div>
+    </div>`).join("");
 }
 
 function renderAll() {
