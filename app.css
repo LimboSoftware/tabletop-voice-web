@@ -3497,3 +3497,35 @@ body.focus-mode .detail-panel {
     font-size: .72rem;
   }
 }
+
+
+/* Weapon value emphasis: numbers up, rule words stay compact */
+.weapon-table tbody td.weapon-number,
+.weapon-table tbody td.weapon-range-number {
+  font-size: 1.16rem;
+  font-weight: 850;
+  line-height: 1;
+}
+
+.weapon-table tbody td.weapon-range-text,
+.weapon-table tbody td.weapon-keywords {
+  font-size: .92rem;
+  font-weight: 500;
+  line-height: 1.2;
+}
+
+@media (max-width: 760px) {
+  .weapon-table tbody td.weapon-number,
+  .weapon-table tbody td.weapon-range-number {
+    font-size: 1rem !important;
+    font-weight: 900 !important;
+    line-height: 1 !important;
+  }
+
+  .weapon-table tbody td.weapon-range-text,
+  .weapon-table tbody td.weapon-keywords {
+    font-size: .58rem !important;
+    font-weight: 500 !important;
+    line-height: 1.15 !important;
+  }
+}
