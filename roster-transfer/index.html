@@ -21,13 +21,13 @@
       <div class="hero">
         <p class="eyebrow">SEND FROM THIS DEVICE</p>
         <h1>Move New Recruit lists to your phone.</h1>
-        <p>Choose one or more New Recruit JSON files, make a QR code, then scan it with your phone. The roster payload is sent directly between the two browsers.</p>
+        <p>Choose one or more New Recruit JSON, ROS, ROSZ or TXT files, make a QR code, then scan it with your phone. The roster payload is sent directly between the two browsers.</p>
       </div>
 
       <label id="dropZone" class="drop-zone">
-        <input id="fileInput" type="file" accept=".json,application/json" multiple hidden>
+        <input id="fileInput" type="file" accept=".json,.ros,.rosz,.txt,application/json,text/plain,application/xml,text/xml,application/zip" multiple hidden>
         <span class="drop-icon">＋</span>
-        <strong>Choose New Recruit JSON files</strong>
+        <strong>Choose New Recruit roster files</strong>
         <small>or drag them here</small>
       </label>
 
@@ -78,7 +78,7 @@
       <div id="receiveComplete" class="hidden">
         <p class="eyebrow">TRANSFER COMPLETE</p>
         <h1>Your lists are ready.</h1>
-        <p class="receive-copy">Save the JSON files to your phone, then import them from the Setup tab in Tabletop Voice.</p>
+        <p class="receive-copy">Save the roster files to your phone, then import them from the Setup tab in Tabletop Voice.</p>
 
         <div id="receivedFiles" class="received-files"></div>
 
@@ -104,6 +104,7 @@
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.5/peerjs.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/fflate/0.8.2/fflate.min.js"></script>
   <script src="./app.js"></script>
 </body>
 </html>
