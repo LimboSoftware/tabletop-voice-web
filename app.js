@@ -2441,10 +2441,16 @@ function handleDatasheetVoiceCommand(q) {
 }
 
 function extractVoiceAmount(q) {
-  const numeric = q.match(/\b(\d+)\b/);
+  const cleaned = q
+    .replace(/\bplayer\s+(?:1|2|one|two)\b/g, " ")
+    .replace(/\bp[12]\b/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  const numeric = cleaned.match(/\b(\d+)\b/);
   if (numeric) return Number(numeric[1]);
 
-  const tokens = q.split(" ");
+  const tokens = cleaned.split(" ");
   for (let i = 0; i < tokens.length; i++) {
     const two = tokens.slice(i, i + 2).join(" ");
     const twoValue = parseSpokenNumber(two);
