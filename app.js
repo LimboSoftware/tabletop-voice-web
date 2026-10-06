@@ -3,10 +3,13 @@ const state = {
   activeRoster: 0,
   selected: null,
   mode: localStorage.getItem("tv_mode") || "mobile",
-  currentPage: localStorage.getItem("tv_page") || "data",
+  currentPage: localStorage.getItem("tv_page") || "setup",
   listening: false,
   recognition: null,
-  referenceData: {rules:[], stratagems:[]}
+  referenceData: {rules:[], stratagems:[]},
+  scoreTurn: Math.min(5, Math.max(1, Number(localStorage.getItem("tv_score_turn") || 1))),
+  lastDiceRoll: null,
+  showDiceOrder: false
 };
 
 const $ = (id) => document.getElementById(id);
@@ -36,7 +39,6 @@ const els = {
   modeToggle: $("modeToggle"),
   focusButton: $("focusButton"),
   pinButton: $("pinButton"),
-  destroyedButton: $("destroyedButton"),
   roundDown: $("roundDown"),
   roundUp: $("roundUp"),
   roundValue: $("roundValue"),
@@ -61,12 +63,33 @@ const els = {
   pageRules: $("pageRules"),
   pageSetup: $("pageSetup"),
   dataRosterSummary: $("dataRosterSummary"),
+  fullDataArmySection: $("fullDataArmySection"),
+  datasheetResultsShell: $("datasheetResultsShell"),
   myScoreValue: $("myScoreValue"),
   oppScoreValue: $("oppScoreValue"),
+  p1PrimaryTurn: $("p1PrimaryTurn"),
+  p1SecondaryTurn: $("p1SecondaryTurn"),
+  p2PrimaryTurn: $("p2PrimaryTurn"),
+  p2SecondaryTurn: $("p2SecondaryTurn"),
+  p1PrimaryTotal: $("p1PrimaryTotal"),
+  p1SecondaryTotal: $("p1SecondaryTotal"),
+  p2PrimaryTotal: $("p2PrimaryTotal"),
+  p2SecondaryTotal: $("p2SecondaryTotal"),
+  p1PrimaryMax: $("p1PrimaryMax"),
+  p1SecondaryMax: $("p1SecondaryMax"),
+  p2PrimaryMax: $("p2PrimaryMax"),
+  p2SecondaryMax: $("p2SecondaryMax"),
+  scoreTurnLabel1: $("scoreTurnLabel1"),
+  scoreTurnLabel2: $("scoreTurnLabel2"),
   diceCount: $("diceCount"),
+  diceTarget: $("diceTarget"),
   rollDiceButton: $("rollDiceButton"),
   diceSummary: $("diceSummary"),
   diceResults: $("diceResults"),
+  diceOrder: $("diceOrder"),
+  rerollMissesButton: $("rerollMissesButton"),
+  rerollAllButton: $("rerollAllButton"),
+  toggleDiceOrderButton: $("toggleDiceOrderButton"),
   stratSearch: $("stratSearch"),
   stratResults: $("stratResults"),
   coreRuleSearch: $("coreRuleSearch"),
@@ -75,8 +98,7 @@ const els = {
   resetMatchButton: $("resetMatchButton"),
   toast: $("toast"),
   firstRunModal: $("firstRunModal"),
-  firstRunFullData: $("firstRunFullData"),
-  firstRunImport: $("firstRunImport"),
+  firstRunContinue: $("firstRunContinue"),
   voiceShortlistModal: $("voiceShortlistModal"),
   voiceShortlistClose: $("voiceShortlistClose"),
   voiceShortlistResults: $("voiceShortlistResults"),
@@ -92,8 +114,7 @@ function boot() {
   renderAll();
   renderMatchTools();
   restoreSetupChecks();
-  switchPage(!state.rosters.length && state.currentPage === "datasheets" ? "data" : state.currentPage, {silent:true});
-  els.voiceDock?.classList.remove("hidden");
+  switchPage(state.currentPage, {silent:true});
   if ("serviceWorker" in navigator) navigator.serviceWorker.register("./sw.js").catch(() => {});
 }
 
@@ -106,7 +127,6 @@ function bindEvents() {
   els.modeToggle.addEventListener("click", toggleMode);
   els.focusButton?.addEventListener("click", toggleFocusMode);
   els.pinButton.addEventListener("click", toggleSelectedPin);
-  els.destroyedButton?.addEventListener("click", toggleDestroyed);
   els.roundDown?.addEventListener("click", () => adjustRound(-1));
   els.roundUp?.addEventListener("click", () => adjustRound(1));
   els.cpDown?.addEventListener("click", () => adjustCP(-1));
@@ -127,12 +147,28 @@ function bindEvents() {
     }
   });
   document.querySelectorAll("[data-score-change]").forEach(button => {
-    button.addEventListener("click", () => adjustScore(button.dataset.scoreSide, Number(button.dataset.scoreChange)));
+    button.addEventListener("click", () => adjustTurnScore(
+      Number(button.dataset.scorePlayer),
+      button.dataset.scoreType,
+      Number(button.dataset.scoreChange)
+    ));
   });
+  document.querySelectorAll("[data-score-turn]").forEach(button => {
+    button.addEventListener("click", () => setScoreTurn(Number(button.dataset.scoreTurn)));
+  });
+  [els.p1PrimaryMax, els.p1SecondaryMax, els.p2PrimaryMax, els.p2SecondaryMax]
+    .filter(Boolean)
+    .forEach(input => input.addEventListener("change", saveScoreMaxes));
   document.querySelectorAll("[data-dice-count]").forEach(button => {
     button.addEventListener("click", () => rollDice(Number(button.dataset.diceCount)));
   });
-  els.rollDiceButton?.addEventListener("click", () => rollDice(Number(els.diceCount?.value || 1)));
+  els.rollDiceButton?.addEventListener("click", () => rollDice(
+    Number(els.diceCount?.value || 1),
+    Number(els.diceTarget?.value || 0) || null
+  ));
+  els.rerollMissesButton?.addEventListener("click", rerollMisses);
+  els.rerollAllButton?.addEventListener("click", rerollEverything);
+  els.toggleDiceOrderButton?.addEventListener("click", toggleDiceOrder);
   els.stratSearch?.addEventListener("input", () => renderStratagems(els.stratSearch.value));
   els.coreRuleSearch?.addEventListener("input", () => renderCoreRules(els.coreRuleSearch.value));
   els.setupChooseArmies?.addEventListener("click", openArmyPicker);
@@ -157,20 +193,18 @@ function bindEvents() {
     renderArmyPicker();
     renderResults(els.searchInput.value);
   });
-  els.firstRunFullData?.addEventListener("click", () => {
+  els.firstRunContinue?.addEventListener("click", () => {
     dismissFirstRun();
-    loadFull40kData();
-  });
-  els.firstRunImport?.addEventListener("click", () => {
-    dismissFirstRun();
-    els.fileInput.click();
+    switchPage("setup");
   });
   els.voiceShortlistClose?.addEventListener("click", closeVoiceShortlist);
   els.voiceShortlistModal?.addEventListener("click", event => {
     if (event.target === els.voiceShortlistModal) closeVoiceShortlist();
   });
-  ["pointerdown", "touchstart"].forEach(evt => els.talkButton.addEventListener(evt, startListening, {passive:false}));
-  ["pointerup", "pointercancel", "pointerleave", "touchend"].forEach(evt => els.talkButton.addEventListener(evt, stopListening, {passive:false}));
+  if (els.talkButton) {
+    ["pointerdown", "touchstart"].forEach(evt => els.talkButton.addEventListener(evt, startListening, {passive:false}));
+    ["pointerup", "pointercancel", "pointerleave", "touchend"].forEach(evt => els.talkButton.addEventListener(evt, stopListening, {passive:false}));
+  }
 }
 
 function showFirstRunIfNeeded() {
