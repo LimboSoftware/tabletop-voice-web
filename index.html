@@ -41,7 +41,6 @@
       </a>
       <div class="top-actions">
         <button id="modeToggle" class="ghost-button" type="button">Table mode</button>
-        <button id="armyPickerButton" class="ghost-button" type="button">Armies</button>
         <button id="fullDataButton" class="ghost-button" type="button">Load full 40K data</button>
         <button id="importButton" class="primary-button" type="button">Import roster</button>
         <input id="fileInput" type="file" accept=".json,.rosz,.ros,.txt,application/json,text/plain" hidden />
@@ -72,8 +71,11 @@
 
           <div class="active-armies-wrap">
             <div class="active-armies-heading">
-              <span>ACTIVE SEARCH ARMIES</span>
-              <small>Tick the armies voice and text search should use</small>
+              <div>
+                <span>SEARCH ARMIES</span>
+                <small id="activeArmySummary">Choose which armies voice and text search should use</small>
+              </div>
+              <button id="armyPickerButton" class="ghost-button compact" type="button">Choose armies</button>
             </div>
             <div id="activeArmySelector" class="active-army-selector"></div>
           </div>
@@ -160,7 +162,7 @@
         </div>
         <div class="army-picker-actions">
           <button id="armyPickerAll" class="ghost-button compact" type="button">Select all</button>
-          <button id="armyPickerCurrent" class="ghost-button compact" type="button">Only current</button>
+          <button id="armyPickerClear" class="ghost-button compact" type="button">Clear</button>
         </div>
         <div id="armyPickerList" class="army-picker-list"></div>
       </div>
