@@ -8,6 +8,7 @@ const state = {
   recognition: null,
   referenceData: {rules:[], stratagems:[]},
   scoreTurn: Math.min(5, Math.max(1, Number(localStorage.getItem("tv_score_turn") || 1))),
+  unitBrowserSourceId: localStorage.getItem("tv_unit_browser_source") || "all",
   lastDiceRoll: null,
   showDiceOrder: false
 };
@@ -274,6 +275,56 @@ function parseRosterFile(text, fileName) {
   };
 }
 
+function collectSelectionCategories(node) {
+  const names = [];
+
+  function walk(value) {
+    if (!value || typeof value !== "object") return;
+    if (Array.isArray(value)) {
+      value.forEach(walk);
+      return;
+    }
+
+    for (const category of value.categories || []) {
+      const name = String(category?.name || "").trim();
+      if (name) names.push(name);
+    }
+
+    for (const category of value.categoryLinks || []) {
+      const name = String(category?.name || "").trim();
+      if (name) names.push(name);
+    }
+
+    for (const child of value.selections || []) walk(child);
+  }
+
+  walk(node);
+  return dedupeBy(names, value => normalize(value));
+}
+
+function collectBSDataCategories(node) {
+  const names = [];
+
+  function walk(value) {
+    if (!value || typeof value !== "object") return;
+    if (Array.isArray(value)) {
+      value.forEach(walk);
+      return;
+    }
+
+    for (const category of value.categoryLinks || []) {
+      const name = String(category?.name || "").trim();
+      if (name) names.push(name);
+    }
+
+    for (const child of value.selectionEntries || []) walk(child);
+    for (const child of value.selectionEntryGroups || []) walk(child);
+  }
+
+  walk(node);
+  return dedupeBy(names, value => normalize(value));
+}
+
 function parseNewRecruitSelection(selection) {
   const allProfiles = collectProfiles(selection);
   const unitProfiles = allProfiles.filter(p => p?.typeName === "Unit");
@@ -309,12 +360,7 @@ function parseNewRecruitSelection(selection) {
   if (pts != null) stats.push({label:"Pts", value:String(pts)});
 
   const name = selection.name || primaryUnitProfile.name || "Unit";
-  const categories = dedupeBy(
-    (selection.categories || [])
-      .map(category => String(category?.name || "").trim())
-      .filter(Boolean),
-    value => normalize(value)
-  );
+  const categories = collectSelectionCategories(selection);
 
   return {
     id: selection.id || primaryUnitProfile.id || name,
@@ -763,6 +809,7 @@ function buildFull40kRoster(documents) {
         name:link.name,
         type:"Reference",
         source:sourceName,
+        categories:[],
         armyId:armyIdFromSource(sourceName),
         armyName:armyNameFromSource(sourceName),
         stats:costStats(link),
@@ -837,12 +884,14 @@ function parseBSDataUnit(node, displayName, sourceName, link) {
     .map(p => ({name:p.name || "Ability", text:characteristicValue((p.characteristics || [])[0])}));
 
   const allRules = dedupeBy([...abilityProfiles, ...rules], r => normalize(r.name + "|" + r.text));
+  const categories = collectBSDataCategories(node);
 
   return {
     id:"bsdata-" + (node.id || link.id || normalize(displayName)),
     name:displayName || unitProfile?.name || node.name || "Unit",
     type:"Unit",
     source:sourceName,
+    categories,
     armyId:armyIdFromSource(sourceName),
     armyName:armyNameFromSource(sourceName),
     stats,
