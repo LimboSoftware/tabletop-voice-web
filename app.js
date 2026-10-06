@@ -1559,6 +1559,9 @@ function getUnitBrowserSources() {
       label:roster.name,
       subLabel:(roster.points != null ? roster.points + " pts · " : "") + "New Recruit",
       kind:"new-recruit",
+      roster,
+      faction:roster.faction || "",
+      detachments:roster.detachments || [],
       entries:(roster.units || []).map(unit => ({
         unit,
         rosterIndex:index,
@@ -1577,6 +1580,8 @@ function getUnitBrowserSources() {
       label:scope.label,
       subLabel:"Whole army",
       kind:"whole-army",
+      faction:scope.label,
+      scope,
       entries:(scope.units || []).map(unit => ({
         unit,
         rosterIndex:scope.rosterIndex,
