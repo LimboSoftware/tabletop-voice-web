@@ -255,7 +255,6 @@ function collectWeaponProfiles(node) {
       ? rawNumber
       : inheritedQuantity;
 
-    if (Number.isFinite(Number(value.number)) && Number(value.number) <= 0) return;
     if (Array.isArray(value.profiles)) {
       value.profiles.forEach(profile => {
         if (!profile || typeof profile !== "object") return;
@@ -303,6 +302,7 @@ function collectProfiles(node) {
       value.forEach(walk);
       return;
     }
+    if (Number.isFinite(Number(value.number)) && Number(value.number) <= 0) return;
     if (Array.isArray(value.profiles)) {
       value.profiles.forEach(p => {
         if (p && typeof p === "object") found.push(p);
