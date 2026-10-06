@@ -712,12 +712,13 @@ function getImportedDetachmentRequests() {
       requests.push({
         name:detachment.name,
         faction:detachment.faction || roster.faction || "",
-        rosterName:roster.name
+        rosterName:roster.name,
+        rosterId:roster.id
       });
     }
   }
 
-  return dedupeBy(requests, item => normalize(item.faction + "|" + item.name));
+  return dedupeBy(requests, item => normalize(item.rosterId + "|" + item.faction + "|" + item.name));
 }
 
 function gdcFactionSlugCandidates(factionName = "") {
@@ -824,6 +825,7 @@ function detachmentStratagemToReference(stratagem, request) {
     category,
     detachment:request.name,
     rosterName:request.rosterName,
+    rosterId:request.rosterId || "",
     source:"Game Datacards 11e"
   };
 }
