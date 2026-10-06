@@ -896,8 +896,8 @@ function getPageElement(page) {
 }
 
 function switchPage(page, options = {}) {
-  const valid = ["data","datasheets","score","dice","strats","rules","setup"];
-  if (!valid.includes(page)) page = "data";
+  const valid = ["setup","datasheets","score","dice","strats","rules","guide"];
+  if (!valid.includes(page)) page = "setup";
 
   state.currentPage = page;
   localStorage.setItem("tv_page", page);
@@ -909,14 +909,20 @@ function switchPage(page, options = {}) {
   document.querySelectorAll("[data-page-target]").forEach(button => {
     button.classList.toggle("active", button.dataset.pageTarget === page);
   });
-  els.navMoreButton?.classList.toggle("active", ["strats","rules","setup"].includes(page));
+  els.navMoreButton?.classList.toggle("active", ["strats","rules","guide"].includes(page));
 
   els.navMoreMenu?.classList.add("hidden");
   els.navMoreButton?.setAttribute("aria-expanded", "false");
 
   if (page === "strats") renderStratagems(els.stratSearch?.value || "");
   if (page === "rules") renderCoreRules(els.coreRuleSearch?.value || "");
-  if (page === "data") renderDataSummary();
+  if (page === "setup") renderDataSummary();
+  if (page === "score") renderScoreboard();
+  if (page === "dice") renderDiceState();
+
+  // Voice is intentionally page-scoped. Setup and Guide have no microphone.
+  const voiceEnabled = ["datasheets","score","dice","strats","rules"].includes(page);
+  els.voiceDock?.classList.toggle("hidden", !voiceEnabled);
 
   if (!options.silent) window.scrollTo({top:0, behavior:"smooth"});
 }
@@ -926,8 +932,7 @@ function showApp() {
 }
 
 function hideApp() {
-  switchPage("data", {silent:true});
-  els.voiceDock?.classList.remove("hidden");
+  switchPage("setup", {silent:true});
 }
 
 function renderDataSummary() {
