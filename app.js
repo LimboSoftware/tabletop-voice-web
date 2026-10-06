@@ -1701,7 +1701,7 @@ function adjustTurnScore(player, type, delta) {
 
   let next = Math.max(0, current + delta);
 
-  if (delta > 0 && max > 0) {
+  if (delta > 0) {
     const room = Math.max(0, max - categoryTotal);
     next = current + Math.min(delta, room);
   }
@@ -2648,16 +2648,20 @@ function restore() {
 }
 
 function clearRosters() {
-  if (!confirm("Remove imported rosters from this device?")) return;
+  if (!confirm("Remove all loaded New Recruit lists and all-armies data from this device?")) return;
   state.rosters = [];
   state.activeRoster = 0;
   state.selected = null;
+  state.referenceData = {rules:[], stratagems:[]};
   localStorage.removeItem("tv_rosters");
   localStorage.removeItem("tv_activeRoster");
   localStorage.removeItem("tv_active_search_rosters");
   localStorage.removeItem("tv_active_search_scopes");
-  hideApp();
-  toast("Imported rosters removed");
+  if (els.searchInput) els.searchInput.value = "";
+  els.datasheetResultsShell?.classList.add("hidden");
+  renderAll();
+  switchPage("setup", {silent:true});
+  toast("Loaded game data cleared");
 }
 
 function toast(message) {
