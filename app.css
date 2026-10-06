@@ -3991,3 +3991,17 @@ body.focus-mode .detail-panel {
     font-size: .62rem;
   }
 }
+
+
+/* Extra mobile weapon readability */
+@media (max-width: 760px) {
+  .compact-weapon-table .weapon-number,
+  .compact-weapon-table .weapon-range-number {
+    font-size: 1.42rem !important;
+  }
+
+  .compact-weapon-table .weapon-stat-row > td {
+    padding-top: 12px !important;
+    padding-bottom: 10px !important;
+  }
+}
