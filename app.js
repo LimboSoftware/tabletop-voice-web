@@ -1185,6 +1185,9 @@ function renderArmyPicker() {
       setSearchScopeActive(input.dataset.armyScopeId, input.checked);
       renderArmyPicker();
       renderActiveArmySelector();
+      renderTabs();
+      renderQuickLists();
+      updateRosterBrowserVisibility();
       renderResults(els.searchInput?.value || "");
     });
   });
