@@ -1230,6 +1230,100 @@ function getImportedRosterEntries() {
     .filter(item => item.roster.source === "new-recruit");
 }
 
+function getUnitBrowserSources() {
+  const sources = [];
+
+  for (const {roster, index} of getImportedRosterEntries()) {
+    sources.push({
+      id:"roster:" + roster.id,
+      label:roster.name,
+      subLabel:(roster.points != null ? roster.points + " pts · " : "") + "New Recruit",
+      kind:"new-recruit",
+      entries:(roster.units || []).map(unit => ({
+        unit,
+        rosterIndex:index,
+        sourceLabel:roster.name
+      }))
+    });
+  }
+
+  const activeScopes = new Set(getActiveSearchScopeIds());
+  for (const scope of getAvailableSearchScopes()) {
+    if (!activeScopes.has(scope.id)) continue;
+
+    sources.push({
+      id:"army:" + scope.id,
+      label:scope.label,
+      subLabel:"Whole army",
+      kind:"whole-army",
+      entries:(scope.units || []).map(unit => ({
+        unit,
+        rosterIndex:scope.rosterIndex,
+        sourceLabel:scope.label
+      }))
+    });
+  }
+
+  if (!sources.length) return [];
+
+  const allEntries = [];
+  const seen = new Set();
+
+  // Prefer New Recruit versions where a unit exists in both a list and a whole-army source.
+  for (const source of [...sources].sort((a,b) => (a.kind === "new-recruit" ? -1 : 1))) {
+    for (const entry of source.entries) {
+      const key = normalize(entry.unit.name);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      allEntries.push(entry);
+    }
+  }
+
+  return [{
+    id:"all",
+    label:"All data",
+    subLabel:allEntries.length + " units",
+    kind:"all",
+    entries:allEntries
+  }, ...sources];
+}
+
+function getActiveUnitBrowserSource() {
+  const sources = getUnitBrowserSources();
+  if (!sources.length) return null;
+
+  let source = sources.find(item => item.id === state.unitBrowserSourceId);
+  if (!source) {
+    source = sources[0];
+    state.unitBrowserSourceId = source.id;
+    localStorage.setItem("tv_unit_browser_source", source.id);
+  }
+  return source;
+}
+
+function setUnitBrowserSource(sourceId) {
+  const source = getUnitBrowserSources().find(item => item.id === sourceId);
+  if (!source) return;
+
+  state.unitBrowserSourceId = source.id;
+  localStorage.setItem("tv_unit_browser_source", source.id);
+  state.selected = null;
+
+  if (source.kind === "new-recruit" && source.entries[0]) {
+    state.activeRoster = source.entries[0].rosterIndex;
+  } else if (source.kind === "whole-army" && source.entries[0]) {
+    state.activeRoster = source.entries[0].rosterIndex;
+  }
+
+  if (els.searchInput) els.searchInput.value = "";
+  els.datasheetResultsShell?.classList.add("hidden");
+  renderDetail(null);
+  renderTabs();
+  renderQuickLists();
+  updateRosterBrowserVisibility();
+  persist();
+}
+
 function getUnitBrowserGroup(unit) {
   const categories = new Set((unit.categories || []).map(category => normalize(category)));
 
@@ -1253,10 +1347,10 @@ function getUnitBrowserGroup(unit) {
 
 function updateRosterBrowserVisibility() {
   if (!els.rosterBrowser) return;
-  const hasImported = getImportedRosterEntries().length > 0;
+  const hasSources = getUnitBrowserSources().length > 0;
   const show =
     state.currentPage === "datasheets" &&
-    hasImported &&
+    hasSources &&
     !state.selected &&
     !normalize(els.searchInput?.value || "");
 
@@ -1266,40 +1360,26 @@ function updateRosterBrowserVisibility() {
 function renderTabs() {
   if (!els.rosterTabs) return;
 
-  const imported = getImportedRosterEntries();
+  const sources = getUnitBrowserSources();
   els.rosterTabs.innerHTML = "";
 
-  if (!imported.length) {
+  if (!sources.length) {
     updateRosterBrowserVisibility();
     return;
   }
 
-  if (!imported.some(item => item.index === state.activeRoster) && !state.selected) {
-    state.activeRoster = imported[0].index;
-  }
+  const active = getActiveUnitBrowserSource();
 
-  imported.forEach(({roster, index}) => {
+  for (const source of sources) {
     const button = document.createElement("button");
     button.type = "button";
-    button.className = "roster-tab" + (index === state.activeRoster ? " active" : "");
+    button.className = "roster-tab" + (source.id === active?.id ? " active" : "");
     button.innerHTML = `
-      <strong>${escapeHtml(roster.name)}</strong>
-      ${roster.points != null ? `<small>${escapeHtml(roster.points)} pts</small>` : ""}`;
-
-    button.addEventListener("click", () => {
-      state.activeRoster = index;
-      state.selected = null;
-      if (els.searchInput) els.searchInput.value = "";
-      els.datasheetResultsShell?.classList.add("hidden");
-      renderDetail(null);
-      renderTabs();
-      renderQuickLists();
-      updateRosterBrowserVisibility();
-      persist();
-    });
-
+      <strong>${escapeHtml(source.label)}</strong>
+      <small>${escapeHtml(source.subLabel || "")}</small>`;
+    button.addEventListener("click", () => setUnitBrowserSource(source.id));
     els.rosterTabs.appendChild(button);
-  });
+  }
 
   updateRosterBrowserVisibility();
 }
@@ -1400,7 +1480,7 @@ function renderDetail(unit) {
   els.detailCard.classList.remove("hidden");
   els.detailType.textContent = (unit.type || "Unit").toUpperCase();
   els.detailName.textContent = unit.name;
-  els.backToRosterButton?.classList.toggle("hidden", getImportedRosterEntries().length === 0);
+  els.backToRosterButton?.classList.toggle("hidden", getUnitBrowserSources().length === 0);
   updatePinButton();
 
   const statOrder = ["m","t","sv","w","ld","oc","insv"];
@@ -2775,8 +2855,8 @@ function updatePinButton() {
 function renderQuickLists() {
   if (!els.quickLists) return;
 
-  const roster = state.rosters[state.activeRoster];
-  if (!roster || roster.source !== "new-recruit") {
+  const source = getActiveUnitBrowserSource();
+  if (!source) {
     els.quickLists.innerHTML = "";
     updateRosterBrowserVisibility();
     return;
@@ -2795,40 +2875,48 @@ function renderQuickLists() {
   ];
 
   const groups = new Map(groupOrder.map(name => [name, []]));
-  for (const unit of roster.units || []) {
-    const group = getUnitBrowserGroup(unit);
+
+  source.entries.forEach((entry, entryIndex) => {
+    const group = getUnitBrowserGroup(entry.unit);
     if (!groups.has(group)) groups.set(group, []);
-    groups.get(group).push(unit);
-  }
+    groups.get(group).push({...entry, entryIndex});
+  });
 
   const html = [];
-  const needsCategoryRefresh = (roster.units || []).length > 0 &&
-    (roster.units || []).every(unit => !(unit.categories || []).length);
+
+  const needsCategoryRefresh =
+    source.kind === "new-recruit" &&
+    source.entries.length > 0 &&
+    source.entries.every(entry => !(entry.unit.categories || []).length);
 
   if (needsCategoryRefresh) {
     html.push(
-      '<div class="roster-refresh-note">Re-import this New Recruit list once to populate unit categories for the new grouped browser.</div>'
+      '<div class="roster-refresh-note">Re-import this New Recruit list once to populate its unit categories.</div>'
     );
   }
 
   for (const groupName of groupOrder) {
-    const units = groups.get(groupName) || [];
-    if (!units.length) continue;
+    const entries = groups.get(groupName) || [];
+    if (!entries.length) continue;
 
-    units.sort((a,b) => a.name.localeCompare(b.name));
+    entries.sort((a,b) => a.unit.name.localeCompare(b.unit.name));
+
     html.push(`
       <section class="roster-unit-group">
         <div class="roster-unit-group-heading">
           <h3>${escapeHtml(groupName)}</h3>
-          <span>${units.length}</span>
+          <span>${entries.length}</span>
         </div>
         <div class="roster-unit-grid">
-          ${units.map(unit => {
-            const pts = (unit.stats || []).find(stat => normalize(stat.label) === "pts")?.value;
+          ${entries.map(entry => {
+            const pts = (entry.unit.stats || []).find(stat => normalize(stat.label) === "pts")?.value;
             return `
-              <button class="roster-unit-button" type="button" data-unit-id="${escapeHtml(unit.id)}">
-                <strong>${escapeHtml(unit.name)}</strong>
-                ${pts != null ? `<small>${escapeHtml(pts)} pts</small>` : ""}
+              <button class="roster-unit-button" type="button" data-entry-index="${entry.entryIndex}">
+                <span class="roster-unit-copy">
+                  <strong>${escapeHtml(entry.unit.name)}</strong>
+                  ${source.kind === "all" ? `<small>${escapeHtml(entry.sourceLabel)}</small>` : ""}
+                </span>
+                ${pts != null ? `<small class="roster-unit-points">${escapeHtml(pts)} pts</small>` : ""}
               </button>`;
           }).join("")}
         </div>
@@ -2836,13 +2924,12 @@ function renderQuickLists() {
   }
 
   els.quickLists.innerHTML = html.join("") ||
-    '<div class="empty-section">No units were found in this imported list.</div>';
+    '<div class="empty-section">No units were found in this data source.</div>';
 
-  const byId = new Map((roster.units || []).map(unit => [unit.id, unit]));
-  els.quickLists.querySelectorAll("[data-unit-id]").forEach(button => {
+  els.quickLists.querySelectorAll("[data-entry-index]").forEach(button => {
     button.addEventListener("click", () => {
-      const unit = byId.get(button.dataset.unitId);
-      if (unit) selectUnitFromRoster(unit, state.activeRoster);
+      const entry = source.entries[Number(button.dataset.entryIndex)];
+      if (entry) selectUnitFromRoster(entry.unit, entry.rosterIndex);
     });
   });
 
@@ -2850,11 +2937,7 @@ function renderQuickLists() {
 }
 
 function backToRosterBrowser() {
-  const imported = getImportedRosterEntries();
-  if (!imported.length) return;
-
-  const activeIsImported = state.rosters[state.activeRoster]?.source === "new-recruit";
-  if (!activeIsImported) state.activeRoster = imported[0].index;
+  if (!getUnitBrowserSources().length) return;
 
   state.selected = null;
   if (els.searchInput) els.searchInput.value = "";
