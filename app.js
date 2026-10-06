@@ -1123,6 +1123,7 @@ function cleanUniqueRuleText(text = "") {
 function renderAbilitySection(rules) {
   const activePhase = getActivePhase();
   const uniqueRules = (rules || []).filter(rule => !isCoreRule(rule));
+  if (!uniqueRules.length) return "";
   const visibleRules = activePhase === "All"
     ? uniqueRules
     : uniqueRules.filter(rule => inferRulePhase(rule) === activePhase);
