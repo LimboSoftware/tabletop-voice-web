@@ -127,8 +127,6 @@ function bindEvents() {
   els.modeToggle.addEventListener("click", toggleMode);
   els.focusButton?.addEventListener("click", toggleFocusMode);
   els.pinButton.addEventListener("click", toggleSelectedPin);
-  els.roundDown?.addEventListener("click", () => adjustRound(-1));
-  els.roundUp?.addEventListener("click", () => adjustRound(1));
   els.cpDown?.addEventListener("click", () => adjustCP(-1));
   els.cpUp?.addEventListener("click", () => adjustCP(1));
   els.turnToggle?.addEventListener("click", toggleTurn);
@@ -160,7 +158,10 @@ function bindEvents() {
     .filter(Boolean)
     .forEach(input => input.addEventListener("change", saveScoreMaxes));
   document.querySelectorAll("[data-dice-count]").forEach(button => {
-    button.addEventListener("click", () => rollDice(Number(button.dataset.diceCount)));
+    button.addEventListener("click", () => rollDice(
+      Number(button.dataset.diceCount),
+      Number(els.diceTarget?.value || 0) || null
+    ));
   });
   els.rollDiceButton?.addEventListener("click", () => rollDice(
     Number(els.diceCount?.value || 1),
@@ -1830,7 +1831,7 @@ function renderDiceState() {
 
   if (els.diceSummary) {
     els.diceSummary.innerHTML = last.target
-      ? `<strong>${successes} / ${last.rolls.length} successes</strong><span>${last.label || "Target"} ${last.target}+</span>`
+      ? `<strong>${successes} / ${last.rolls.length} ${escapeHtml((last.label || "successes").toLowerCase())}</strong><span>${escapeHtml(last.label || "Target")} on ${last.target}+</span>`
       : `<strong>${last.rolls.length} dice rolled</strong><span>Total ${last.rolls.reduce((a,b) => a+b,0)}</span>`;
   }
 
@@ -2525,7 +2526,8 @@ function handleDiceVoice(q) {
 
   const verb = match[2] || "";
   const target = match[3] ? parseDiceTarget(match[3]) : null;
-  const label = verb ? titleCase(verb.replace(/ing$/, "")) + " on" : "";
+  const labelMap = {hitting:"Hits", wounding:"Wounds", saving:"Saves", succeeding:"Successes"};
+  const label = verb ? (labelMap[verb] || "Successes") : "";
 
   rollDice(count, target, label);
   return true;
