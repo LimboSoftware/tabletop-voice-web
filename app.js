@@ -990,6 +990,30 @@ function renderDetachmentSummary() {
     </div>`;
 }
 
+async function getGdcFactionDataChain(factionName = "") {
+  const datasets = [];
+  const seen = new Set();
+
+  let currentName = factionName;
+
+  for (let depth = 0; depth < 3 && currentName; depth++) {
+    const data = await fetchGdcFactionData(currentName, []);
+    if (!data) break;
+
+    const identity = normalize(data.id || data.name || currentName);
+    if (seen.has(identity)) break;
+
+    seen.add(identity);
+    datasets.push(data);
+
+    const parentName = String(data.parent_name || "").trim();
+    if (!parentName || normalize(parentName) === normalize(currentName)) break;
+    currentName = parentName;
+  }
+
+  return datasets;
+}
+
 function cleanGdcText(value) {
   return cleanRuleText(
     englishText(value)
@@ -1083,20 +1107,28 @@ async function getUnitBrowserReferenceData(source) {
       .map(item => String(item?.name || "").trim())
       .filter(Boolean);
 
-    const data = await fetchGdcFactionData(source.faction || roster?.faction || "", detachmentNames);
+    const datasets = await getGdcFactionDataChain(source.faction || roster?.faction || "");
 
-    const stratagems = data && detachmentNames.length
-      ? gdcStratagemsToReferences(data, detachmentNames, roster?.name || source.label)
+    const stratagems = detachmentNames.length
+      ? dedupeBy(
+          datasets.flatMap(data =>
+            gdcStratagemsToReferences(data, detachmentNames, roster?.name || source.label)
+          ),
+          item => normalize((item.detachment || "") + "|" + item.name + "|" + item.text)
+        )
       : [];
 
     const armyRules = localRules.length
       ? localRules
-      : gdcArmyRulesToReferences(data, roster?.name || source.label);
+      : dedupeBy(
+          datasets.flatMap(data => gdcArmyRulesToReferences(data, roster?.name || source.label)),
+          item => normalize(item.name + "|" + item.text)
+        );
 
     let note = "";
     if (!detachmentNames.length) {
       note = "No selected detachment was detected in this New Recruit list.";
-    } else if (!data) {
+    } else if (!datasets.length) {
       note = "No current faction reference data was found for this list.";
     } else if (!stratagems.length) {
       note = "The selected detachment was detected, but no matching current stratagems were found.";
@@ -1106,11 +1138,18 @@ async function getUnitBrowserReferenceData(source) {
   }
 
   if (source.kind === "whole-army") {
-    const data = await fetchGdcFactionData(source.faction || source.label, []);
+    const datasets = await getGdcFactionDataChain(source.faction || source.label);
+
     return {
-      stratagems:gdcStratagemsToReferences(data, null, source.label),
-      armyRules:gdcArmyRulesToReferences(data, source.label),
-      note:data ? "" : "No current faction reference data was found for this army."
+      stratagems:dedupeBy(
+        datasets.flatMap(data => gdcStratagemsToReferences(data, null, source.label)),
+        item => normalize((item.detachment || "") + "|" + item.name + "|" + item.text)
+      ),
+      armyRules:dedupeBy(
+        datasets.flatMap(data => gdcArmyRulesToReferences(data, source.label)),
+        item => normalize(item.name + "|" + item.text)
+      ),
+      note:datasets.length ? "" : "No current faction reference data was found for this army."
     };
   }
 
