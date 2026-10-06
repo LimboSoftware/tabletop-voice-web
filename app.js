@@ -15,7 +15,6 @@ const state = {
 const $ = (id) => document.getElementById(id);
 const els = {
   welcome: $("welcome"),
-  workspace: $("workspace"),
   voiceDock: $("voiceDock"),
   fileInput: $("fileInput"),
   importButton: $("importButton"),
@@ -123,7 +122,11 @@ function bindEvents() {
   els.fileInput?.addEventListener("change", handleFiles);
   els.fullDataButton?.addEventListener("click", loadFull40kData);
   els.clearRoster.addEventListener("click", clearRosters);
-  els.searchInput.addEventListener("input", () => renderResults(els.searchInput.value));
+  els.searchInput.addEventListener("input", () => {
+    state.selected = null;
+    renderDetail(null);
+    renderResults(els.searchInput.value);
+  });
   els.modeToggle.addEventListener("click", toggleMode);
   els.focusButton?.addEventListener("click", toggleFocusMode);
   els.pinButton.addEventListener("click", toggleSelectedPin);
