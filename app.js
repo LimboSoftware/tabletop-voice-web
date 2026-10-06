@@ -987,9 +987,12 @@ function inferRulePhase(rule) {
 }
 
 function renderPhaseControls(rules) {
+  const uniqueRules = (rules || []).filter(rule => !isCoreRule(rule));
+  if (!uniqueRules.length) return "";
+
   const active = getActivePhase();
   const counts = Object.fromEntries(PHASES.map(p => [p, 0]));
-  for (const rule of rules || []) {
+  for (const rule of uniqueRules) {
     counts.All++;
     const phase = inferRulePhase(rule);
     if (phase !== "All") counts[phase]++;
@@ -1068,101 +1071,79 @@ function renderWeaponSection(profiles) {
     </section>`;
 }
 
+function isCoreRule(rule) {
+  const name = normalize(cleanRuleText(rule?.name || ""));
+
+  const corePatterns = [
+    /^assault$/,
+    /^pistol$/,
+    /^heavy$/,
+    /^torrent$/,
+    /^blast$/,
+    /^lethal hits$/,
+    /^sustained hits(?: \d+| d\d+)?$/,
+    /^devastating wounds$/,
+    /^hazardous$/,
+    /^twin linked$/,
+    /^ignores cover$/,
+    /^indirect fire$/,
+    /^lance$/,
+    /^melta(?: \d+| d\d+)?$/,
+    /^rapid fire(?: \d+| d\d+)?$/,
+    /^anti .+ \d+$/,
+    /^precision$/,
+    /^extra attacks$/,
+    /^psychic$/,
+    /^one shot$/,
+    /^deadly demise(?: \d+| d\d+)?$/,
+    /^deep strike$/,
+    /^fights first$/,
+    /^scouts? \d+$/,
+    /^stealth$/,
+    /^feel no pain \d+$/,
+    /^leader$/,
+    /^lone operative$/,
+    /^infiltrators$/,
+    /^damaged .+ wounds? remaining$/,
+    /^core .+$/,
+    /^weapon ability .+$/
+  ];
+
+  return corePatterns.some(pattern => pattern.test(name));
+}
+
+function cleanUniqueRuleText(text = "") {
+  return cleanRuleText(text)
+    .replace(/\n?\s*Example:?[\s\S]*$/i, "")
+    .replace(/\n?\s*Designer'?s Note:?[\s\S]*$/i, "")
+    .replace(/\n?\s*Designer'?s Commentary:?[\s\S]*$/i, "")
+    .trim();
+}
+
 function renderAbilitySection(rules) {
   const activePhase = getActivePhase();
+  const uniqueRules = (rules || []).filter(rule => !isCoreRule(rule));
   const visibleRules = activePhase === "All"
-    ? rules
-    : rules.filter(rule => inferRulePhase(rule) === activePhase);
+    ? uniqueRules
+    : uniqueRules.filter(rule => inferRulePhase(rule) === activePhase);
 
   return `
     <section class="detail-section ability-section">
       <div class="section-heading-row">
-        <h3>Abilities & rules</h3>
+        <h3>Unique abilities & rules</h3>
         <span class="section-count">${visibleRules.length}</span>
       </div>
       <div class="ability-list">
         ${visibleRules.length ? visibleRules.map(rule => {
-          const summary = summariseRule(rule.name || "Rule", rule.text || "");
+          const text = cleanUniqueRuleText(rule.text || "");
           return `
-            <article class="ability-card compact-rule">
+            <article class="ability-card unique-rule-card">
               <h4>${escapeHtml(cleanRuleText(rule.name || "Rule"))}</h4>
-              ${summary ? `<p class="ability-summary">${escapeHtml(summary)}</p>` : ""}
+              ${text ? `<div class="ability-text unique-rule-text">${formatRuleText(text)}</div>` : ""}
             </article>`;
-        }).join("") : '<div class="empty-section">No abilities matched this phase.</div>'}
+        }).join("") : '<div class="empty-section">No unique abilities matched this phase.</div>'}
       </div>
     </section>`;
-}
-
-function summariseRule(name = "", text = "") {
-  const cleanName = normalize(cleanRuleText(name));
-  const cleaned = cleanRuleText(text);
-
-  const known = [
-    [/^blast$/, "Gain +1 Attack for every 5 models in the target unit."],
-    [/^lethal hits$/, "Critical Hits automatically wound the target."],
-    [/^sustained hits (\d+|d\d+)$/, match => "Critical Hits score " + match[1] + " extra hit" + (match[1] === "1" ? "" : "s") + "."],
-    [/^devastating wounds$/, "Critical Wounds inflict mortal wounds equal to the weapon's Damage."],
-    [/^twin linked$/, "Re-roll the Wound roll."],
-    [/^assault$/, "This weapon can be fired after the unit Advances."],
-    [/^pistol$/, "This weapon can be fired while the unit is within Engagement Range."],
-    [/^ignores cover$/, "Targets cannot benefit from Cover against this weapon."],
-    [/^indirect fire$/, "Can target units not visible to the attacker, with the normal Indirect Fire penalties."],
-    [/^hazardous$/, "After attacking, take a Hazardous test for each Hazardous weapon used."],
-    [/^torrent$/, "Attacks automatically hit."],
-    [/^lance$/, "If this unit charged, add 1 to the Wound roll."],
-    [/^melta (\d+)$/, match => "At half range, add " + match[1] + " to Damage."],
-    [/^rapid fire (\d+)$/, match => "At half range, gain " + match[1] + " extra Attack" + (match[1] === "1" ? "" : "s") + "."],
-    [/^anti (.+) (\d\+)$/, match => "Against " + titleCase(match[1]) + ", unmodified " + match[2] + " Wound rolls are Critical Wounds."],
-    [/^deadly demise d3$/, "When destroyed, roll a D6; on a 6, nearby units suffer D3 mortal wounds."],
-    [/^deadly demise (\d+)$/, match => "When destroyed, roll a D6; on a 6, nearby units suffer " + match[1] + " mortal wounds."],
-    [/^stealth$/, "Enemy ranged attacks against this unit suffer -1 to Hit."],
-    [/^deep strike$/, "This unit can be set up in Reserves and arrive more than 9\" from enemy models."],
-    [/^fights first$/, "This unit fights in the Fights First step."],
-    [/^scouts (\d+\")$/, match => "Before the battle starts, this unit can make a " + match[1] + " Scout move."],
-    [/^feel no pain (\d\+)$/, match => "Each time this model would lose a wound, ignore it on a " + match[1] + "."]
-  ];
-
-  for (const [pattern, summary] of known) {
-    const match = cleanName.match(pattern);
-    if (match) return typeof summary === "function" ? summary(match) : summary;
-  }
-
-  const withoutNotes = cleaned
-    .replace(/\*{0,3}Example:?[\s\S]*$/i, "")
-    .replace(/Designer'?s Note:?[\s\S]*$/i, "")
-    .replace(/This ability always takes the form[^.]*\.\s*/i, "")
-    .replace(/See [^.]+\.\s*/gi, "")
-    .replace(/\s+/g, " ")
-    .trim();
-
-  if (!withoutNotes) return "";
-
-  const sentences = withoutNotes.match(/[^.!?]+[.!?]+|[^.!?]+$/g) || [withoutNotes];
-
-  const useful = sentences
-    .map(x => x.trim())
-    .filter(Boolean)
-    .filter(x => !/^example\b/i.test(x))
-    .filter(x => !/^designer'?s note\b/i.test(x));
-
-  let summary = useful[0] || withoutNotes;
-
-  if (summary.length > 190 && useful.length > 1) {
-    summary = useful.slice(0, 2).join(" ");
-  }
-
-  summary = summary
-    .replace(/^Each time /i, "")
-    .replace(/^While /i, "While ")
-    .replace(/^At the start of /i, "At the start of ")
-    .replace(/\s+/g, " ")
-    .trim();
-
-  if (summary.length > 240) {
-    summary = summary.slice(0, 237).replace(/\s+\S*$/, "") + "…";
-  }
-
-  return summary;
 }
 
 function titleCase(value = "") {
@@ -1186,19 +1167,43 @@ function formatRuleText(text = "") {
   const cleaned = cleanRuleText(text);
   if (!cleaned) return "";
 
-  return cleaned
-    .split(/\n{2,}/)
-    .map(block => {
-      const lines = block.split("\n").map(line => line.trim()).filter(Boolean);
-      const bulletLines = lines.filter(line => /^[■•*-]\s*/.test(line));
+  const lines = cleaned.split("\n").map(line => line.trim());
+  const html = [];
+  let paragraph = [];
+  let bullets = [];
 
-      if (bulletLines.length === lines.length && lines.length) {
-        return `<ul>${lines.map(line => `<li>${escapeHtml(line.replace(/^[■•*-]\s*/, ""))}</li>`).join("")}</ul>`;
-      }
+  const flushParagraph = () => {
+    if (!paragraph.length) return;
+    html.push(`<p>${paragraph.map(line => escapeHtml(line)).join("<br>")}</p>`);
+    paragraph = [];
+  };
 
-      return `<p>${lines.map(line => escapeHtml(line)).join("<br>")}</p>`;
-    })
-    .join("");
+  const flushBullets = () => {
+    if (!bullets.length) return;
+    html.push(`<ul>${bullets.map(line => `<li>${escapeHtml(line)}</li>`).join("")}</ul>`);
+    bullets = [];
+  };
+
+  for (const line of lines) {
+    if (!line) {
+      flushParagraph();
+      flushBullets();
+      continue;
+    }
+
+    if (/^[■•*-]\s*/.test(line)) {
+      flushParagraph();
+      bullets.push(line.replace(/^[■•*-]\s*/, ""));
+      continue;
+    }
+
+    flushBullets();
+    paragraph.push(line);
+  }
+
+  flushParagraph();
+  flushBullets();
+  return html.join("");
 }
 
 function getMatchState() {
