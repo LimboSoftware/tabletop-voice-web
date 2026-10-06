@@ -2700,3 +2700,16 @@ body.focus-mode .detail-panel {
     font-size: .85rem;
   }
 }
+
+
+@media (max-width: 760px) {
+  .stat-grid {
+    display: flex !important;
+    flex-wrap: nowrap !important;
+    align-items: stretch;
+  }
+
+  .stat-grid .stat {
+    flex: 1 1 0;
+  }
+}
