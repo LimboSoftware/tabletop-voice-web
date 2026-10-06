@@ -3555,3 +3555,101 @@ body.focus-mode .detail-panel {
     padding-bottom: 8px !important;
   }
 }
+
+
+/* Inline army references now match normal unit rule styling */
+.unit-browser-references {
+  display: grid;
+  gap: 12px;
+  margin-top: 2px;
+}
+
+.browser-reference-unit-group {
+  padding: 12px;
+}
+
+.browser-reference-list {
+  display: grid;
+  gap: 8px;
+  max-width: none;
+  padding: 0;
+}
+
+.browser-inline-rule {
+  padding: 12px 13px;
+  border-radius: 11px;
+  background: #141c26;
+}
+
+.browser-inline-rule-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 7px;
+}
+
+.browser-inline-rule-heading h4 {
+  margin: 0;
+  font-size: .86rem;
+}
+
+.browser-inline-rule-heading span {
+  flex: 0 0 auto;
+  max-width: 52%;
+  color: #8494a7;
+  font-size: .62rem;
+  line-height: 1.25;
+  text-align: right;
+}
+
+.reference-detachment-heading {
+  margin: 5px 2px 0;
+  color: var(--accent);
+  font-size: .68rem;
+  font-weight: 900;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+}
+
+.browser-inline-rule .ability-text {
+  max-width: none;
+  font-size: .84rem;
+  line-height: 1.52;
+}
+
+@media (max-width: 760px) {
+  .browser-reference-unit-group {
+    padding: 9px;
+  }
+
+  .browser-reference-list {
+    gap: 6px;
+  }
+
+  .browser-inline-rule {
+    padding: 9px 10px;
+  }
+
+  .browser-inline-rule-heading {
+    gap: 7px;
+    margin-bottom: 5px;
+  }
+
+  .browser-inline-rule-heading h4 {
+    font-size: .79rem;
+  }
+
+  .browser-inline-rule-heading span {
+    font-size: .56rem;
+  }
+
+  .browser-inline-rule .ability-text {
+    font-size: .75rem;
+    line-height: 1.45;
+  }
+
+  .reference-detachment-heading {
+    font-size: .62rem;
+  }
+}
