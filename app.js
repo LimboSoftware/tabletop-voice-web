@@ -1244,7 +1244,8 @@ function getUnitBrowserSources() {
       entries:(roster.units || []).map(unit => ({
         unit,
         rosterIndex:index,
-        sourceLabel:roster.name
+        sourceLabel:roster.name,
+        sourceKind:"new-recruit"
       }))
     });
   }
@@ -1261,7 +1262,8 @@ function getUnitBrowserSources() {
       entries:(scope.units || []).map(unit => ({
         unit,
         rosterIndex:scope.rosterIndex,
-        sourceLabel:scope.label
+        sourceLabel:scope.label,
+        sourceKind:"whole-army"
       }))
     });
   }
@@ -2887,14 +2889,13 @@ function renderQuickLists() {
 
   const html = [];
 
-  const needsCategoryRefresh =
-    source.kind === "new-recruit" &&
-    source.entries.length > 0 &&
-    source.entries.every(entry => !(entry.unit.categories || []).length);
+  const needsCategoryRefresh = source.entries.some(entry =>
+    entry.sourceKind === "new-recruit" && !(entry.unit.categories || []).length
+  );
 
   if (needsCategoryRefresh) {
     html.push(
-      '<div class="roster-refresh-note">Re-import this New Recruit list once to populate its unit categories.</div>'
+      '<div class="roster-refresh-note">Re-import any older New Recruit lists once to populate their unit categories.</div>'
     );
   }
 
