@@ -627,8 +627,8 @@ const BSDATA_RAW = "https://raw.githubusercontent.com/" + BSDATA_REPO + "/refs/h
 async function loadFull40kData() {
   if (state.fullDataLoading) return;
   state.fullDataLoading = true;
-  setFullDataButtons(true, "Loading 40K…");
-  toast("Fetching current 40K data from BSData…");
+  setFullDataButtons(true, "Importing armies…");
+  toast("Importing all armies…");
 
   try {
     const listingResponse = await fetch(BSDATA_API, {headers:{"Accept":"application/vnd.github+json"}});
@@ -665,7 +665,7 @@ async function loadFull40kData() {
     const roster = buildFull40kRoster(documents);
     roster.referenceData = state.referenceData;
 
-    if (!roster.units.length) throw new Error("The BSData files downloaded but no unit entries could be resolved.");
+    if (!roster.units.length) throw new Error("The army data downloaded but no unit entries could be resolved.");
 
     const oldIndex = state.rosters.findIndex(r => r.id === "bsdata-full-40k");
     if (oldIndex >= 0) state.rosters.splice(oldIndex, 1);
@@ -678,11 +678,11 @@ async function loadFull40kData() {
     persist();
     renderAll();
     renderDetail(null);
-    toast("Loaded " + roster.units.length + " 40K unit entries");
+    toast("Imported " + roster.units.length + " datasheet entries");
     setTimeout(openArmyPicker, 150);
   } catch (error) {
     console.error(error);
-    toast(error.message || "Could not load full 40K data.");
+    toast(error.message || "Could not import all armies.");
   } finally {
     state.fullDataLoading = false;
     setFullDataButtons(false, state.rosters.some(r => r.source === "bsdata") ? "Refresh all armies" : "Import all armies");
