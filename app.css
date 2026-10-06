@@ -3059,3 +3059,26 @@ body.focus-mode .detail-panel {
   font-size: .75rem;
   line-height: 1.4;
 }
+
+
+/* Units readability: larger numbers, keep labels/keywords compact */
+@media (max-width: 760px) {
+  .stat strong {
+    font-size: 1.12rem !important;
+  }
+
+  .weapon-table .weapon-row td:nth-child(3),
+  .weapon-table .weapon-row td:nth-child(4),
+  .weapon-table .weapon-row td:nth-child(5),
+  .weapon-table .weapon-row td:nth-child(6),
+  .weapon-table .weapon-row td:nth-child(7) {
+    font-size: .72rem !important;
+    font-weight: 850;
+  }
+
+  .weapon-table .weapon-row td:nth-child(2),
+  .weapon-table .weapon-keywords {
+    font-size: .58rem !important;
+    font-weight: 500;
+  }
+}
