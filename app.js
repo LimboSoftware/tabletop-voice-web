@@ -265,7 +265,7 @@ function extractSelectedDetachments(root) {
       }
 
       const count = Number(value.number);
-      const selected = !Number.isFinite(count) || count > 0;
+      const selected = Number.isFinite(count) && count > 0;
       const group = String(value.group || value.entryGroupName || "");
       const categories = [
         ...(value.categories || []),
@@ -695,6 +695,7 @@ function buildReferenceData(documents) {
 
 const GDC_11E_RAW = "https://raw.githubusercontent.com/game-datacards/datasources/refs/heads/main/11th/gdc/";
 const gdcFactionCache = new Map();
+let gdcFactionFileIndexPromise = null;
 
 function englishText(value) {
   if (typeof value === "string") return value;
@@ -732,52 +733,105 @@ function gdcFactionSlugCandidates(factionName = "") {
   const compact = normal.replace(/\s+/g, "");
 
   const aliases = {
-    "adeptus astartes":"spacemarines",
-    "space marines":"spacemarines",
+    "adeptus astartes":"space_marines",
+    "space marines":"space_marines",
     "adeptus custodes":"adeptuscustodes",
     "adepta sororitas":"adeptasororitas",
     "sisters of battle":"adeptasororitas",
     "adeptus mechanicus":"adeptusmechanicus",
     "astra militarum":"astramilitarum",
     "imperial guard":"astramilitarum",
-    "chaos space marines":"chaosspacemarines",
-    "genestealer cults":"genestealercults",
+    "heretic astartes":"chaos_spacemarines",
+    "chaos space marines":"chaos_spacemarines",
+    "legiones daemonica":"chaosdaemons",
+    "chaos daemons":"chaosdaemons",
+    "genestealer cults":"gsc",
+    "imperial agents":"agents",
+    "agents of the imperium":"agents",
     "leagues of votann":"votann",
     "tau empire":"tau",
     "t au empire":"tau",
     "world eaters":"worldeaters",
     "thousand sons":"thousandsons",
     "death guard":"deathguard",
-    "emperors children":"emperorschildren",
-    "emperor s children":"emperorschildren",
+    "emperors children":"emperors_children",
+    "emperor s children":"emperors_children",
     "grey knights":"greyknights",
     "imperial knights":"imperialknights",
     "chaos knights":"chaosknights",
-    "black templars":"blacktemplars",
+    "black templars":"blacktemplar",
+    "black templar":"blacktemplar",
     "blood angels":"bloodangels",
     "dark angels":"darkangels",
     "space wolves":"spacewolves",
     "craftworlds":"aeldari",
-    "asuryani":"aeldari"
+    "asuryani":"aeldari",
+    "aeldari":"aeldari",
+    "drukhari":"drukhari",
+    "necrons":"necrons",
+    "orks":"orks",
+    "tyranids":"tyranids",
+    "adeptus titanicus":"titan"
   };
 
-  const candidates = [
+  return [...new Set([
     aliases[normal],
     compact,
+    normal.replace(/\s+/g, "_"),
     normalize(String(factionName)).replace(/\s+/g, "")
-  ].filter(Boolean);
+  ].filter(Boolean))];
+}
 
-  return [...new Set(candidates)];
+async function getGdcFactionFileIndex() {
+  if (gdcFactionFileIndexPromise) return gdcFactionFileIndexPromise;
+
+  gdcFactionFileIndexPromise = (async () => {
+    try {
+      const response = await fetch("https://api.github.com/repos/game-datacards/datasources/contents/11th/gdc?ref=main");
+      if (!response.ok) return [];
+
+      const listing = await response.json();
+      return (Array.isArray(listing) ? listing : [])
+        .filter(item => /\.json$/i.test(item?.name || "") && item.name !== "core.json")
+        .map(item => ({
+          name:item.name,
+          slug:item.name.replace(/\.json$/i, ""),
+          normalized:normalize(item.name.replace(/\.json$/i, ""))
+        }));
+    } catch (error) {
+      console.warn("Could not load faction data index", error);
+      return [];
+    }
+  })();
+
+  return gdcFactionFileIndexPromise;
+}
+
+async function resolveGdcFactionSlugs(factionName = "") {
+  const candidates = gdcFactionSlugCandidates(factionName);
+  const index = await getGdcFactionFileIndex();
+
+  const targetNames = new Set([
+    normalize(factionName),
+    ...String(factionName).split(/\s+[-—–]\s+/).map(part => normalize(part)),
+    ...candidates.map(value => normalize(value))
+  ].filter(Boolean));
+
+  const indexedMatches = index
+    .filter(item => targetNames.has(item.normalized))
+    .map(item => item.slug);
+
+  return [...new Set([...candidates, ...indexedMatches])];
 }
 
 async function fetchGdcFactionData(factionName, wantedDetachments = []) {
   const cacheKey = normalize(factionName);
-  const cached = gdcFactionCache.get(cacheKey);
-  if (cached) return cached;
+  if (gdcFactionCache.has(cacheKey)) return gdcFactionCache.get(cacheKey);
 
-  const wanted = new Set(wantedDetachments.map(name => normalize(name)));
+  const wanted = new Set(wantedDetachments.map(name => normalize(name)).filter(Boolean));
+  const slugs = await resolveGdcFactionSlugs(factionName);
 
-  for (const slug of gdcFactionSlugCandidates(factionName)) {
+  for (const slug of slugs) {
     try {
       const response = await fetch(GDC_11E_RAW + encodeURIComponent(slug) + ".json");
       if (!response.ok) continue;
@@ -793,7 +847,7 @@ async function fetchGdcFactionData(factionName, wantedDetachments = []) {
       gdcFactionCache.set(cacheKey, data);
       return data;
     } catch (error) {
-      console.warn("Could not load detachment reference", slug, error);
+      console.warn("Could not load faction reference", slug, error);
     }
   }
 
