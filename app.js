@@ -235,9 +235,21 @@ async function handleFiles(event) {
     try {
       const text = await file.text();
       const roster = parseRosterFile(text, file.name);
-      state.rosters.push(roster);
+      const existingIndex = state.rosters.findIndex(existing =>
+        existing.source === "new-recruit" &&
+        normalize(existing.name) === normalize(roster.name) &&
+        normalize(existing.faction) === normalize(roster.faction)
+      );
+
+      if (existingIndex >= 0) {
+        state.rosters.splice(existingIndex, 1, roster);
+        state.activeRoster = existingIndex;
+      } else {
+        state.rosters.push(roster);
+        state.activeRoster = state.rosters.length - 1;
+      }
+
       state.detachmentStratagemLoadKey = "";
-      state.activeRoster = state.rosters.length - 1;
       activateRosterSearchScopes(roster);
       persist();
       showApp();
@@ -349,6 +361,7 @@ function parseRosterFile(text, fileName) {
     name: root.name || fileName.replace(/\.[^.]+$/, ""),
     faction: (root.forces || [])[0]?.catalogueName || (root.forces || [])[0]?.name || "New Recruit list",
     source: "new-recruit",
+    detachmentParserVersion: 2,
     points: pts ?? null,
     detachments: extractSelectedDetachments(root),
     armyRules: extractArmyRules(root),
@@ -1049,25 +1062,37 @@ async function getUnitBrowserReferenceData(source) {
 
   if (source.kind === "new-recruit") {
     const roster = source.roster;
-    const detachmentNames = (roster?.detachments || []).map(item => item.name);
+    const localRules = (roster?.armyRules || []).filter(rule => rule?.name && rule?.text);
+
+    if (roster?.detachmentParserVersion !== 2) {
+      return {
+        stratagems:[],
+        armyRules:localRules,
+        note:"Re-import this New Recruit list once. Its saved detachment data came from the older parser and is not trusted."
+      };
+    }
+
+    const detachmentNames = (roster?.detachments || [])
+      .map(item => String(item?.name || "").trim())
+      .filter(Boolean);
+
     const data = await fetchGdcFactionData(source.faction || roster?.faction || "", detachmentNames);
 
     const stratagems = data && detachmentNames.length
       ? gdcStratagemsToReferences(data, detachmentNames, roster?.name || source.label)
       : [];
 
-    const localRules = (roster?.armyRules || []).filter(rule => rule?.name && rule?.text);
     const armyRules = localRules.length
       ? localRules
       : gdcArmyRulesToReferences(data, roster?.name || source.label);
 
     let note = "";
-    if (!Array.isArray(roster?.detachments)) {
-      note = "Re-import this older New Recruit list once to detect its detachments.";
-    } else if (!roster.detachments.length) {
-      note = "No selected detachment was detected. If this list should have one, re-import its New Recruit JSON after this update.";
-    } else if (data && !stratagems.length) {
-      note = "Detachment detected, but no matching current stratagems were found.";
+    if (!detachmentNames.length) {
+      note = "No selected detachment was detected in this New Recruit list.";
+    } else if (!data) {
+      note = "No current faction reference data was found for this list.";
+    } else if (!stratagems.length) {
+      note = "The selected detachment was detected, but no matching current stratagems were found.";
     }
 
     return {stratagems, armyRules, note};
