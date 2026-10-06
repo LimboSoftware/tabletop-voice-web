@@ -4005,3 +4005,31 @@ body.focus-mode .detail-panel {
     padding-bottom: 10px !important;
   }
 }
+
+
+/* Lightweight TXT roster imports */
+.text-loadout-list {
+  display: grid;
+  gap: 5px;
+}
+
+.text-loadout-list > div {
+  border: 1px solid #283546;
+  border-radius: 9px;
+  background: #131b24;
+  color: #b8c5d1;
+  padding: 8px 10px;
+  font-size: .78rem;
+  line-height: 1.35;
+}
+
+.text-import-notice {
+  padding-top: 8px !important;
+}
+
+@media (max-width: 760px) {
+  .text-loadout-list > div {
+    padding: 7px 8px;
+    font-size: .72rem;
+  }
+}
