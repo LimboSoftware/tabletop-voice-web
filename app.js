@@ -36,7 +36,6 @@ const els = {
   modeToggle: $("modeToggle"),
   focusButton: $("focusButton"),
   pinButton: $("pinButton"),
-  compareButton: $("compareButton"),
   destroyedButton: $("destroyedButton"),
   roundDown: $("roundDown"),
   roundUp: $("roundUp"),
@@ -45,6 +44,12 @@ const els = {
   cpUp: $("cpUp"),
   cpValue: $("cpValue"),
   turnToggle: $("turnToggle"),
+  armyPickerButton: $("armyPickerButton"),
+  armyPickerModal: $("armyPickerModal"),
+  armyPickerClose: $("armyPickerClose"),
+  armyPickerAll: $("armyPickerAll"),
+  armyPickerCurrent: $("armyPickerCurrent"),
+  armyPickerList: $("armyPickerList"),
   toast: $("toast"),
   firstRunModal: $("firstRunModal"),
   firstRunFullData: $("firstRunFullData"),
@@ -76,13 +81,31 @@ function bindEvents() {
   els.modeToggle.addEventListener("click", toggleMode);
   els.focusButton?.addEventListener("click", toggleFocusMode);
   els.pinButton.addEventListener("click", toggleSelectedPin);
-  els.compareButton?.addEventListener("click", toggleCompareBase);
   els.destroyedButton?.addEventListener("click", toggleDestroyed);
   els.roundDown?.addEventListener("click", () => adjustRound(-1));
   els.roundUp?.addEventListener("click", () => adjustRound(1));
   els.cpDown?.addEventListener("click", () => adjustCP(-1));
   els.cpUp?.addEventListener("click", () => adjustCP(1));
   els.turnToggle?.addEventListener("click", toggleTurn);
+  els.armyPickerButton?.addEventListener("click", openArmyPicker);
+  els.armyPickerClose?.addEventListener("click", closeArmyPicker);
+  els.armyPickerModal?.addEventListener("click", event => {
+    if (event.target === els.armyPickerModal) closeArmyPicker();
+  });
+  els.armyPickerAll?.addEventListener("click", () => {
+    setActiveSearchRosterIds(state.rosters.map(r => r.id));
+    renderActiveArmySelector();
+    renderArmyPicker();
+    renderResults(els.searchInput.value);
+  });
+  els.armyPickerCurrent?.addEventListener("click", () => {
+    const current = state.rosters[state.activeRoster];
+    if (!current) return;
+    setActiveSearchRosterIds([current.id]);
+    renderActiveArmySelector();
+    renderArmyPicker();
+    renderResults(els.searchInput.value);
+  });
   els.firstRunFullData?.addEventListener("click", () => {
     dismissFirstRun();
     loadFull40kData();
@@ -521,6 +544,7 @@ function renderAll() {
   if (!state.rosters.length) return hideApp();
   showApp();
   renderActiveArmySelector();
+  renderArmyPicker();
   renderTabs();
   const roster = state.rosters[state.activeRoster];
   els.rosterTitle.textContent = roster.name;
@@ -565,6 +589,55 @@ function getSearchRosters() {
   return roster ? [{roster, rosterIndex:state.activeRoster}] : [];
 }
 
+function setActiveSearchRosterIds(ids) {
+  const valid = [...new Set((ids || []).filter(id => state.rosters.some(r => r.id === id)))];
+  if (!valid.length && state.rosters.length) valid.push(state.rosters[state.activeRoster]?.id || state.rosters[0].id);
+  try {
+    localStorage.setItem("tv_active_search_rosters", JSON.stringify(valid));
+  } catch {}
+}
+
+function openArmyPicker() {
+  renderArmyPicker();
+  els.armyPickerModal?.classList.remove("hidden");
+}
+
+function closeArmyPicker() {
+  els.armyPickerModal?.classList.add("hidden");
+}
+
+function renderArmyPicker() {
+  if (!els.armyPickerList) return;
+  if (!state.rosters.length) {
+    els.armyPickerList.innerHTML = '<p class="army-picker-empty">No armies loaded yet.</p>';
+    return;
+  }
+
+  const activeIds = new Set(getActiveSearchRosterIds());
+  els.armyPickerList.innerHTML = state.rosters.map((roster, index) => {
+    const active = activeIds.has(roster.id);
+    const current = index === state.activeRoster;
+    return `
+      <label class="army-picker-row${active ? " active" : ""}${current ? " current" : ""}">
+        <input type="checkbox" data-army-picker-id="${escapeHtml(roster.id)}" ${active ? "checked" : ""}>
+        <span class="army-picker-box" aria-hidden="true">${active ? "✓" : ""}</span>
+        <span class="army-picker-copy">
+          <strong>${escapeHtml(roster.name)}</strong>
+          <small>${escapeHtml(roster.faction || roster.source || "Roster")}${current ? " · current" : ""}</small>
+        </span>
+      </label>`;
+  }).join("");
+
+  els.armyPickerList.querySelectorAll("[data-army-picker-id]").forEach(input => {
+    input.addEventListener("change", () => {
+      setRosterSearchActive(input.dataset.armyPickerId, input.checked);
+      renderArmyPicker();
+      renderActiveArmySelector();
+      renderResults(els.searchInput.value);
+    });
+  });
+}
+
 function renderActiveArmySelector() {
   if (!els.activeArmySelector) return;
   if (!state.rosters.length) {
@@ -585,7 +658,7 @@ function renderActiveArmySelector() {
         <span class="active-army-check">${active ? "✓" : ""}</span>
         <span class="active-army-copy">
           <strong>${escapeHtml(roster.name)}</strong>
-          <small>${escapeHtml(roster.faction || roster.source || "Roster")}</small>
+          <small>${active ? "Included in search" : "Not searched"}${current ? " · current" : ""}</small>
         </span>
       </button>`;
   }).join("");
@@ -709,7 +782,6 @@ function renderDetail(unit) {
   els.detailType.textContent = (unit.type || "Unit").toUpperCase();
   els.detailName.textContent = unit.name;
   updatePinButton();
-  updateCompareButton();
   updateDestroyedButton();
 
   els.detailStats.innerHTML = unit.stats.length
@@ -721,8 +793,6 @@ function renderDetail(unit) {
     : '<div class="stat"><span>PROFILE</span><strong>Imported</strong></div>';
 
   const sections = [];
-  const compare = renderCompareSection(unit);
-  if (compare) sections.push(compare);
   const statuses = renderStatusSection(unit);
   if (statuses) sections.push(statuses);
   const woundTracker = renderWoundTracker(unit);
@@ -740,133 +810,6 @@ function renderDetail(unit) {
   els.detailSections.innerHTML = sections.join("") ||
     '<section class="detail-section"><div class="empty-section">No additional profiles were found in this entry.</div></section>';
   bindDynamicDetailControls();
-}
-
-function compareStorageKey() {
-  return "tv_compare_base";
-}
-
-function getCompareBase() {
-  try {
-    const raw = JSON.parse(localStorage.getItem(compareStorageKey()) || "null");
-    if (!raw) return null;
-    const rosterIndex = state.rosters.findIndex(r => r.id === raw.rosterId);
-    if (rosterIndex < 0) return null;
-    const roster = state.rosters[rosterIndex];
-    const unit = (roster.units || []).find(u => u.id === raw.unitId);
-    return unit ? {unit, roster, rosterIndex} : null;
-  } catch {
-    return null;
-  }
-}
-
-function toggleCompareBase() {
-  if (!state.selected) return;
-  const currentRoster = state.rosters[state.activeRoster];
-  const existing = getCompareBase();
-
-  if (existing && existing.unit.id === state.selected.id && existing.roster.id === currentRoster.id) {
-    localStorage.removeItem(compareStorageKey());
-    toast("Compare cleared");
-  } else {
-    localStorage.setItem(compareStorageKey(), JSON.stringify({
-      rosterId: currentRoster.id,
-      unitId: state.selected.id
-    }));
-    toast("Compare unit set: " + state.selected.name);
-  }
-  updateCompareButton();
-  renderDetail(state.selected);
-}
-
-function updateCompareButton() {
-  if (!els.compareButton) return;
-  const base = getCompareBase();
-  const roster = state.rosters[state.activeRoster];
-  const active = !!(base && state.selected && roster &&
-    base.unit.id === state.selected.id && base.roster.id === roster.id);
-  els.compareButton.textContent = active ? "Compare ✓" : "Compare";
-  els.compareButton.classList.toggle("active", active);
-}
-
-function statValue(unit, label) {
-  const hit = (unit?.stats || []).find(s => normalize(s.label) === normalize(label));
-  return hit ? String(hit.value) : "—";
-}
-
-function numericStat(unit, label) {
-  const raw = statValue(unit, label);
-  const n = parseInt(raw, 10);
-  return Number.isFinite(n) ? n : null;
-}
-
-function woundNeeded(strength, toughness) {
-  if (!Number.isFinite(strength) || !Number.isFinite(toughness) || toughness <= 0) return "—";
-  if (strength >= toughness * 2) return "2+";
-  if (strength > toughness) return "3+";
-  if (strength === toughness) return "4+";
-  if (strength * 2 <= toughness) return "6+";
-  return "5+";
-}
-
-function renderCompareSection(currentUnit) {
-  const base = getCompareBase();
-  const currentRoster = state.rosters[state.activeRoster];
-  if (!base || !currentUnit || !currentRoster) return "";
-  if (base.unit.id === currentUnit.id && base.roster.id === currentRoster.id) {
-    return `
-      <section class="detail-section compare-section compare-waiting">
-        <div class="section-heading-row">
-          <h3>Compare mode</h3>
-          <span class="section-count">1/2</span>
-        </div>
-        <p>Select another unit from any active army to compare it with <strong>${escapeHtml(base.unit.name)}</strong>.</p>
-      </section>`;
-  }
-
-  const labels = ["M","T","Sv","W","LD","OC","InSv"];
-  const targetT = numericStat(currentUnit, "T");
-  const weaponChecks = (base.unit.profiles || []).map(profile => {
-    const s = (profile.values || []).find(v => normalize(v.label) === "s");
-    const strength = s ? parseInt(String(s.value), 10) : NaN;
-    if (!Number.isFinite(strength) || !Number.isFinite(targetT)) return null;
-    return {
-      name: profile.name,
-      strength,
-      needed: woundNeeded(strength, targetT)
-    };
-  }).filter(Boolean).slice(0, 8);
-
-  return `
-    <section class="detail-section compare-section">
-      <div class="section-heading-row">
-        <h3>Compare</h3>
-        <button type="button" class="ghost-button compact compare-clear">Clear</button>
-      </div>
-      <div class="compare-grid">
-        <div class="compare-card">
-          <span class="compare-side">ATTACKER</span>
-          <h4>${escapeHtml(base.unit.name)}</h4>
-          <small>${escapeHtml(base.roster.name)}</small>
-          <div class="compare-stats">
-            ${labels.map(label => `<div><span>${escapeHtml(label)}</span><strong>${escapeHtml(statValue(base.unit,label))}</strong></div>`).join("")}
-          </div>
-        </div>
-        <div class="compare-card">
-          <span class="compare-side">TARGET</span>
-          <h4>${escapeHtml(currentUnit.name)}</h4>
-          <small>${escapeHtml(currentRoster.name)}</small>
-          <div class="compare-stats">
-            ${labels.map(label => `<div><span>${escapeHtml(label)}</span><strong>${escapeHtml(statValue(currentUnit,label))}</strong></div>`).join("")}
-          </div>
-        </div>
-      </div>
-      ${weaponChecks.length ? `
-        <div class="compare-weapons">
-          <strong>Wound rolls vs T${escapeHtml(targetT)}</strong>
-          ${weaponChecks.map(w => `<div><span>${escapeHtml(w.name)} · S${w.strength}</span><b>${w.needed}</b></div>`).join("")}
-        </div>` : ""}
-    </section>`;
 }
 
 const STATUS_OPTIONS = ["Advanced","Fell Back","Charged","Battle-shocked","In Reserve","Once-per-game used"];
@@ -1708,10 +1651,6 @@ function handleVoiceCommand(q) {
     scrollToDetailSection(".weapon-section");
     return true;
   }
-  if (/^(compare)$/.test(q)) {
-    toggleCompareBase();
-    return true;
-  }
   const phaseMatch = q.match(/^(?:show )?(command|movement|shooting|charge|fight) phase$/);
   if (phaseMatch) {
     setActivePhase(titleCase(phaseMatch[1]));
@@ -1961,11 +1900,6 @@ function bindDynamicDetailControls() {
   });
   document.querySelectorAll("[data-phase]").forEach(button => {
     button.addEventListener("click", () => setActivePhase(button.dataset.phase));
-  });
-  document.querySelector(".compare-clear")?.addEventListener("click", () => {
-    localStorage.removeItem(compareStorageKey());
-    updateCompareButton();
-    if (state.selected) renderDetail(state.selected);
   });
   document.querySelectorAll("[data-wound-change]").forEach(button => {
     button.addEventListener("click", () => adjustWounds(Number(button.dataset.woundChange)));
