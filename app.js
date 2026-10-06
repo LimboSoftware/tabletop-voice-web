@@ -1086,16 +1086,57 @@ async function getUnitBrowserReferenceData(source) {
 }
 
 function renderBrowserReferenceCards(items, kind = "rule") {
-  if (!items?.length) return '<div class="browser-reference-empty">None found.</div>';
+  if (!items?.length) return '<div class="empty-section">None found.</div>';
 
-  return items.map(item => `
-    <article class="browser-reference-card ${kind}">
-      <div class="browser-reference-card-heading">
-        <h4>${escapeHtml(item.name)}</h4>
-        ${item.category ? `<span>${escapeHtml(item.category)}</span>` : ""}
+  const ordered = [...items].sort((a,b) => {
+    const da = normalize(a.detachment || "");
+    const db = normalize(b.detachment || "");
+    if (da !== db) return da.localeCompare(db);
+    return String(a.name || "").localeCompare(String(b.name || ""));
+  });
+
+  let lastDetachment = "";
+
+  return ordered.map(item => {
+    const detachment = kind === "stratagem" ? String(item.detachment || "").trim() : "";
+    const detachmentHeading =
+      detachment && detachment !== lastDetachment
+        ? `<div class="reference-detachment-heading">${escapeHtml(detachment)}</div>`
+        : "";
+
+    if (detachment) lastDetachment = detachment;
+
+    const meta = item.category
+      ? String(item.category)
+          .split("·")
+          .map(part => part.trim())
+          .filter(part => normalize(part) !== normalize(detachment))
+          .join(" · ")
+      : "";
+
+    return `
+      ${detachmentHeading}
+      <article class="ability-card unique-rule-card browser-inline-rule ${kind}">
+        <div class="browser-inline-rule-heading">
+          <h4>${escapeHtml(item.name)}</h4>
+          ${meta ? `<span>${escapeHtml(meta)}</span>` : ""}
+        </div>
+        ${item.text ? `<div class="ability-text unique-rule-text">${formatRuleText(item.text)}</div>` : ""}
+      </article>`;
+  }).join("");
+}
+
+function renderUnitBrowserReferenceSection(title, items, kind) {
+  return `
+    <section class="roster-unit-group browser-reference-unit-group">
+      <div class="roster-unit-group-heading">
+        <h3>${escapeHtml(title)}</h3>
+        <span>${items?.length || 0}</span>
       </div>
-      ${item.text ? `<div class="browser-reference-card-text">${formatRuleText(item.text)}</div>` : ""}
-    </article>`).join("");
+      <div class="ability-list browser-reference-list">
+        ${renderBrowserReferenceCards(items || [], kind)}
+      </div>
+    </section>`;
 }
 
 function renderUnitBrowserReferences(source, data = null) {
@@ -1111,24 +1152,8 @@ function renderUnitBrowserReferences(source, data = null) {
   return `
     <div id="unitBrowserReferences" class="unit-browser-references">
       ${data.note ? `<div class="roster-refresh-note">${escapeHtml(data.note)}</div>` : ""}
-      <details class="browser-reference-section">
-        <summary>
-          <span>Stratagems</span>
-          <strong>${data.stratagems.length}</strong>
-        </summary>
-        <div class="browser-reference-list stratagem-list">
-          ${renderBrowserReferenceCards(data.stratagems, "stratagem")}
-        </div>
-      </details>
-      <details class="browser-reference-section">
-        <summary>
-          <span>Army Rules</span>
-          <strong>${data.armyRules.length}</strong>
-        </summary>
-        <div class="browser-reference-list army-rule-list">
-          ${renderBrowserReferenceCards(data.armyRules, "rule")}
-        </div>
-      </details>
+      ${renderUnitBrowserReferenceSection("Stratagems", data.stratagems, "stratagem")}
+      ${renderUnitBrowserReferenceSection("Army Rules", data.armyRules, "rule")}
     </div>`;
 }
 
