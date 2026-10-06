@@ -665,28 +665,95 @@ function normalize(value) {
   return String(value || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 }
 
+function getPageElement(page) {
+  return {
+    data: els.welcome,
+    datasheets: els.pageDatasheets,
+    score: els.pageScore,
+    dice: els.pageDice,
+    strats: els.pageStrats,
+    rules: els.pageRules,
+    setup: els.pageSetup
+  }[page] || els.welcome;
+}
+
+function switchPage(page, options = {}) {
+  const valid = ["data","datasheets","score","dice","strats","rules","setup"];
+  if (!valid.includes(page)) page = "data";
+
+  state.currentPage = page;
+  localStorage.setItem("tv_page", page);
+
+  document.querySelectorAll(".app-page").forEach(section => {
+    section.classList.toggle("hidden", section.dataset.page !== page);
+  });
+
+  document.querySelectorAll("[data-page-target]").forEach(button => {
+    button.classList.toggle("active", button.dataset.pageTarget === page);
+  });
+
+  els.navMoreMenu?.classList.add("hidden");
+  els.navMoreButton?.setAttribute("aria-expanded", "false");
+
+  if (page === "strats") renderStratagems(els.stratSearch?.value || "");
+  if (page === "rules") renderCoreRules(els.coreRuleSearch?.value || "");
+  if (page === "data") renderDataSummary();
+
+  if (!options.silent) window.scrollTo({top:0, behavior:"smooth"});
+}
+
 function showApp() {
-  els.welcome.classList.add("hidden");
-  els.workspace.classList.remove("hidden");
-  els.voiceDock.classList.remove("hidden");
+  els.voiceDock?.classList.remove("hidden");
 }
 
 function hideApp() {
-  els.welcome.classList.remove("hidden");
-  els.workspace.classList.add("hidden");
-  els.voiceDock.classList.add("hidden");
+  switchPage("data", {silent:true});
+  els.voiceDock?.classList.remove("hidden");
+}
+
+function renderDataSummary() {
+  if (!els.dataRosterSummary) return;
+
+  if (!state.rosters.length) {
+    els.dataRosterSummary.innerHTML = '<p>Nothing loaded yet.</p>';
+    return;
+  }
+
+  els.dataRosterSummary.innerHTML = state.rosters.map(roster => {
+    const count = roster.units?.length || 0;
+    const label = roster.source === "bsdata" ? "Full 40K data" : "New Recruit";
+    return `
+      <div class="data-summary-row">
+        <div>
+          <strong>${escapeHtml(roster.name)}</strong>
+          <small>${escapeHtml(label)} · ${count} entries</small>
+        </div>
+      </div>`;
+  }).join("");
 }
 
 function renderAll() {
-  if (!state.rosters.length) return hideApp();
   showApp();
   renderActiveArmySelector();
   renderArmyPicker();
   renderTabs();
+  renderDataSummary();
+
   const roster = state.rosters[state.activeRoster];
-  els.rosterTitle.textContent = roster.name;
-  renderQuickLists();
-  renderResults(els.searchInput.value);
+  if (roster) {
+    if (els.rosterTitle) els.rosterTitle.textContent = roster.name;
+    renderQuickLists();
+    renderResults(els.searchInput?.value || "");
+  } else {
+    if (els.rosterTitle) els.rosterTitle.textContent = "No data loaded";
+    if (els.rosterTabs) els.rosterTabs.innerHTML = "";
+    if (els.quickLists) els.quickLists.innerHTML = "";
+    if (els.resultList) els.resultList.innerHTML = '<div class="result-item"><small>Load data or import a roster first.</small></div>';
+    renderDetail(null);
+  }
+
+  renderStratagems(els.stratSearch?.value || "");
+  renderCoreRules(els.coreRuleSearch?.value || "");
 }
 
 function getAvailableSearchScopes() {
