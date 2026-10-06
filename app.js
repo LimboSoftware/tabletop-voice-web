@@ -916,6 +916,180 @@ function renderDetachmentSummary() {
     </div>`;
 }
 
+function cleanGdcText(value) {
+  return cleanRuleText(
+    englishText(value)
+      .replace(/<br\s*\/?>/gi, "\n")
+      .replace(/<\/li>/gi, "\n")
+      .replace(/<li[^>]*>/gi, "■ ")
+      .replace(/<\/p>/gi, "\n")
+      .replace(/<[^>]+>/g, "")
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;|&apos;/g, "'")
+      .replace(/&amp;/g, "&")
+      .replace(/&nbsp;/g, " ")
+  ).replace(/\n{3,}/g, "\n\n").trim();
+}
+
+function gdcArmyRulesToReferences(data, sourceLabel = "") {
+  return (data?.rules?.army || []).map(card => {
+    const name = englishText(card.name) || "Army rule";
+    const text = (card.rules || [])
+      .map(rule => {
+        if (rule.type === "image") return "";
+        const value = cleanGdcText(rule.text);
+        if (!value || value === "-") return "";
+        return value;
+      })
+      .filter(Boolean)
+      .join("\n\n");
+
+    return {
+      name,
+      text,
+      category:"Army rule",
+      source:sourceLabel || data?.name || ""
+    };
+  }).filter(item => item.text);
+}
+
+function gdcStratagemsToReferences(data, detachmentNames = null, sourceLabel = "") {
+  const wanted = detachmentNames?.length
+    ? new Set(detachmentNames.map(name => normalize(name)))
+    : null;
+
+  return (data?.stratagems || [])
+    .filter(stratagem => {
+      if (!wanted) return true;
+      return wanted.has(normalize(englishText(stratagem.detachment || stratagem.detachment_name)));
+    })
+    .map(stratagem => {
+      const detachment = englishText(stratagem.detachment || stratagem.detachment_name) || "Detachment";
+      return detachmentStratagemToReference(stratagem, {
+        name:detachment,
+        rosterName:sourceLabel,
+        rosterId:""
+      });
+    });
+}
+
+async function getUnitBrowserReferenceData(source) {
+  if (!source) return {stratagems:[], armyRules:[], note:""};
+
+  if (source.kind === "all") {
+    const childSources = getUnitBrowserSources().filter(item => item.id !== "all");
+    const results = await Promise.all(childSources.map(getUnitBrowserReferenceData));
+
+    return {
+      stratagems:dedupeBy(
+        results.flatMap(item => item.stratagems || []),
+        item => normalize((item.detachment || "") + "|" + item.name + "|" + item.text)
+      ),
+      armyRules:dedupeBy(
+        results.flatMap(item => item.armyRules || []),
+        item => normalize(item.name + "|" + item.text)
+      ),
+      note:""
+    };
+  }
+
+  if (source.kind === "new-recruit") {
+    const roster = source.roster;
+    const detachmentNames = (roster?.detachments || []).map(item => item.name);
+    const data = await fetchGdcFactionData(source.faction || roster?.faction || "", detachmentNames);
+
+    const stratagems = data && detachmentNames.length
+      ? gdcStratagemsToReferences(data, detachmentNames, roster?.name || source.label)
+      : [];
+
+    const localRules = (roster?.armyRules || []).filter(rule => rule?.name && rule?.text);
+    const armyRules = localRules.length
+      ? localRules
+      : gdcArmyRulesToReferences(data, roster?.name || source.label);
+
+    let note = "";
+    if (!Array.isArray(roster?.detachments)) {
+      note = "Re-import this older New Recruit list once to detect its detachments.";
+    } else if (!roster.detachments.length) {
+      note = "No selected detachment was detected in this list.";
+    } else if (data && !stratagems.length) {
+      note = "Detachment detected, but no matching current stratagems were found.";
+    }
+
+    return {stratagems, armyRules, note};
+  }
+
+  if (source.kind === "whole-army") {
+    const data = await fetchGdcFactionData(source.faction || source.label, []);
+    return {
+      stratagems:gdcStratagemsToReferences(data, null, source.label),
+      armyRules:gdcArmyRulesToReferences(data, source.label),
+      note:data ? "" : "No current faction reference data was found for this army."
+    };
+  }
+
+  return {stratagems:[], armyRules:[], note:""};
+}
+
+function renderBrowserReferenceCards(items, kind = "rule") {
+  if (!items?.length) return '<div class="browser-reference-empty">None found.</div>';
+
+  return items.map(item => `
+    <article class="browser-reference-card ${kind}">
+      <div class="browser-reference-card-heading">
+        <h4>${escapeHtml(item.name)}</h4>
+        ${item.category ? `<span>${escapeHtml(item.category)}</span>` : ""}
+      </div>
+      ${item.text ? `<div class="browser-reference-card-text">${formatRuleText(item.text)}</div>` : ""}
+    </article>`).join("");
+}
+
+function renderUnitBrowserReferences(source, data = null) {
+  if (!source) return "";
+
+  if (!data) {
+    return `
+      <div id="unitBrowserReferences" class="unit-browser-references">
+        <div class="browser-reference-loading">Loading army references…</div>
+      </div>`;
+  }
+
+  return `
+    <div id="unitBrowserReferences" class="unit-browser-references">
+      ${data.note ? `<div class="roster-refresh-note">${escapeHtml(data.note)}</div>` : ""}
+      <details class="browser-reference-section">
+        <summary>
+          <span>Stratagems</span>
+          <strong>${data.stratagems.length}</strong>
+        </summary>
+        <div class="browser-reference-list stratagem-list">
+          ${renderBrowserReferenceCards(data.stratagems, "stratagem")}
+        </div>
+      </details>
+      <details class="browser-reference-section">
+        <summary>
+          <span>Army Rules</span>
+          <strong>${data.armyRules.length}</strong>
+        </summary>
+        <div class="browser-reference-list army-rule-list">
+          ${renderBrowserReferenceCards(data.armyRules, "rule")}
+        </div>
+      </details>
+    </div>`;
+}
+
+async function refreshUnitBrowserReferences(sourceId) {
+  const source = getUnitBrowserSources().find(item => item.id === sourceId);
+  if (!source) return;
+
+  const data = await getUnitBrowserReferenceData(source);
+  const active = getActiveUnitBrowserSource();
+  if (!active || active.id !== sourceId || state.selected) return;
+
+  const container = document.getElementById("unitBrowserReferences");
+  if (container) container.outerHTML = renderUnitBrowserReferences(active, data);
+}
+
 function getCombinedReferenceData() {
   const rules = [...CORE_RULE_QUICKREF];
   const stratagems = [...CORE_STRATAGEM_QUICKREF];
@@ -3204,8 +3378,12 @@ function renderQuickLists() {
       </section>`);
   }
 
+  html.push(renderUnitBrowserReferences(source));
+
   els.quickLists.innerHTML = html.join("") ||
     '<div class="empty-section">No units were found in this data source.</div>';
+
+  refreshUnitBrowserReferences(source.id);
 
   els.quickLists.querySelectorAll("[data-entry-index]").forEach(button => {
     button.addEventListener("click", () => {
