@@ -1925,7 +1925,7 @@ function parseSpokenNumber(value) {
 function setupSpeech() {
   const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!Recognition) {
-    els.voiceHint.textContent = "Voice recognition unavailable in this browser";
+    if (els.voiceHint) els.voiceHint.textContent = "Voice recognition unavailable in this browser";
     return;
   }
 
@@ -1945,8 +1945,8 @@ function setupSpeech() {
         finalAlternatives = Array.from(result)
           .slice(0, 5)
           .map(alt => ({
-            transcript: String(alt.transcript || "").trim(),
-            confidence: Number.isFinite(alt.confidence) ? alt.confidence : 0
+            transcript:String(alt.transcript || "").trim(),
+            confidence:Number.isFinite(alt.confidence) ? alt.confidence : 0
           }))
           .filter(alt => alt.transcript);
       } else {
@@ -1954,17 +1954,11 @@ function setupSpeech() {
       }
     }
 
-    if (interim) {
-      els.voiceHint.textContent = interim;
-      els.searchInput.value = interim;
-      renderResults(interim);
-    }
+    if (interim && els.voiceHint) els.voiceHint.textContent = interim;
 
     if (finalAlternatives?.length) {
       const primary = finalAlternatives[0].transcript;
-      els.voiceHint.textContent = primary;
-      els.searchInput.value = primary;
-      renderResults(primary);
+      if (els.voiceHint) els.voiceHint.textContent = primary;
       chooseBestVoiceMatch(finalAlternatives);
     }
   };
@@ -2001,9 +1995,9 @@ function stopListening(event) {
 
 function setListening(active) {
   state.listening = active;
-  els.talkButton.classList.toggle("listening", active);
-  els.voiceStatus.textContent = active ? "Listening…" : "Ready";
-  if (!active && !els.voiceHint.textContent.trim()) els.voiceHint.textContent = "Hold to talk";
+  els.talkButton?.classList.toggle("listening", active);
+  if (els.voiceStatus) els.voiceStatus.textContent = active ? "Listening…" : "Ready";
+  if (!active && els.voiceHint && !els.voiceHint.textContent.trim()) els.voiceHint.textContent = "Hold to talk";
 }
 
 function voiceAliasKey(rosterId, unitId) {
@@ -2308,17 +2302,43 @@ function chooseBestVoiceMatch(input) {
 
   const primary = alternatives[0]?.transcript?.trim() || "";
   const q = normalize(primary);
+  if (!q) return;
 
-  if (q && handleVoiceCommand(q)) {
-    els.voiceHint.textContent = primary;
+  if (state.currentPage === "score") {
+    if (!handleScoreVoice(q)) toast("Scoring voice only accepts Player 1/2 Primary or Secondary score changes.");
     return;
   }
+
+  if (state.currentPage === "dice") {
+    if (!handleDiceVoice(q)) toast("Try “roll 60 dice hitting on 4” or “reroll all misses”.");
+    return;
+  }
+
+  if (state.currentPage === "strats") {
+    const query = primary.replace(/^(find|search|show)\s+(stratagem|stratagems|strat|strats)\s+/i, "");
+    if (els.stratSearch) els.stratSearch.value = query;
+    renderStratagems(query);
+    return;
+  }
+
+  if (state.currentPage === "rules") {
+    const query = primary.replace(/^(find|search|show)\s+(core rule|core rules|rule|rules)\s+/i, "");
+    if (els.coreRuleSearch) els.coreRuleSearch.value = query;
+    renderCoreRules(query);
+    return;
+  }
+
+  if (state.currentPage !== "datasheets") return;
+
+  if (handleDatasheetVoiceCommand(q)) return;
 
   if (!state.rosters.length) {
-    els.voiceHint.textContent = "No roster data loaded";
-    toast("Load or import data first for datasheet lookup.");
+    toast("Go to Setup and import data first.");
     return;
   }
+
+  if (els.searchInput) els.searchInput.value = primary;
+  renderResults(primary);
 
   const ranked = rankVoiceCandidates(alternatives);
   const top = ranked[0];
@@ -2326,8 +2346,7 @@ function chooseBestVoiceMatch(input) {
   const margin = top ? top.score - (second?.score || 0) : 0;
 
   if (!top || top.score < .34) {
-    els.voiceHint.textContent = "No confident unit match";
-    toast("I couldn't confidently match that unit. Try again or type part of the name.");
+    if (els.voiceHint) els.voiceHint.textContent = "No confident datasheet match";
     return;
   }
 
@@ -2346,7 +2365,7 @@ function chooseBestVoiceMatch(input) {
   if (decisive) {
     closeVoiceShortlist();
     selectUnitFromRoster(top.unit, top.rosterIndex);
-    els.voiceHint.textContent = top.unit.name;
+    if (els.voiceHint) els.voiceHint.textContent = top.unit.name;
     return;
   }
 
@@ -2407,179 +2426,109 @@ function closeVoiceShortlist() {
   state.voiceHeard = "";
 }
 
-function handleVoiceCommand(q) {
-  if (/^(?:choose|select|pick) armies$/.test(q)) {
-    switchPage("data", {silent:true});
-    openArmyPicker();
-    return true;
-  }
-  if (/^(?:open |show |go to )?(?:data|armies|army data|import)$/.test(q)) {
-    switchPage("data");
-    return true;
-  }
-  if (/^(?:open |show |go to )?(?:datasheets?|data sheets?|units?|unit lookup)$/.test(q)) {
-    switchPage("datasheets");
-    return true;
-  }
-  if (/^(?:open |show |go to )?(?:score|scoring|scores)$/.test(q)) {
-    switchPage("score");
-    return true;
-  }
-  if (/^(?:open |show |go to )?(?:dice|dice roller)$/.test(q)) {
-    switchPage("dice");
-    return true;
-  }
-  if (/^(?:open |show |go to )?(?:stratagems?|strats?)$/.test(q)) {
-    switchPage("strats");
-    return true;
-  }
-  if (/^(?:open |show |go to )?(?:core rules?|rules lookup|rule lookup)$/.test(q)) {
-    switchPage("rules");
-    return true;
-  }
-  if (/^(?:open |show |go to )?(?:game setup|setup)$/.test(q)) {
-    switchPage("setup");
-    return true;
-  }
-  if (/^(?:mission ready|mission done)$/.test(q)) {
-    setSetupCheck("mission", true);
-    return true;
-  }
-  if (/^(?:terrain ready|battlefield ready)$/.test(q)) {
-    setSetupCheck("terrain", true);
-    return true;
-  }
-  if (/^(?:deployment complete|deployment ready|deployed)$/.test(q)) {
-    setSetupCheck("deploy", true);
-    return true;
-  }
-
-  const diceMatch = q.match(/^roll (\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty)(?: d6| dice| die)?$/);
-  if (diceMatch) {
-    rollDice(parseSpokenNumber(diceMatch[1]) || 1);
-    return true;
-  }
-
-  const myScoreMatch = q.match(/^(?:add |score )?(\d+) (?:points? )?(?:for me|to my score|my score)$/);
-  if (myScoreMatch) {
-    adjustScore("my", Number(myScoreMatch[1]));
-    switchPage("score");
-    return true;
-  }
-
-  const oppScoreMatch = q.match(/^(?:add |score )?(\d+) (?:points? )?(?:for opponent|to opponent score|opponent score)$/);
-  if (oppScoreMatch) {
-    adjustScore("opp", Number(oppScoreMatch[1]));
-    switchPage("score");
-    return true;
-  }
-
-  const setMyScore = q.match(/^set my score (?:to )?(\d+)$/);
-  if (setMyScore) {
-    localStorage.setItem("tv_match_score_my", String(Number(setMyScore[1])));
-    renderMatchTools();
-    switchPage("score");
-    return true;
-  }
-
-  const setOppScore = q.match(/^set opponent score (?:to )?(\d+)$/);
-  if (setOppScore) {
-    localStorage.setItem("tv_match_score_opp", String(Number(setOppScore[1])));
-    renderMatchTools();
-    switchPage("score");
-    return true;
-  }
-
-  const stratLookup = q.match(/^(?:find |search )?(?:stratagem|strat) (.+)$/);
-  if (stratLookup) {
-    switchPage("strats", {silent:true});
-    if (els.stratSearch) els.stratSearch.value = stratLookup[1];
-    renderStratagems(stratLookup[1]);
-    return true;
-  }
-
-  const ruleLookup = q.match(/^(?:find |search )?(?:rule|core rule) (.+)$/);
-  if (ruleLookup) {
-    switchPage("rules", {silent:true});
-    if (els.coreRuleSearch) els.coreRuleSearch.value = ruleLookup[1];
-    renderCoreRules(ruleLookup[1]);
-    return true;
-  }
-
+function handleDatasheetVoiceCommand(q) {
   if (!state.selected && !/next|previous|back/.test(q)) return false;
 
   if (/^(show )?(weapons?|guns?|melee|ranged)$/.test(q)) {
-    switchPage("datasheets", {silent:true});
     scrollToDetailSection(".weapon-section");
     return true;
   }
+
   const phaseMatch = q.match(/^(?:show )?(command|movement|shooting|charge|fight) phase$/);
   if (phaseMatch) {
-    switchPage("datasheets", {silent:true});
     setActivePhase(titleCase(phaseMatch[1]));
     scrollToDetailSection(".ability-section");
     return true;
   }
+
   if (/^(show )?(all abilities|all rules)$/.test(q)) {
-    switchPage("datasheets", {silent:true});
     setActivePhase("All");
     return true;
   }
+
   if (/^(show )?(abilities|ability|rules?)$/.test(q)) {
-    switchPage("datasheets", {silent:true});
     scrollToDetailSection(".ability-section");
     return true;
   }
+
   if (/^(next|next unit)$/.test(q)) {
-    switchPage("datasheets", {silent:true});
     moveSelection(1);
     return true;
   }
+
   if (/^(previous|previous unit|back)$/.test(q)) {
-    switchPage("datasheets", {silent:true});
     moveSelection(-1);
     return true;
   }
+
   if (/^(pin|pin unit|favourite|favorite)$/.test(q)) {
     toggleSelectedPin();
     return true;
   }
-  if (/^(destroyed|mark destroyed|unit destroyed)$/.test(q)) {
-    toggleDestroyed();
-    return true;
-  }
-  if (/^(your turn|my turn)$/.test(q)) {
-    localStorage.setItem("tv_match_turn", "your");
-    renderMatchTools();
-    switchPage("score");
-    return true;
-  }
-  if (/^(opponent turn|their turn)$/.test(q)) {
-    localStorage.setItem("tv_match_turn", "opponent");
-    renderMatchTools();
-    switchPage("score");
-    return true;
-  }
-  if (/^(next round|round up)$/.test(q)) {
-    adjustRound(1);
-    switchPage("score");
-    return true;
-  }
-  if (/^(previous round|round down)$/.test(q)) {
-    adjustRound(-1);
-    switchPage("score");
-    return true;
-  }
-
-  const cpMatch = q.match(/^(?:set )?cp (\d+)$/);
-  if (cpMatch) {
-    localStorage.setItem("tv_match_cp", String(Number(cpMatch[1])));
-    renderMatchTools();
-    switchPage("score");
-    return true;
-  }
 
   return false;
+}
+
+function extractVoiceAmount(q) {
+  const numeric = q.match(/\b(\d+)\b/);
+  if (numeric) return Number(numeric[1]);
+
+  const tokens = q.split(" ");
+  for (let i = 0; i < tokens.length; i++) {
+    const two = tokens.slice(i, i + 2).join(" ");
+    const twoValue = parseSpokenNumber(two);
+    if (twoValue) return twoValue;
+    const oneValue = parseSpokenNumber(tokens[i]);
+    if (oneValue) return oneValue;
+  }
+  return null;
+}
+
+function handleScoreVoice(q) {
+  const action = /\b(remove|subtract|minus|take)\b/.test(q) ? -1 :
+    /\b(add|score|plus|give)\b/.test(q) ? 1 : 0;
+  const player = /\b(player 1|player one|p1)\b/.test(q) ? 1 :
+    /\b(player 2|player two|p2|opponent)\b/.test(q) ? 2 : null;
+  const type = /\bprimary\b/.test(q) ? "primary" :
+    /\bsecondary\b/.test(q) ? "secondary" : null;
+  const amount = extractVoiceAmount(q);
+
+  if (!action || !player || !type || !amount) return false;
+  adjustTurnScore(player, type, action * amount);
+  return true;
+}
+
+function parseDiceTarget(value) {
+  const cleaned = normalize(String(value || "")).replace(/s$/, "");
+  const number = parseSpokenNumber(cleaned);
+  if (!number) return null;
+  return Math.min(6, Math.max(2, number));
+}
+
+function handleDiceVoice(q) {
+  if (/^reroll (?:all )?misses$/.test(q) || /^re roll (?:all )?misses$/.test(q)) {
+    rerollMisses();
+    return true;
+  }
+
+  if (/^reroll (?:all|everything)$/.test(q) || /^re roll (?:all|everything)$/.test(q)) {
+    rerollEverything();
+    return true;
+  }
+
+  let match = q.match(/^roll (.+?) (?:dice|d6|die)(?: (hitting|wounding|saving|succeeding) on (.+))?$/);
+  if (!match) match = q.match(/^roll (.+?)(?: (hitting|wounding|saving|succeeding) on (.+))$/);
+  if (!match) return false;
+
+  const count = parseSpokenNumber(match[1]);
+  if (!count) return false;
+
+  const verb = match[2] || "";
+  const target = match[3] ? parseDiceTarget(match[3]) : null;
+  const label = verb ? titleCase(verb.replace(/ing$/, "")) + " on" : "";
+
+  rollDice(count, target, label);
+  return true;
 }
 
 function scrollToDetailSection(selector) {
