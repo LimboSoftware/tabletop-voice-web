@@ -3048,3 +3048,14 @@ body.focus-mode .detail-panel {
     font-size: .62rem;
   }
 }
+
+
+.roster-refresh-note {
+  border: 1px solid #5a4b2a;
+  border-radius: 11px;
+  background: rgba(197,151,48,.06);
+  color: #d4bd83;
+  padding: 10px 12px;
+  font-size: .75rem;
+  line-height: 1.4;
+}
