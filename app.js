@@ -1584,10 +1584,12 @@ function getMatchState() {
     return {
       round: Math.min(5, Math.max(1, Number(localStorage.getItem("tv_match_round") || 1))),
       cp: Math.max(0, Number(localStorage.getItem("tv_match_cp") || 0)),
-      turn: localStorage.getItem("tv_match_turn") || "your"
+      turn: localStorage.getItem("tv_match_turn") || "your",
+      myScore: Math.max(0, Number(localStorage.getItem("tv_match_score_my") || 0)),
+      oppScore: Math.max(0, Number(localStorage.getItem("tv_match_score_opp") || 0))
     };
   } catch {
-    return {round:1, cp:0, turn:"your"};
+    return {round:1, cp:0, turn:"your", myScore:0, oppScore:0};
   }
 }
 
@@ -1595,6 +1597,8 @@ function renderMatchTools() {
   const match = getMatchState();
   if (els.roundValue) els.roundValue.textContent = String(match.round);
   if (els.cpValue) els.cpValue.textContent = String(match.cp);
+  if (els.myScoreValue) els.myScoreValue.textContent = String(match.myScore);
+  if (els.oppScoreValue) els.oppScoreValue.textContent = String(match.oppScore);
   if (els.turnToggle) {
     els.turnToggle.textContent = match.turn === "your" ? "Your turn" : "Opponent turn";
     els.turnToggle.classList.toggle("opponent", match.turn === "opponent");
@@ -1616,12 +1620,90 @@ function adjustCP(delta) {
   renderMatchTools();
 }
 
+function adjustScore(side, delta) {
+  const match = getMatchState();
+  const key = side === "opp" ? "tv_match_score_opp" : "tv_match_score_my";
+  const current = side === "opp" ? match.oppScore : match.myScore;
+  const next = Math.max(0, current + delta);
+  localStorage.setItem(key, String(next));
+  renderMatchTools();
+}
+
 function toggleTurn() {
   const match = getMatchState();
   const next = match.turn === "your" ? "opponent" : "your";
   localStorage.setItem("tv_match_turn", next);
   renderMatchTools();
   toast(next === "your" ? "Your turn" : "Opponent turn");
+}
+
+function resetMatchState() {
+  if (!confirm("Reset scores, round, CP, turn and setup checklist?")) return;
+
+  ["tv_match_round","tv_match_cp","tv_match_turn","tv_match_score_my","tv_match_score_opp"].forEach(key => localStorage.removeItem(key));
+  document.querySelectorAll("[data-setup-check]").forEach(input => input.checked = false);
+  persistSetupChecks();
+  renderMatchTools();
+  toast("Match reset");
+}
+
+function persistSetupChecks() {
+  const state = {};
+  document.querySelectorAll("[data-setup-check]").forEach(input => {
+    state[input.dataset.setupCheck] = !!input.checked;
+  });
+  localStorage.setItem("tv_setup_checks", JSON.stringify(state));
+}
+
+function restoreSetupChecks() {
+  let saved = {};
+  try { saved = JSON.parse(localStorage.getItem("tv_setup_checks") || "{}"); } catch {}
+  document.querySelectorAll("[data-setup-check]").forEach(input => {
+    input.checked = !!saved[input.dataset.setupCheck];
+  });
+}
+
+function randomD6() {
+  if (window.crypto?.getRandomValues) {
+    const array = new Uint32Array(1);
+    window.crypto.getRandomValues(array);
+    return (array[0] % 6) + 1;
+  }
+  return Math.floor(Math.random() * 6) + 1;
+}
+
+function rollDice(count = 1) {
+  count = Math.max(1, Math.min(100, Number(count) || 1));
+  if (els.diceCount) els.diceCount.value = String(count);
+
+  const rolls = Array.from({length:count}, randomD6);
+  const total = rolls.reduce((sum, value) => sum + value, 0);
+  const sixes = rolls.filter(value => value === 6).length;
+  const ones = rolls.filter(value => value === 1).length;
+
+  if (els.diceSummary) {
+    els.diceSummary.innerHTML = `
+      <strong>${count}D6 = ${total}</strong>
+      <span>${sixes} six${sixes === 1 ? "" : "es"} · ${ones} one${ones === 1 ? "" : "s"}</span>`;
+  }
+
+  if (els.diceResults) {
+    els.diceResults.innerHTML = rolls.map(value => `<span class="die-result die-${value}">${value}</span>`).join("");
+  }
+
+  switchPage("dice", {silent:true});
+}
+
+function parseSpokenNumber(value) {
+  const direct = Number(value);
+  if (Number.isFinite(direct)) return direct;
+
+  const words = {
+    one:1,two:2,three:3,four:4,five:5,six:6,seven:7,eight:8,nine:9,ten:10,
+    eleven:11,twelve:12,thirteen:13,fourteen:14,fifteen:15,sixteen:16,
+    seventeen:17,eighteen:18,nineteen:19,twenty:20
+  };
+  return words[normalize(value)] || null;
 }
 
 function destroyedKey(unit = state.selected) {
