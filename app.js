@@ -3,8 +3,10 @@ const state = {
   activeRoster: 0,
   selected: null,
   mode: localStorage.getItem("tv_mode") || "mobile",
+  currentPage: localStorage.getItem("tv_page") || "data",
   listening: false,
-  recognition: null
+  recognition: null,
+  referenceData: {rules:[], stratagems:[]}
 };
 
 const $ = (id) => document.getElementById(id);
@@ -14,9 +16,7 @@ const els = {
   voiceDock: $("voiceDock"),
   fileInput: $("fileInput"),
   importButton: $("importButton"),
-  welcomeImport: $("welcomeImport"),
   fullDataButton: $("fullDataButton"),
-  fullDataWelcome: $("fullDataWelcome"),
   clearRoster: $("clearRoster"),
   searchInput: $("searchInput"),
   resultList: $("resultList"),
@@ -51,6 +51,28 @@ const els = {
   armyPickerClear: $("armyPickerClear"),
   activeArmySummary: $("activeArmySummary"),
   armyPickerList: $("armyPickerList"),
+  appNav: $("appNav"),
+  navMoreButton: $("navMoreButton"),
+  navMoreMenu: $("navMoreMenu"),
+  pageDatasheets: $("pageDatasheets"),
+  pageScore: $("pageScore"),
+  pageDice: $("pageDice"),
+  pageStrats: $("pageStrats"),
+  pageRules: $("pageRules"),
+  pageSetup: $("pageSetup"),
+  dataRosterSummary: $("dataRosterSummary"),
+  myScoreValue: $("myScoreValue"),
+  oppScoreValue: $("oppScoreValue"),
+  diceCount: $("diceCount"),
+  rollDiceButton: $("rollDiceButton"),
+  diceSummary: $("diceSummary"),
+  diceResults: $("diceResults"),
+  stratSearch: $("stratSearch"),
+  stratResults: $("stratResults"),
+  coreRuleSearch: $("coreRuleSearch"),
+  coreRuleResults: $("coreRuleResults"),
+  setupChooseArmies: $("setupChooseArmies"),
+  resetMatchButton: $("resetMatchButton"),
   toast: $("toast"),
   firstRunModal: $("firstRunModal"),
   firstRunFullData: $("firstRunFullData"),
@@ -67,16 +89,18 @@ function boot() {
   bindEvents();
   showFirstRunIfNeeded();
   setupSpeech();
+  renderAll();
   renderMatchTools();
+  restoreSetupChecks();
+  switchPage(state.currentPage, {silent:true});
+  els.voiceDock?.classList.remove("hidden");
   if ("serviceWorker" in navigator) navigator.serviceWorker.register("./sw.js").catch(() => {});
 }
 
 function bindEvents() {
-  els.importButton.addEventListener("click", () => els.fileInput.click());
-  els.welcomeImport.addEventListener("click", () => els.fileInput.click());
-  els.fileInput.addEventListener("change", handleFiles);
+  els.importButton?.addEventListener("click", () => els.fileInput.click());
+  els.fileInput?.addEventListener("change", handleFiles);
   els.fullDataButton?.addEventListener("click", loadFull40kData);
-  els.fullDataWelcome?.addEventListener("click", loadFull40kData);
   els.clearRoster.addEventListener("click", clearRosters);
   els.searchInput.addEventListener("input", () => renderResults(els.searchInput.value));
   els.modeToggle.addEventListener("click", toggleMode);
@@ -88,6 +112,34 @@ function bindEvents() {
   els.cpDown?.addEventListener("click", () => adjustCP(-1));
   els.cpUp?.addEventListener("click", () => adjustCP(1));
   els.turnToggle?.addEventListener("click", toggleTurn);
+  document.querySelectorAll("[data-page-target]").forEach(button => {
+    button.addEventListener("click", () => switchPage(button.dataset.pageTarget));
+  });
+  els.navMoreButton?.addEventListener("click", () => {
+    const open = els.navMoreMenu?.classList.toggle("hidden") === false;
+    els.navMoreButton.setAttribute("aria-expanded", open ? "true" : "false");
+  });
+  document.addEventListener("click", event => {
+    if (!els.navMoreMenu || !els.navMoreButton) return;
+    if (!els.navMoreMenu.contains(event.target) && !els.navMoreButton.contains(event.target)) {
+      els.navMoreMenu.classList.add("hidden");
+      els.navMoreButton.setAttribute("aria-expanded", "false");
+    }
+  });
+  document.querySelectorAll("[data-score-change]").forEach(button => {
+    button.addEventListener("click", () => adjustScore(button.dataset.scoreSide, Number(button.dataset.scoreChange)));
+  });
+  document.querySelectorAll("[data-dice-count]").forEach(button => {
+    button.addEventListener("click", () => rollDice(Number(button.dataset.diceCount)));
+  });
+  els.rollDiceButton?.addEventListener("click", () => rollDice(Number(els.diceCount?.value || 1)));
+  els.stratSearch?.addEventListener("input", () => renderStratagems(els.stratSearch.value));
+  els.coreRuleSearch?.addEventListener("input", () => renderCoreRules(els.coreRuleSearch.value));
+  els.setupChooseArmies?.addEventListener("click", openArmyPicker);
+  els.resetMatchButton?.addEventListener("click", resetMatchState);
+  document.querySelectorAll("[data-setup-check]").forEach(input => {
+    input.addEventListener("change", persistSetupChecks);
+  });
   els.armyPickerButton?.addEventListener("click", openArmyPicker);
   els.armyPickerClose?.addEventListener("click", closeArmyPicker);
   els.armyPickerModal?.addEventListener("click", event => {
