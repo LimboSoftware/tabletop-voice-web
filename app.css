@@ -3240,3 +3240,260 @@ body.focus-mode .detail-panel {
     font-size: .61rem;
   }
 }
+
+
+/* Unit context controls */
+.unit-status-toggle {
+  border-radius: 10px !important;
+  background: transparent !important;
+  color: #b8c5d2 !important;
+  box-shadow: none !important;
+}
+
+.unit-status-toggle:hover {
+  background: #17202b !important;
+  color: #eef4f8 !important;
+}
+
+.unit-status-toggle.active {
+  border-color: #3a7187 !important;
+  background: rgba(56,189,248,.10) !important;
+  color: var(--accent) !important;
+}
+
+.battle-shock-toggle.active {
+  border-color: #a84050 !important;
+  background: rgba(220,54,73,.18) !important;
+  color: #ff9aa6 !important;
+}
+
+.unit-context-bar {
+  align-items: center !important;
+}
+
+.unit-top-statuses {
+  flex-wrap: nowrap;
+}
+
+/* Units browser references */
+.unit-browser-references {
+  display: grid;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.browser-reference-loading,
+.browser-reference-empty {
+  border: 1px solid #293444;
+  border-radius: 12px;
+  background: #101720;
+  color: #8797a9;
+  padding: 12px;
+  font-size: .76rem;
+}
+
+.browser-reference-section {
+  border: 1px solid #293444;
+  border-radius: 14px;
+  background: #101720;
+  overflow: hidden;
+}
+
+.browser-reference-section > summary {
+  min-height: 50px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  cursor: pointer;
+  list-style: none;
+  padding: 0 14px;
+  color: #eef4f8;
+  font-size: .9rem;
+  font-weight: 850;
+}
+
+.browser-reference-section > summary::-webkit-details-marker {
+  display: none;
+}
+
+.browser-reference-section > summary::after {
+  content: "⌄";
+  color: #8090a2;
+  margin-left: auto;
+  transition: transform .16s ease;
+}
+
+.browser-reference-section[open] > summary::after {
+  transform: rotate(180deg);
+}
+
+.browser-reference-section > summary strong {
+  min-width: 25px;
+  height: 23px;
+  display: grid;
+  place-items: center;
+  border: 1px solid #304054;
+  border-radius: 999px;
+  color: #8fa0b3;
+  font-size: .64rem;
+}
+
+.browser-reference-list {
+  display: grid;
+  gap: 7px;
+  padding: 0 10px 10px;
+}
+
+.browser-reference-card {
+  border: 1px solid #273444;
+  border-radius: 11px;
+  background: #141c26;
+  padding: 11px 12px;
+}
+
+.browser-reference-card-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 9px;
+}
+
+.browser-reference-card-heading h4 {
+  margin: 0;
+  font-size: .82rem;
+}
+
+.browser-reference-card-heading span {
+  flex: 0 0 auto;
+  max-width: 55%;
+  color: #8da0b3;
+  font-size: .58rem;
+  text-align: right;
+}
+
+.browser-reference-card-text {
+  margin-top: 7px;
+  color: #bbc7d3;
+  font-size: .76rem;
+  line-height: 1.48;
+}
+
+.browser-reference-card-text p {
+  margin: 0 0 7px;
+}
+
+.browser-reference-card-text p:last-child {
+  margin-bottom: 0;
+}
+
+/* Denser weapon layout with larger numbers */
+.weapon-table {
+  table-layout: fixed;
+}
+
+.weapon-table th,
+.weapon-table td {
+  padding-top: 12px;
+  padding-bottom: 12px;
+}
+
+.weapon-table th:nth-child(1),
+.weapon-table td:nth-child(1) { width: 34%; }
+.weapon-table th:nth-child(2),
+.weapon-table td:nth-child(2) { width: 9%; }
+.weapon-table th:nth-child(3),
+.weapon-table td:nth-child(3) { width: 6%; }
+.weapon-table th:nth-child(4),
+.weapon-table td:nth-child(4) { width: 8%; }
+.weapon-table th:nth-child(5),
+.weapon-table td:nth-child(5) { width: 6%; }
+.weapon-table th:nth-child(6),
+.weapon-table td:nth-child(6) { width: 6%; }
+.weapon-table th:nth-child(7),
+.weapon-table td:nth-child(7) { width: 6%; }
+.weapon-table th:nth-child(8),
+.weapon-table td:nth-child(8) { width: 25%; }
+
+.weapon-table tbody td:nth-child(3),
+.weapon-table tbody td:nth-child(4),
+.weapon-table tbody td:nth-child(5),
+.weapon-table tbody td:nth-child(6),
+.weapon-table tbody td:nth-child(7) {
+  font-size: 1.16rem;
+  font-weight: 850;
+  line-height: 1;
+}
+
+.weapon-table tbody td:nth-child(2),
+.weapon-table tbody td:nth-child(8) {
+  font-size: .92rem;
+  font-weight: 500;
+}
+
+@media (max-width: 760px) {
+  .unit-context-bar {
+    min-height: 42px;
+    padding: 6px 8px !important;
+  }
+
+  .unit-top-statuses {
+    gap: 4px;
+  }
+
+  .unit-status-toggle {
+    min-height: 30px !important;
+    padding: 0 7px !important;
+    font-size: .59rem !important;
+  }
+
+  .back-to-roster {
+    min-height: 30px;
+  }
+
+  .weapon-table th,
+  .weapon-table .weapon-row td {
+    padding: 7px 2px !important;
+  }
+
+  .weapon-table tbody td:nth-child(3),
+  .weapon-table tbody td:nth-child(4),
+  .weapon-table tbody td:nth-child(5),
+  .weapon-table tbody td:nth-child(6),
+  .weapon-table tbody td:nth-child(7) {
+    font-size: 1rem !important;
+    font-weight: 900 !important;
+    line-height: 1 !important;
+  }
+
+  .weapon-table tbody td:nth-child(2),
+  .weapon-table tbody td:nth-child(8),
+  .weapon-table .weapon-keywords {
+    font-size: .58rem !important;
+    font-weight: 500 !important;
+    line-height: 1.15 !important;
+  }
+
+  .weapon-name strong {
+    font-size: .72rem !important;
+    line-height: 1.12 !important;
+  }
+
+  .browser-reference-section > summary {
+    min-height: 46px;
+    padding: 0 11px;
+    font-size: .82rem;
+  }
+
+  .browser-reference-card {
+    padding: 9px 10px;
+  }
+
+  .browser-reference-card-heading h4 {
+    font-size: .78rem;
+  }
+
+  .browser-reference-card-text {
+    font-size: .72rem;
+  }
+}
