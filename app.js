@@ -1150,6 +1150,18 @@ async function getUnitBrowserReferenceData(source) {
   return {stratagems:[], armyRules:[], note:""};
 }
 
+function getReferencePhaseTags(item) {
+  const standard = ["command","movement","shooting","charge","fight"];
+  const phases = (item?.phases || []).map(value => normalize(value)).filter(Boolean);
+  const tags = phases.filter(value => standard.includes(value) || value === "any");
+
+  if (tags.length) return [...new Set(tags)];
+
+  const text = normalize(item?.text || "");
+  const inferred = standard.filter(phase => text.includes(phase + " phase"));
+  return inferred.length ? inferred : ["any"];
+}
+
 function renderBrowserReferenceCards(items, kind = "rule") {
   if (!items?.length) return '<div class="empty-section">None found.</div>';
 
@@ -1175,33 +1187,64 @@ function renderBrowserReferenceCards(items, kind = "rule") {
       ? String(item.category)
           .split("·")
           .map(part => part.trim())
-          .filter(part => normalize(part) !== normalize(detachment))
+          .filter(Boolean)
           .join(" · ")
       : "";
 
+    const phaseTags = kind === "stratagem" ? getReferencePhaseTags(item) : [];
+
     return `
       ${detachmentHeading}
-      <article class="ability-card unique-rule-card browser-inline-rule ${kind}">
-        <div class="browser-inline-rule-heading">
-          <h4>${escapeHtml(item.name)}</h4>
-          ${meta ? `<span>${escapeHtml(meta)}</span>` : ""}
-        </div>
-        ${item.text ? `<div class="ability-text unique-rule-text">${formatRuleText(item.text)}</div>` : ""}
-      </article>`;
+      <details class="browser-inline-rule-details ${kind}" ${phaseTags.length ? `data-ref-phases="${escapeHtml(phaseTags.join(" "))}"` : ""}>
+        <summary class="browser-inline-rule-summary">
+          <span class="browser-inline-rule-title">
+            <strong>${escapeHtml(item.name)}</strong>
+            ${meta ? `<small>${escapeHtml(meta)}</small>` : ""}
+          </span>
+          <span class="browser-inline-rule-open" aria-hidden="true">＋</span>
+        </summary>
+        <article class="ability-card unique-rule-card browser-inline-rule ${kind}">
+          ${item.text ? `<div class="ability-text unique-rule-text">${formatRuleText(item.text)}</div>` : ""}
+        </article>
+      </details>`;
   }).join("");
+}
+
+function renderStratagemPhaseTabs(items) {
+  if (!items?.length) return "";
+
+  const phases = [
+    ["all","All"],
+    ["command","Command"],
+    ["movement","Movement"],
+    ["shooting","Shooting"],
+    ["charge","Charge"],
+    ["fight","Fight"]
+  ];
+
+  return `
+    <div class="strat-phase-tabs" role="tablist" aria-label="Filter stratagems by phase">
+      ${phases.map(([value,label], index) => `
+        <button type="button" class="${index === 0 ? "active" : ""}" data-strat-phase="${value}">
+          ${label}
+        </button>`).join("")}
+    </div>`;
 }
 
 function renderUnitBrowserReferenceSection(title, items, kind) {
   return `
-    <section class="roster-unit-group browser-reference-unit-group">
-      <div class="roster-unit-group-heading">
-        <h3>${escapeHtml(title)}</h3>
-        <span>${items?.length || 0}</span>
+    <details class="roster-unit-group browser-reference-unit-group">
+      <summary class="browser-reference-section-summary">
+        <span>${escapeHtml(title)}</span>
+        <strong>${items?.length || 0}</strong>
+      </summary>
+      <div class="browser-reference-section-body">
+        ${kind === "stratagem" ? renderStratagemPhaseTabs(items) : ""}
+        <div class="ability-list browser-reference-list">
+          ${renderBrowserReferenceCards(items || [], kind)}
+        </div>
       </div>
-      <div class="ability-list browser-reference-list">
-        ${renderBrowserReferenceCards(items || [], kind)}
-      </div>
-    </section>`;
+    </details>`;
 }
 
 function renderUnitBrowserReferences(source, data = null) {
@@ -1222,6 +1265,41 @@ function renderUnitBrowserReferences(source, data = null) {
     </div>`;
 }
 
+function bindUnitBrowserReferenceControls(container) {
+  if (!container) return;
+
+  container.querySelectorAll("[data-strat-phase]").forEach(button => {
+    button.addEventListener("click", () => {
+      const phase = button.dataset.stratPhase || "all";
+
+      container.querySelectorAll("[data-strat-phase]").forEach(other => {
+        other.classList.toggle("active", other === button);
+      });
+
+      container.querySelectorAll(".browser-inline-rule-details.stratagem").forEach(card => {
+        const tags = String(card.dataset.refPhases || "").split(/\s+/).filter(Boolean);
+        const visible = phase === "all" || tags.includes(phase) || tags.includes("any");
+        card.classList.toggle("phase-hidden", !visible);
+      });
+
+      container.querySelectorAll(".reference-detachment-heading").forEach(heading => {
+        let next = heading.nextElementSibling;
+        let hasVisible = false;
+
+        while (next && !next.classList.contains("reference-detachment-heading")) {
+          if (next.matches?.(".browser-inline-rule-details.stratagem") && !next.classList.contains("phase-hidden")) {
+            hasVisible = true;
+            break;
+          }
+          next = next.nextElementSibling;
+        }
+
+        heading.classList.toggle("phase-hidden", !hasVisible);
+      });
+    });
+  });
+}
+
 async function refreshUnitBrowserReferences(sourceId) {
   const source = getUnitBrowserSources().find(item => item.id === sourceId);
   if (!source) return;
@@ -1231,7 +1309,10 @@ async function refreshUnitBrowserReferences(sourceId) {
   if (!active || active.id !== sourceId || state.selected) return;
 
   const container = document.getElementById("unitBrowserReferences");
-  if (container) container.outerHTML = renderUnitBrowserReferences(active, data);
+  if (container) {
+    container.outerHTML = renderUnitBrowserReferences(active, data);
+    bindUnitBrowserReferenceControls(document.getElementById("unitBrowserReferences"));
+  }
 }
 
 function getCombinedReferenceData() {
@@ -2227,7 +2308,7 @@ function updateUnitTopStatuses(unit = state.selected) {
 }
 
 function renderWeaponSection(profiles, title = "Weapons") {
-  const columns = ["Range", "A", "BS/WS", "S", "AP", "D", "Keywords"];
+  const columns = ["Range", "A", "BS/WS", "S", "AP", "D"];
 
   const rows = profiles.map(profile => {
     const values = new Map(
@@ -2245,15 +2326,15 @@ function renderWeaponSection(profiles, title = "Weapons") {
       name: profile.name || "Weapon",
       type: profile.type || "",
       quantity: Number.isFinite(Number(profile.quantity)) ? Math.max(1, Number(profile.quantity)) : null,
-      values: [
+      stats: [
         get("Range"),
         get("A"),
         skill,
         get("S"),
         get("AP"),
-        get("D"),
-        get("Keywords")
-      ]
+        get("D")
+      ],
+      keywords:get("Keywords")
     };
   });
 
@@ -2264,7 +2345,7 @@ function renderWeaponSection(profiles, title = "Weapons") {
         <span class="section-count">${rows.length}</span>
       </div>
       <div class="weapon-table-wrap">
-        <table class="weapon-table">
+        <table class="weapon-table compact-weapon-table">
           <thead>
             <tr>
               <th class="weapon-name-column">Weapon</th>
@@ -2273,78 +2354,37 @@ function renderWeaponSection(profiles, title = "Weapons") {
           </thead>
           <tbody>
             ${rows.map(row => `
-              <tr class="weapon-row">
+              <tr class="weapon-row weapon-stat-row">
                 <td class="weapon-name">
                   <div class="weapon-title-line">
                     ${row.quantity != null ? `<span class="weapon-quantity">${row.quantity}×</span>` : ""}
                     <strong>${escapeHtml(row.name)}</strong>
                   </div>
                 </td>
-                ${row.values.map((value, index) => {
-                  let cellClass = "weapon-number";
-                  if (index === 6) cellClass = "weapon-keywords";
-                  else if (index === 0 && /^melee$/i.test(String(value).trim())) cellClass = "weapon-range-text";
-                  else if (index === 0) cellClass = "weapon-range-number";
+                ${row.stats.map((value, index) => {
+                  const cellClass =
+                    index === 0 && /^melee$/i.test(String(value).trim())
+                      ? "weapon-range-text"
+                      : index === 0
+                        ? "weapon-range-number"
+                        : "weapon-number";
 
                   return `
                     <td data-label="${escapeHtml(columns[index])}" class="${cellClass}">
                       ${escapeHtml(value)}
                     </td>`;
                 }).join("")}
+              </tr>
+              <tr class="weapon-keyword-row">
+                <td colspan="7">
+                  <span>Keywords</span>
+                  <strong>${escapeHtml(row.keywords)}</strong>
+                </td>
               </tr>`).join("")}
           </tbody>
         </table>
       </div>
     </section>`;
-}
-
-function isCoreRule(rule) {
-  const name = normalize(cleanRuleText(rule?.name || ""));
-
-  const corePatterns = [
-    /^assault$/,
-    /^pistol$/,
-    /^heavy$/,
-    /^torrent$/,
-    /^blast$/,
-    /^lethal hits$/,
-    /^sustained hits(?: \d+| d\d+)?$/,
-    /^devastating wounds$/,
-    /^hazardous$/,
-    /^twin linked$/,
-    /^ignores cover$/,
-    /^indirect fire$/,
-    /^lance$/,
-    /^melta(?: \d+| d\d+)?$/,
-    /^rapid fire(?: \d+| d\d+)?$/,
-    /^anti .+ \d+$/,
-    /^precision$/,
-    /^extra attacks$/,
-    /^psychic$/,
-    /^one shot$/,
-    /^deadly demise(?: \d+| d\d+)?$/,
-    /^deep strike$/,
-    /^fights first$/,
-    /^scouts? \d+$/,
-    /^stealth$/,
-    /^feel no pain \d+$/,
-    /^leader$/,
-    /^lone operative$/,
-    /^infiltrators$/,
-    /^damaged .+ wounds? remaining$/,
-    /^core .+$/,
-    /^weapon ability .+$/
-  ];
-
-  return corePatterns.some(pattern => pattern.test(name));
-}
-
-function cleanUniqueRuleText(text = "") {
-  return cleanRuleText(text)
-    .replace(/\n?\s*Example:?[\s\S]*$/i, "")
-    .replace(/\n?\s*Designer'?s Note:?[\s\S]*$/i, "")
-    .replace(/\n?\s*Designer'?s Commentary:?[\s\S]*$/i, "")
-    .trim();
 }
 
 function renderAbilitySection(rules) {
