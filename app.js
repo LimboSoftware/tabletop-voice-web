@@ -1152,22 +1152,84 @@ function renderActiveArmySelector() {
   els.activeArmySelector.querySelector(".active-army-more")?.addEventListener("click", openArmyPicker);
 }
 
+function getImportedRosterEntries() {
+  return state.rosters
+    .map((roster, index) => ({roster, index}))
+    .filter(item => item.roster.source === "new-recruit");
+}
+
+function getUnitBrowserGroup(unit) {
+  const categories = new Set((unit.categories || []).map(category => normalize(category)));
+
+  if (categories.has("character") || categories.has("epic hero")) return "Characters";
+  if (categories.has("battleline")) return "Battleline";
+  if (categories.has("dedicated transport")) return "Transports";
+  if (categories.has("vehicle")) return "Vehicles";
+  if (categories.has("monster")) return "Monsters";
+  if (
+    categories.has("mounted") ||
+    categories.has("beast") ||
+    categories.has("swarm") ||
+    categories.has("drone") ||
+    categories.has("aircraft") ||
+    categories.has("cavalry")
+  ) return "Fast / Mounted";
+  if (categories.has("infantry")) return "Infantry";
+  if (categories.has("fortification")) return "Fortifications";
+  return "Other units";
+}
+
+function updateRosterBrowserVisibility() {
+  if (!els.rosterBrowser) return;
+  const hasImported = getImportedRosterEntries().length > 0;
+  const show =
+    state.currentPage === "datasheets" &&
+    hasImported &&
+    !state.selected &&
+    !normalize(els.searchInput?.value || "");
+
+  els.rosterBrowser.classList.toggle("hidden", !show);
+}
+
 function renderTabs() {
+  if (!els.rosterTabs) return;
+
+  const imported = getImportedRosterEntries();
   els.rosterTabs.innerHTML = "";
-  state.rosters.forEach((roster, index) => {
+
+  if (!imported.length) {
+    updateRosterBrowserVisibility();
+    return;
+  }
+
+  if (!imported.some(item => item.index === state.activeRoster) && !state.selected) {
+    state.activeRoster = imported[0].index;
+  }
+
+  imported.forEach(({roster, index}) => {
     const button = document.createElement("button");
+    button.type = "button";
     button.className = "roster-tab" + (index === state.activeRoster ? " active" : "");
-    button.textContent = roster.name;
+    button.innerHTML = `
+      <strong>${escapeHtml(roster.name)}</strong>
+      ${roster.points != null ? `<small>${escapeHtml(roster.points)} pts</small>` : ""}`;
+
     button.addEventListener("click", () => {
       state.activeRoster = index;
       state.selected = null;
-      els.searchInput.value = "";
-      renderAll();
+      if (els.searchInput) els.searchInput.value = "";
+      els.datasheetResultsShell?.classList.add("hidden");
       renderDetail(null);
+      renderTabs();
+      renderQuickLists();
+      updateRosterBrowserVisibility();
       persist();
     });
+
     els.rosterTabs.appendChild(button);
   });
+
+  updateRosterBrowserVisibility();
 }
 
 function renderResults(query = "") {
@@ -2582,34 +2644,88 @@ function updatePinButton() {
 
 function renderQuickLists() {
   if (!els.quickLists) return;
+
   const roster = state.rosters[state.activeRoster];
-  if (!roster) {
+  if (!roster || roster.source !== "new-recruit") {
     els.quickLists.innerHTML = "";
+    updateRosterBrowserVisibility();
     return;
   }
 
-  const byId = new Map(roster.units.map(unit => [unit.id, unit]));
-  const pinned = getStoredIds("pins").map(id => byId.get(id)).filter(Boolean);
-  const recent = getStoredIds("recent").map(id => byId.get(id)).filter(Boolean);
+  const groupOrder = [
+    "Characters",
+    "Battleline",
+    "Infantry",
+    "Fast / Mounted",
+    "Vehicles",
+    "Monsters",
+    "Transports",
+    "Fortifications",
+    "Other units"
+  ];
 
-  const group = (label, units, icon) => units.length ? `
-    <div class="quick-group">
-      <span class="quick-label">${icon} ${label}</span>
-      <div class="quick-chips">
-        ${units.map(unit => `<button class="quick-chip" data-unit-id="${escapeHtml(unit.id)}">${escapeHtml(unit.name)}</button>`).join("")}
-      </div>
-    </div>` : "";
+  const groups = new Map(groupOrder.map(name => [name, []]));
+  for (const unit of roster.units || []) {
+    const group = getUnitBrowserGroup(unit);
+    if (!groups.has(group)) groups.set(group, []);
+    groups.get(group).push(unit);
+  }
 
-  els.quickLists.innerHTML =
-    group("Pinned", pinned, "★") +
-    group("Recent", recent, "↺");
+  const html = [];
+  for (const groupName of groupOrder) {
+    const units = groups.get(groupName) || [];
+    if (!units.length) continue;
 
+    units.sort((a,b) => a.name.localeCompare(b.name));
+    html.push(`
+      <section class="roster-unit-group">
+        <div class="roster-unit-group-heading">
+          <h3>${escapeHtml(groupName)}</h3>
+          <span>${units.length}</span>
+        </div>
+        <div class="roster-unit-grid">
+          ${units.map(unit => {
+            const pts = (unit.stats || []).find(stat => normalize(stat.label) === "pts")?.value;
+            return `
+              <button class="roster-unit-button" type="button" data-unit-id="${escapeHtml(unit.id)}">
+                <strong>${escapeHtml(unit.name)}</strong>
+                ${pts != null ? `<small>${escapeHtml(pts)} pts</small>` : ""}
+              </button>`;
+          }).join("")}
+        </div>
+      </section>`);
+  }
+
+  els.quickLists.innerHTML = html.join("") ||
+    '<div class="empty-section">No units were found in this imported list.</div>';
+
+  const byId = new Map((roster.units || []).map(unit => [unit.id, unit]));
   els.quickLists.querySelectorAll("[data-unit-id]").forEach(button => {
     button.addEventListener("click", () => {
       const unit = byId.get(button.dataset.unitId);
-      if (unit) selectUnit(unit);
+      if (unit) selectUnitFromRoster(unit, state.activeRoster);
     });
   });
+
+  updateRosterBrowserVisibility();
+}
+
+function backToRosterBrowser() {
+  const imported = getImportedRosterEntries();
+  if (!imported.length) return;
+
+  const activeIsImported = state.rosters[state.activeRoster]?.source === "new-recruit";
+  if (!activeIsImported) state.activeRoster = imported[0].index;
+
+  state.selected = null;
+  if (els.searchInput) els.searchInput.value = "";
+  els.datasheetResultsShell?.classList.add("hidden");
+  renderDetail(null);
+  renderTabs();
+  renderQuickLists();
+  updateRosterBrowserVisibility();
+  setVoicePrompt("datasheets");
+  window.scrollTo({top:0, behavior:"smooth"});
 }
 
 function bindDynamicDetailControls() {
