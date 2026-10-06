@@ -92,7 +92,7 @@ function boot() {
   renderAll();
   renderMatchTools();
   restoreSetupChecks();
-  switchPage(state.currentPage, {silent:true});
+  switchPage(!state.rosters.length && state.currentPage === "datasheets" ? "data" : state.currentPage, {silent:true});
   els.voiceDock?.classList.remove("hidden");
   if ("serviceWorker" in navigator) navigator.serviceWorker.register("./sw.js").catch(() => {});
 }
@@ -872,6 +872,7 @@ function switchPage(page, options = {}) {
   document.querySelectorAll("[data-page-target]").forEach(button => {
     button.classList.toggle("active", button.dataset.pageTarget === page);
   });
+  els.navMoreButton?.classList.toggle("active", ["strats","rules","setup"].includes(page));
 
   els.navMoreMenu?.classList.add("hidden");
   els.navMoreButton?.setAttribute("aria-expanded", "false");
@@ -1648,6 +1649,14 @@ function resetMatchState() {
   toast("Match reset");
 }
 
+function setSetupCheck(name, checked = true) {
+  const input = document.querySelector(`[data-setup-check="${name}"]`);
+  if (!input) return;
+  input.checked = checked;
+  persistSetupChecks();
+  switchPage("setup");
+}
+
 function persistSetupChecks() {
   const state = {};
   document.querySelectorAll("[data-setup-check]").forEach(input => {
@@ -2221,6 +2230,11 @@ function closeVoiceShortlist() {
 }
 
 function handleVoiceCommand(q) {
+  if (/^(?:choose|select|pick) armies$/.test(q)) {
+    switchPage("data", {silent:true});
+    openArmyPicker();
+    return true;
+  }
   if (/^(?:open |show |go to )?(?:data|armies|army data|import)$/.test(q)) {
     switchPage("data");
     return true;
@@ -2247,6 +2261,18 @@ function handleVoiceCommand(q) {
   }
   if (/^(?:open |show |go to )?(?:game setup|setup)$/.test(q)) {
     switchPage("setup");
+    return true;
+  }
+  if (/^(?:mission ready|mission done)$/.test(q)) {
+    setSetupCheck("mission", true);
+    return true;
+  }
+  if (/^(?:terrain ready|battlefield ready)$/.test(q)) {
+    setSetupCheck("terrain", true);
+    return true;
+  }
+  if (/^(?:deployment complete|deployment ready|deployed)$/.test(q)) {
+    setSetupCheck("deploy", true);
     return true;
   }
 
