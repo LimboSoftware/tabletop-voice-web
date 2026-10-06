@@ -892,6 +892,20 @@ function normalize(value) {
   return String(value || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 }
 
+function setVoicePrompt(page = state.currentPage) {
+  if (!els.voiceHint) return;
+
+  const prompts = {
+    datasheets: "Say a unit name, e.g. “Death Korps of Krieg”",
+    score: "Say “Player 1 add 5 primary”",
+    dice: "Say “Roll 60 dice hitting on 4 plus”",
+    strats: "Say a stratagem name",
+    rules: "Say a core rule"
+  };
+
+  els.voiceHint.textContent = prompts[page] || "Hold to talk";
+}
+
 function switchPage(page, options = {}) {
   const valid = ["setup","datasheets","score","dice","strats","rules","guide"];
   if (!valid.includes(page)) page = "setup";
@@ -916,10 +930,16 @@ function switchPage(page, options = {}) {
   if (page === "setup") renderDataSummary();
   if (page === "score") renderScoreboard();
   if (page === "dice") renderDiceState();
+  if (page === "datasheets") {
+    renderTabs();
+    renderQuickLists();
+    updateRosterBrowserVisibility();
+  }
 
-  // Voice is intentionally page-scoped. Setup and Guide have no microphone.
   const voiceEnabled = ["datasheets","score","dice","strats","rules"].includes(page);
   els.voiceDock?.classList.toggle("hidden", !voiceEnabled);
+  els.voiceSearchWrap?.classList.toggle("hidden", page !== "datasheets");
+  setVoicePrompt(page);
 
   if (!options.silent) window.scrollTo({top:0, behavior:"smooth"});
 }
@@ -963,20 +983,23 @@ function renderAll() {
   showApp();
   renderActiveArmySelector();
   renderArmyPicker();
-  renderTabs();
   renderDataSummary();
+  renderTabs();
+  renderQuickLists();
 
   const roster = state.rosters[state.activeRoster];
-  if (roster) {
-    if (els.rosterTitle) els.rosterTitle.textContent = roster.name;
-    renderQuickLists();
-    renderResults(els.searchInput?.value || "");
-  } else {
+  if (roster && els.rosterTitle) els.rosterTitle.textContent = roster.name;
+
+  if (!roster) {
     if (els.rosterTitle) els.rosterTitle.textContent = "No data loaded";
-    if (els.rosterTabs) els.rosterTabs.innerHTML = "";
-    if (els.quickLists) els.quickLists.innerHTML = "";
-    if (els.resultList) els.resultList.innerHTML = '<div class="result-item"><small>Load data or import a roster first.</small></div>';
+    if (els.resultList) els.resultList.innerHTML = "";
+    els.datasheetResultsShell?.classList.add("hidden");
     renderDetail(null);
+  } else if (normalize(els.searchInput?.value || "")) {
+    renderResults(els.searchInput.value);
+  } else {
+    els.datasheetResultsShell?.classList.add("hidden");
+    updateRosterBrowserVisibility();
   }
 
   renderStratagems(els.stratSearch?.value || "");
@@ -1238,11 +1261,12 @@ function renderResults(query = "") {
   if (!q) {
     if (els.resultList) els.resultList.innerHTML = "";
     els.datasheetResultsShell?.classList.add("hidden");
-    state.selected = null;
     renderDetail(null);
+    updateRosterBrowserVisibility();
     return;
   }
 
+  els.rosterBrowser?.classList.add("hidden");
   const collections = getSearchCollections();
   const results = [];
 
@@ -1295,8 +1319,9 @@ function scoreMatch(unit, q) {
 function selectUnit(unit) {
   state.selected = unit;
   rememberRecentUnit(unit);
-  renderQuickLists();
-  renderResults(els.searchInput.value);
+  els.rosterBrowser?.classList.add("hidden");
+  els.datasheetResultsShell?.classList.add("hidden");
+  if (els.resultList) els.resultList.innerHTML = "";
   renderDetail(unit);
 }
 
@@ -1304,12 +1329,14 @@ function selectUnitFromRoster(unit, rosterIndex) {
   if (Number.isInteger(rosterIndex) && rosterIndex >= 0 && rosterIndex < state.rosters.length) {
     state.activeRoster = rosterIndex;
   }
+
   switchPage("datasheets", {silent:true});
   selectUnit(unit);
   renderActiveArmySelector();
   renderTabs();
+
   const roster = state.rosters[state.activeRoster];
-  if (roster) els.rosterTitle.textContent = roster.name;
+  if (roster && els.rosterTitle) els.rosterTitle.textContent = roster.name;
   persist();
 }
 
@@ -1324,6 +1351,7 @@ function renderDetail(unit) {
   els.detailCard.classList.remove("hidden");
   els.detailType.textContent = (unit.type || "Unit").toUpperCase();
   els.detailName.textContent = unit.name;
+  els.backToRosterButton?.classList.toggle("hidden", getImportedRosterEntries().length === 0);
   updatePinButton();
 
   const statOrder = ["m","t","sv","w","ld","oc","insv"];
