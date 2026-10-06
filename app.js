@@ -501,7 +501,7 @@ function buildReferenceData(documents) {
   for (const doc of documents || []) {
     const extracted = extractReferenceData(doc.data, doc.name);
     for (const rule of extracted.rules) {
-      if (doc.name === "Warhammer 40,000.json" || /^library\s*-/i.test(doc.name)) {
+      if (doc.name === "Warhammer 40,000.json") {
         const key = normalize(rule.name + "|" + rule.text);
         if (!ruleSeen.has(key)) {
           ruleSeen.add(key);
@@ -528,19 +528,22 @@ function getCombinedReferenceData() {
   const seenStrats = new Set(stratagems.map(item => normalize(item.name + "|" + item.text)));
 
   const sources = [
-    state.referenceData,
-    ...state.rosters.map(r => r.referenceData).filter(Boolean)
+    {data:state.referenceData, coreOnly:false},
+    ...state.rosters
+      .filter(r => r.referenceData)
+      .map(r => ({data:r.referenceData, coreOnly:r.source === "new-recruit"}))
   ];
 
   for (const source of sources) {
-    for (const rule of source?.rules || []) {
+    for (const rule of source.data?.rules || []) {
+      if (source.coreOnly && !isCoreRule(rule)) continue;
       const key = normalize(rule.name + "|" + rule.text);
       if (!seenRules.has(key)) {
         seenRules.add(key);
         rules.push(rule);
       }
     }
-    for (const strat of source?.stratagems || []) {
+    for (const strat of source.data?.stratagems || []) {
       const key = normalize(strat.name + "|" + strat.text);
       if (!seenStrats.has(key)) {
         seenStrats.add(key);
