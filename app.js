@@ -1698,6 +1698,9 @@ function getMatchState() {
   }
 }
 
+const SCORE_ROUND_CAP = 15;
+const SCORE_GAME_CAP = 45;
+
 function getScoreState() {
   const emptyTurn = () => ({
     p1:{primary:0,secondary:0},
@@ -1705,17 +1708,20 @@ function getScoreState() {
   });
 
   const fallback = {
-    turns: {"1":emptyTurn(),"2":emptyTurn(),"3":emptyTurn(),"4":emptyTurn(),"5":emptyTurn()},
-    maxes: {
-      p1:{primary:50,secondary:50},
-      p2:{primary:50,secondary:50}
-    }
+    turns: {"1":emptyTurn(),"2":emptyTurn(),"3":emptyTurn(),"4":emptyTurn(),"5":emptyTurn()}
   };
 
   try {
     const saved = JSON.parse(localStorage.getItem("tv_score_state") || "null");
-    if (!saved?.turns || !saved?.maxes) return fallback;
-    return saved;
+    if (!saved?.turns) return fallback;
+
+    for (const turn of ["1","2","3","4","5"]) {
+      if (!saved.turns[turn]) saved.turns[turn] = emptyTurn();
+      if (!saved.turns[turn].p1) saved.turns[turn].p1 = {primary:0,secondary:0};
+      if (!saved.turns[turn].p2) saved.turns[turn].p2 = {primary:0,secondary:0};
+    }
+
+    return {turns:saved.turns};
   } catch {
     return fallback;
   }
@@ -1763,11 +1769,6 @@ function renderScoreboard() {
   setText(els.myScoreValue, totals.p1Primary + totals.p1Secondary);
   setText(els.oppScoreValue, totals.p2Primary + totals.p2Secondary);
 
-  if (els.p1PrimaryMax) els.p1PrimaryMax.value = score.maxes.p1.primary;
-  if (els.p1SecondaryMax) els.p1SecondaryMax.value = score.maxes.p1.secondary;
-  if (els.p2PrimaryMax) els.p2PrimaryMax.value = score.maxes.p2.primary;
-  if (els.p2SecondaryMax) els.p2SecondaryMax.value = score.maxes.p2.secondary;
-
   renderMatchTools();
 }
 
@@ -1775,16 +1776,7 @@ function setScoreTurn(turn) {
   state.scoreTurn = Math.min(5, Math.max(1, Number(turn) || 1));
   localStorage.setItem("tv_score_turn", String(state.scoreTurn));
   renderScoreboard();
-}
-
-function saveScoreMaxes() {
-  const score = getScoreState();
-  score.maxes.p1.primary = Math.max(0, Number(els.p1PrimaryMax?.value || 0));
-  score.maxes.p1.secondary = Math.max(0, Number(els.p1SecondaryMax?.value || 0));
-  score.maxes.p2.primary = Math.max(0, Number(els.p2PrimaryMax?.value || 0));
-  score.maxes.p2.secondary = Math.max(0, Number(els.p2SecondaryMax?.value || 0));
-  saveScoreState(score);
-  renderScoreboard();
+  setVoicePrompt("score");
 }
 
 function adjustTurnScore(player, type, delta) {
@@ -1794,14 +1786,23 @@ function adjustTurnScore(player, type, delta) {
   const playerKey = "p" + player;
   const turn = String(state.scoreTurn);
   const current = Math.max(0, Number(score.turns[turn][playerKey][type] || 0));
-  const categoryTotal = scoreCategoryTotal(score, player, type);
-  const max = Math.max(0, Number(score.maxes[playerKey][type] || 0));
+  const gameTotal = scoreCategoryTotal(score, player, type);
 
   let next = Math.max(0, current + delta);
 
   if (delta > 0) {
-    const room = Math.max(0, max - categoryTotal);
-    next = current + Math.min(delta, room);
+    const roundRoom = Math.max(0, SCORE_ROUND_CAP - current);
+    const gameRoom = Math.max(0, SCORE_GAME_CAP - gameTotal);
+    const allowed = Math.min(delta, roundRoom, gameRoom);
+    next = current + allowed;
+
+    if (allowed < delta) {
+      toast(
+        gameRoom <= roundRoom
+          ? type + " is capped at " + SCORE_GAME_CAP + " VP for the game."
+          : type + " is capped at " + SCORE_ROUND_CAP + " VP in a battle round."
+      );
+    }
   }
 
   score.turns[turn][playerKey][type] = next;
