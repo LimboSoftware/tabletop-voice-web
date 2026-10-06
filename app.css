@@ -3529,3 +3529,29 @@ body.focus-mode .detail-panel {
     line-height: 1.15 !important;
   }
 }
+
+
+/* Final weapon readability bump */
+.weapon-table tbody td.weapon-number,
+.weapon-table tbody td.weapon-range-number {
+  font-size: 1.35rem;
+}
+
+.weapon-table th,
+.weapon-table td {
+  padding-top: 15px;
+  padding-bottom: 15px;
+}
+
+@media (max-width: 760px) {
+  .weapon-table tbody td.weapon-number,
+  .weapon-table tbody td.weapon-range-number {
+    font-size: 1.12rem !important;
+  }
+
+  .weapon-table th,
+  .weapon-table .weapon-row td {
+    padding-top: 8px !important;
+    padding-bottom: 8px !important;
+  }
+}
