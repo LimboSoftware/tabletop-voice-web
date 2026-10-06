@@ -2136,10 +2136,17 @@ function renderWeaponSection(profiles, title = "Weapons") {
                     <strong>${escapeHtml(row.name)}</strong>
                   </div>
                 </td>
-                ${row.values.map((value, index) => `
-                  <td data-label="${escapeHtml(columns[index])}" class="${index === 6 ? "weapon-keywords" : ""}">
-                    ${escapeHtml(value)}
-                  </td>`).join("")}
+                ${row.values.map((value, index) => {
+                  let cellClass = "weapon-number";
+                  if (index === 6) cellClass = "weapon-keywords";
+                  else if (index === 0 && /^melee$/i.test(String(value).trim())) cellClass = "weapon-range-text";
+                  else if (index === 0) cellClass = "weapon-range-number";
+
+                  return `
+                    <td data-label="${escapeHtml(columns[index])}" class="${cellClass}">
+                      ${escapeHtml(value)}
+                    </td>`;
+                }).join("")}
               </tr>`).join("")}
           </tbody>
         </table>
