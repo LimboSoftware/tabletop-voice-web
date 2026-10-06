@@ -1187,72 +1187,53 @@ function renderTabs() {
 }
 
 function renderResults(query = "") {
-  const currentRoster = state.rosters[state.activeRoster];
-  if (!currentRoster) return;
-
   const q = normalize(query);
-  let results = [];
-  const collections = getSearchCollections();
 
-  if (q) {
-    for (const collection of collections) {
-      for (const unit of collection.units || []) {
-        const score = scoreMatch(unit, q);
-        if (score > 0) results.push({
-          unit,
-          roster: collection.roster,
-          rosterIndex: collection.rosterIndex,
-          scopeLabel: collection.label,
-          score
-        });
-      }
-    }
-    results.sort((a,b) => b.score - a.score || a.unit.name.localeCompare(b.unit.name));
-  } else if (currentRoster.source === "bsdata") {
-    const currentCollections = collections.filter(collection => collection.rosterIndex === state.activeRoster);
-    results = currentCollections.flatMap(collection =>
-      (collection.units || []).map(unit => ({
-        unit,
-        roster: collection.roster,
-        rosterIndex: collection.rosterIndex,
-        scopeLabel: collection.label,
-        score: 0
-      }))
-    );
-  } else {
-    results = (currentRoster.units || []).map(unit => ({
-      unit,
-      roster: currentRoster,
-      rosterIndex: state.activeRoster,
-      scopeLabel: currentRoster.name,
-      score: 0
-    }));
+  if (!q) {
+    if (els.resultList) els.resultList.innerHTML = "";
+    els.datasheetResultsShell?.classList.add("hidden");
+    state.selected = null;
+    renderDetail(null);
+    return;
   }
 
+  const collections = getSearchCollections();
+  const results = [];
+
+  for (const collection of collections) {
+    for (const unit of collection.units || []) {
+      const score = scoreMatch(unit, q);
+      if (score > 0) results.push({
+        unit,
+        roster:collection.roster,
+        rosterIndex:collection.rosterIndex,
+        scopeLabel:collection.label,
+        score
+      });
+    }
+  }
+
+  results.sort((a,b) => b.score - a.score || a.unit.name.localeCompare(b.unit.name));
+  els.datasheetResultsShell?.classList.remove("hidden");
+  if (!els.resultList) return;
+
   els.resultList.innerHTML = "";
-  results.slice(0, 100).forEach(result => {
-    const {unit, roster, rosterIndex, scopeLabel} = result;
+  results.slice(0, 80).forEach(result => {
+    const {unit, rosterIndex, scopeLabel} = result;
     const button = document.createElement("button");
     button.className = "result-item" + (state.selected?.id === unit.id && state.activeRoster === rosterIndex ? " active" : "");
-    button.classList.toggle("destroyed", isUnitDestroyedInRoster(unit, rosterIndex));
     button.innerHTML = `
       <strong>${escapeHtml(unit.name)}</strong>
-      <small>${escapeHtml(unit.type || "Unit")}${q ? ` · <span class="result-roster">${escapeHtml(scopeLabel)}</span>` : ""}${isUnitDestroyedInRoster(unit, rosterIndex) ? " · DESTROYED" : ""}</small>`;
+      <small>${escapeHtml(unit.type || "Unit")} · <span class="result-roster">${escapeHtml(scopeLabel)}</span></small>`;
     button.addEventListener("click", () => selectUnitFromRoster(unit, rosterIndex));
     els.resultList.appendChild(button);
   });
 
   if (!results.length) {
     els.resultList.innerHTML = collections.length
-      ? '<div class="result-item"><small>No matching entries in the selected armies.</small></div>'
-      : '<div class="result-item"><small>No armies selected. Choose armies above to enable search.</small></div>';
+      ? '<div class="result-item"><small>No matching datasheets in the selected armies.</small></div>'
+      : '<div class="result-item"><small>No armies are active for search. Go to Setup and choose armies.</small></div>';
   }
-}
-
-function isUnitDestroyedInRoster(unit, rosterIndex) {
-  const roster = state.rosters[rosterIndex];
-  if (!roster || !unit) return false;
-  return localStorage.getItem("tv_destroyed_" + roster.id + "_" + unit.id) === "1";
 }
 
 function scoreMatch(unit, q) {
@@ -1288,8 +1269,8 @@ function selectUnitFromRoster(unit, rosterIndex) {
 
 function renderDetail(unit) {
   if (!unit) {
-    els.emptyDetail.classList.remove("hidden");
-    els.detailCard.classList.add("hidden");
+    els.emptyDetail?.classList.add("hidden");
+    els.detailCard?.classList.add("hidden");
     return;
   }
 
@@ -1298,15 +1279,24 @@ function renderDetail(unit) {
   els.detailType.textContent = (unit.type || "Unit").toUpperCase();
   els.detailName.textContent = unit.name;
   updatePinButton();
-  updateDestroyedButton();
 
-  els.detailStats.innerHTML = unit.stats.length
-    ? unit.stats.map(stat => `
+  const statOrder = ["m","t","sv","w","ld","oc","insv"];
+  const statMap = new Map((unit.stats || []).map(stat => [normalize(stat.label), stat]));
+  let displayStats = statOrder.map(key => statMap.get(key)).filter(Boolean);
+
+  if (!displayStats.length) {
+    displayStats = (unit.stats || [])
+      .filter(stat => !/crusade|blackstone|commendation|logistics|enhancement|detachment|pts|points/i.test(stat.label))
+      .slice(0, 7);
+  }
+
+  els.detailStats.innerHTML = displayStats.length
+    ? displayStats.map(stat => `
         <div class="stat">
           <span>${escapeHtml(stat.label)}</span>
           <strong>${escapeHtml(stat.value)}</strong>
         </div>`).join("")
-    : '<div class="stat"><span>PROFILE</span><strong>Imported</strong></div>';
+    : "";
 
   const sections = [];
 
@@ -1925,34 +1915,6 @@ function parseSpokenNumber(value) {
   }
 
   return null;
-}
-
-function destroyedKey(unit = state.selected) {
-  const roster = state.rosters[state.activeRoster];
-  return roster && unit ? "tv_destroyed_" + roster.id + "_" + unit.id : null;
-}
-
-function isDestroyed(unit = state.selected) {
-  const key = destroyedKey(unit);
-  return key ? localStorage.getItem(key) === "1" : false;
-}
-
-function toggleDestroyed() {
-  if (!state.selected) return;
-  const key = destroyedKey(state.selected);
-  if (!key) return;
-  const next = !isDestroyed(state.selected);
-  localStorage.setItem(key, next ? "1" : "0");
-  updateDestroyedButton();
-  renderResults(els.searchInput.value);
-  toast(next ? state.selected.name + " marked destroyed" : state.selected.name + " restored");
-}
-
-function updateDestroyedButton() {
-  if (!els.destroyedButton) return;
-  const destroyed = state.selected ? isDestroyed(state.selected) : false;
-  els.destroyedButton.textContent = destroyed ? "Destroyed ✓" : "Destroyed";
-  els.destroyedButton.classList.toggle("danger-active", destroyed);
 }
 
 function setupSpeech() {
