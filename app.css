@@ -2004,3 +2004,699 @@ body.focus-mode .detail-panel {
     min-height: 102px;
   }
 }
+
+
+/* === Companion UX refinement: Setup / Sheets / Score / Dice === */
+.beta-notice-card .primary-button {
+  width: 100%;
+  margin-top: 18px;
+}
+
+.setup-hero {
+  margin-bottom: 18px;
+}
+
+.setup-import-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.setup-import-card {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.setup-import-card > p {
+  color: #94a3b5;
+  line-height: 1.5;
+  min-height: 46px;
+  margin: 8px 0 16px;
+}
+
+.setup-main-action {
+  width: 100%;
+  min-height: 50px;
+}
+
+.full-data-army-section {
+  margin-top: 14px;
+  display: grid;
+  grid-template-columns: minmax(0,1fr) auto;
+  gap: 14px 18px;
+  align-items: center;
+}
+
+.full-data-army-section.hidden {
+  display: none;
+}
+
+.army-section-copy h2 {
+  margin: 5px 0 4px;
+}
+
+.army-section-copy small {
+  color: #8796a8;
+}
+
+.choose-armies-button {
+  min-width: 190px;
+  min-height: 54px;
+  padding: 0 24px;
+  font-size: .98rem;
+  font-weight: 900;
+  box-shadow: 0 0 0 1px rgba(56,189,248,.18), 0 10px 30px rgba(0,0,0,.25);
+}
+
+.full-data-army-section .active-army-selector {
+  grid-column: 1 / -1;
+  margin-top: 2px;
+}
+
+.setup-footer-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 12px;
+}
+
+/* Datasheets are intentionally search-first */
+.datasheet-page {
+  padding: clamp(14px, 2.5vw, 26px);
+}
+
+.datasheet-search-top {
+  width: min(900px, 100%);
+  margin: 0 auto 12px;
+}
+
+.datasheet-main-search {
+  display: block;
+  margin: 0;
+  padding: 0;
+}
+
+.datasheet-main-search span {
+  display: block;
+  margin-bottom: 7px;
+  color: #8291a3;
+  font-size: .72rem;
+  font-weight: 850;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+}
+
+.datasheet-main-search input {
+  width: 100%;
+  min-height: 52px;
+  border: 1px solid #324156;
+  border-radius: 15px;
+  background: #101720;
+  color: #f4f7fa;
+  padding: 0 16px;
+  font: inherit;
+  font-size: 1rem;
+}
+
+.datasheet-main-search input:focus {
+  outline: none;
+  border-color: var(--accent-strong);
+  box-shadow: 0 0 0 3px rgba(56,189,248,.08);
+}
+
+.datasheet-results-shell {
+  width: min(900px, 100%);
+  margin: 0 auto 14px;
+  border: 1px solid #293444;
+  border-radius: 14px;
+  background: #101720;
+  overflow: hidden;
+}
+
+.datasheet-result-list {
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.datasheet-detail-panel {
+  width: min(1180px, 100%);
+  margin: 0 auto;
+  border: 0;
+  background: transparent;
+}
+
+.datasheet-detail-panel .detail-card {
+  border: 1px solid #293444;
+  border-radius: 18px;
+  overflow: hidden;
+  background: #0f151d;
+}
+
+/* Scoring */
+.score-turn-tabs {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 7px;
+  max-width: 680px;
+  margin: 18px 0 14px;
+}
+
+.score-turn-tabs button {
+  min-height: 44px;
+  border: 1px solid #2d3a4b;
+  border-radius: 11px;
+  background: #131a23;
+  color: #94a4b6;
+  font-weight: 900;
+}
+
+.score-turn-tabs button.active {
+  border-color: var(--accent-strong);
+  background: rgba(56,189,248,.10);
+  color: var(--accent);
+}
+
+.scoreboard-totals {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0,1fr));
+  gap: 10px;
+  max-width: 680px;
+  margin-bottom: 14px;
+}
+
+.scoreboard-totals > div {
+  border: 1px solid #293444;
+  border-radius: 14px;
+  background: #111720;
+  padding: 13px 16px;
+}
+
+.scoreboard-totals span {
+  display: block;
+  color: #8291a3;
+  font-size: .66rem;
+  font-weight: 900;
+  letter-spacing: .08em;
+}
+
+.scoreboard-totals strong {
+  display: block;
+  margin-top: 4px;
+  font-size: 2rem;
+}
+
+.score-player-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0,1fr));
+  gap: 12px;
+}
+
+.score-player-card {
+  border: 1px solid #293444;
+  border-radius: 18px;
+  background: #111720;
+  padding: 16px;
+}
+
+.score-player-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.score-player-heading h2 {
+  margin: 0;
+  font-size: 1.15rem;
+}
+
+.score-player-heading span {
+  color: var(--accent);
+  font-size: .74rem;
+  font-weight: 850;
+}
+
+.score-category {
+  border-top: 1px solid #263241;
+  padding: 13px 0 0;
+  margin-top: 13px;
+}
+
+.score-category:first-of-type {
+  margin-top: 0;
+}
+
+.score-category > div:first-child {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.score-category label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: #8291a3;
+  font-size: .68rem;
+  font-weight: 800;
+}
+
+.score-category label input {
+  width: 52px;
+  border: 1px solid #304054;
+  border-radius: 8px;
+  background: #0d141c;
+  color: #eef4f8;
+  padding: 5px 6px;
+  text-align: center;
+}
+
+.score-value-row {
+  display: grid;
+  grid-template-columns: 42px 42px minmax(54px,1fr) 42px 42px;
+  gap: 6px;
+  align-items: center;
+}
+
+.score-value-row button {
+  min-height: 40px;
+  border: 1px solid #304054;
+  border-radius: 9px;
+  background: #17202b;
+  color: #eef4f8;
+  font-weight: 900;
+}
+
+.score-value-row > strong {
+  text-align: center;
+  font-size: 1.75rem;
+}
+
+.score-category > small {
+  display: block;
+  margin-top: 7px;
+  color: #8291a3;
+  text-align: right;
+}
+
+.compact-match-state {
+  grid-template-columns: minmax(160px, 250px) auto;
+  justify-content: start;
+  max-width: 520px;
+}
+
+/* Advanced dice */
+.advanced-dice-custom {
+  grid-template-columns: minmax(90px, 130px) minmax(110px, 160px) 1fr;
+}
+
+.advanced-dice-custom select {
+  min-height: 44px;
+  border: 1px solid #304054;
+  border-radius: 12px;
+  background: #0f151d;
+  color: #f2f6fa;
+  padding: 0 12px;
+  font: inherit;
+}
+
+.dice-grouped-results {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0,1fr));
+  gap: 8px;
+}
+
+.die-count-card {
+  min-width: 0;
+  display: grid;
+  place-items: center;
+  gap: 3px;
+  border: 1px solid #34455a;
+  border-radius: 12px;
+  background: #141d27;
+  padding: 10px 5px;
+}
+
+.die-count-card .die-face {
+  font-size: 1.2rem;
+  font-weight: 900;
+}
+
+.die-count-card strong {
+  color: #9eacbd;
+  font-size: .76rem;
+}
+
+.die-count-card.die-6 {
+  border-color: #3a7187;
+}
+
+.die-count-card.die-1 {
+  border-color: #6d3b47;
+}
+
+.dice-reroll-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.dice-order {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #263241;
+}
+
+/* Compact mobile datasheets: one-row profile + one-row weapons */
+@media (max-width: 760px) {
+  .setup-import-grid {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .setup-import-card > p {
+    min-height: 0;
+    margin-bottom: 12px;
+  }
+
+  .full-data-army-section {
+    grid-template-columns: 1fr;
+    padding: 14px;
+  }
+
+  .choose-armies-button {
+    width: 100%;
+    min-width: 0;
+    min-height: 52px;
+  }
+
+  .full-data-army-section .active-army-selector {
+    grid-column: 1;
+  }
+
+  .datasheet-page {
+    padding: 10px 8px 18px;
+  }
+
+  .datasheet-main-search input {
+    min-height: 46px;
+    border-radius: 12px;
+  }
+
+  .datasheet-results-shell {
+    border-radius: 11px;
+    margin-bottom: 8px;
+  }
+
+  .datasheet-result-list {
+    max-height: 220px;
+  }
+
+  .datasheet-detail-panel .detail-card {
+    border-radius: 12px;
+  }
+
+  .detail-heading {
+    padding: 10px 9px 8px;
+  }
+
+  .detail-heading h2 {
+    font-size: 1.2rem;
+    line-height: 1.05;
+  }
+
+  .detail-actions .ghost-button {
+    padding: 6px 8px;
+    font-size: .68rem;
+  }
+
+  .stat-grid {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0,1fr)) !important;
+    gap: 2px !important;
+    padding: 5px 8px 7px !important;
+  }
+
+  .stat {
+    min-width: 0;
+    padding: 5px 1px !important;
+    border-radius: 7px !important;
+    text-align: center;
+  }
+
+  .stat span {
+    font-size: .46rem !important;
+    line-height: 1 !important;
+    letter-spacing: 0 !important;
+    white-space: nowrap;
+  }
+
+  .stat strong {
+    font-size: .88rem !important;
+    line-height: 1 !important;
+    margin-top: 4px !important;
+    white-space: nowrap;
+  }
+
+  .detail-sections {
+    padding: 0 8px 16px !important;
+  }
+
+  .detail-section {
+    padding: 12px 0 !important;
+  }
+
+  .section-heading-row {
+    margin-bottom: 6px !important;
+  }
+
+  .section-heading-row h3 {
+    font-size: .96rem !important;
+  }
+
+  .section-count {
+    min-width: 20px;
+    height: 20px;
+    padding: 0 5px;
+    font-size: .58rem;
+  }
+
+  .weapon-table-wrap {
+    overflow: visible !important;
+    margin: 0 !important;
+    border: 1px solid #293444 !important;
+    border-radius: 9px !important;
+    background: #111720 !important;
+  }
+
+  .weapon-table {
+    display: table !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    table-layout: fixed;
+    border-collapse: collapse;
+  }
+
+  .weapon-table thead {
+    display: table-header-group !important;
+  }
+
+  .weapon-table tbody {
+    display: table-row-group !important;
+  }
+
+  .weapon-table .weapon-row {
+    display: table-row !important;
+    padding: 0 !important;
+    border: 0 !important;
+    background: transparent !important;
+  }
+
+  .weapon-table th,
+  .weapon-table .weapon-row td {
+    display: table-cell !important;
+    min-width: 0 !important;
+    max-width: none !important;
+    padding: 4px 2px !important;
+    border-bottom: 1px solid #25303f !important;
+    background: transparent !important;
+    text-align: center !important;
+    vertical-align: middle;
+    font-size: .60rem !important;
+    line-height: 1.12;
+    overflow-wrap: anywhere;
+  }
+
+  .weapon-table th {
+    position: static !important;
+    color: #7f8da0;
+    font-size: .46rem !important;
+    letter-spacing: 0 !important;
+    white-space: nowrap;
+    background: #17202b !important;
+  }
+
+  .weapon-table th:nth-child(1),
+  .weapon-table td:nth-child(1) { width: 27%; text-align: left !important; }
+  .weapon-table th:nth-child(2),
+  .weapon-table td:nth-child(2) { width: 9%; }
+  .weapon-table th:nth-child(3),
+  .weapon-table td:nth-child(3) { width: 6%; }
+  .weapon-table th:nth-child(4),
+  .weapon-table td:nth-child(4) { width: 9%; }
+  .weapon-table th:nth-child(5),
+  .weapon-table td:nth-child(5) { width: 6%; }
+  .weapon-table th:nth-child(6),
+  .weapon-table td:nth-child(6) { width: 8%; }
+  .weapon-table th:nth-child(7),
+  .weapon-table td:nth-child(7) { width: 7%; }
+  .weapon-table th:nth-child(8),
+  .weapon-table td:nth-child(8) { width: 28%; }
+
+  .weapon-table .weapon-name {
+    grid-column: auto !important;
+    margin: 0 !important;
+    border-bottom: 1px solid #25303f !important;
+  }
+
+  .weapon-title-line {
+    gap: 3px !important;
+    align-items: center;
+  }
+
+  .weapon-name strong {
+    font-size: .62rem !important;
+    line-height: 1.08 !important;
+  }
+
+  .weapon-quantity {
+    min-width: 18px !important;
+    height: 17px !important;
+    padding: 0 3px !important;
+    font-size: .48rem !important;
+  }
+
+  .weapon-table .weapon-row td:not(.weapon-name)::before {
+    display: none !important;
+    content: none !important;
+  }
+
+  .weapon-table .weapon-keywords {
+    grid-column: auto !important;
+    min-width: 0 !important;
+    max-width: none !important;
+    padding: 4px 2px !important;
+    border-top: 0 !important;
+    color: #aebdca !important;
+    text-align: left !important;
+    font-size: .53rem !important;
+    line-height: 1.12 !important;
+  }
+
+  .score-turn-tabs {
+    gap: 4px;
+    margin-top: 12px;
+  }
+
+  .score-turn-tabs button {
+    min-height: 40px;
+    border-radius: 9px;
+  }
+
+  .scoreboard-totals {
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+  }
+
+  .scoreboard-totals > div {
+    padding: 10px 12px;
+  }
+
+  .scoreboard-totals strong {
+    font-size: 1.65rem;
+  }
+
+  .score-player-grid {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .score-player-card {
+    padding: 12px;
+    border-radius: 14px;
+  }
+
+  .score-category {
+    padding-top: 10px;
+    margin-top: 10px;
+  }
+
+  .score-value-row {
+    grid-template-columns: 38px 38px minmax(48px,1fr) 38px 38px;
+    gap: 4px;
+  }
+
+  .score-value-row button {
+    min-height: 36px;
+  }
+
+  .compact-match-state {
+    grid-template-columns: 1fr auto !important;
+    padding: 10px !important;
+  }
+
+  .dice-card {
+    padding: 12px !important;
+  }
+
+  .advanced-dice-custom {
+    grid-template-columns: 1fr 1fr;
+    gap: 7px;
+  }
+
+  .advanced-dice-custom .primary-button {
+    grid-column: 1 / -1 !important;
+    min-height: 42px;
+  }
+
+  .dice-grouped-results {
+    grid-template-columns: repeat(6, minmax(0,1fr));
+    gap: 4px;
+  }
+
+  .die-count-card {
+    padding: 7px 2px;
+    border-radius: 9px;
+  }
+
+  .die-count-card .die-face {
+    font-size: 1rem;
+  }
+
+  .die-count-card strong {
+    font-size: .62rem;
+  }
+
+  .dice-reroll-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+  }
+
+  .dice-reroll-actions #toggleDiceOrderButton {
+    grid-column: 1 / -1;
+  }
+
+  .dice-order .die-result {
+    width: 32px;
+    height: 32px;
+    font-size: .85rem;
+  }
+}
