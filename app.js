@@ -1626,35 +1626,132 @@ function formatRuleText(text = "") {
 function getMatchState() {
   try {
     return {
-      round: Math.min(5, Math.max(1, Number(localStorage.getItem("tv_match_round") || 1))),
       cp: Math.max(0, Number(localStorage.getItem("tv_match_cp") || 0)),
-      turn: localStorage.getItem("tv_match_turn") || "your",
-      myScore: Math.max(0, Number(localStorage.getItem("tv_match_score_my") || 0)),
-      oppScore: Math.max(0, Number(localStorage.getItem("tv_match_score_opp") || 0))
+      turn: localStorage.getItem("tv_match_turn") || "your"
     };
   } catch {
-    return {round:1, cp:0, turn:"your", myScore:0, oppScore:0};
+    return {cp:0, turn:"your"};
   }
+}
+
+function getScoreState() {
+  const emptyTurn = () => ({
+    p1:{primary:0,secondary:0},
+    p2:{primary:0,secondary:0}
+  });
+
+  const fallback = {
+    turns: {"1":emptyTurn(),"2":emptyTurn(),"3":emptyTurn(),"4":emptyTurn(),"5":emptyTurn()},
+    maxes: {
+      p1:{primary:50,secondary:50},
+      p2:{primary:50,secondary:50}
+    }
+  };
+
+  try {
+    const saved = JSON.parse(localStorage.getItem("tv_score_state") || "null");
+    if (!saved?.turns || !saved?.maxes) return fallback;
+    return saved;
+  } catch {
+    return fallback;
+  }
+}
+
+function saveScoreState(score) {
+  localStorage.setItem("tv_score_state", JSON.stringify(score));
+}
+
+function scoreCategoryTotal(score, player, type) {
+  return [1,2,3,4,5].reduce((sum, turn) => {
+    return sum + Math.max(0, Number(score.turns?.[turn]?.["p"+player]?.[type] || 0));
+  }, 0);
+}
+
+function renderScoreboard() {
+  const score = getScoreState();
+  const turn = String(state.scoreTurn);
+  const current = score.turns[turn];
+
+  document.querySelectorAll("[data-score-turn]").forEach(button => {
+    button.classList.toggle("active", Number(button.dataset.scoreTurn) === state.scoreTurn);
+  });
+
+  if (els.scoreTurnLabel1) els.scoreTurnLabel1.textContent = "Turn " + state.scoreTurn;
+  if (els.scoreTurnLabel2) els.scoreTurnLabel2.textContent = "Turn " + state.scoreTurn;
+
+  const setText = (el, value) => { if (el) el.textContent = String(value); };
+  setText(els.p1PrimaryTurn, current?.p1?.primary || 0);
+  setText(els.p1SecondaryTurn, current?.p1?.secondary || 0);
+  setText(els.p2PrimaryTurn, current?.p2?.primary || 0);
+  setText(els.p2SecondaryTurn, current?.p2?.secondary || 0);
+
+  const totals = {
+    p1Primary:scoreCategoryTotal(score,1,"primary"),
+    p1Secondary:scoreCategoryTotal(score,1,"secondary"),
+    p2Primary:scoreCategoryTotal(score,2,"primary"),
+    p2Secondary:scoreCategoryTotal(score,2,"secondary")
+  };
+
+  setText(els.p1PrimaryTotal, totals.p1Primary);
+  setText(els.p1SecondaryTotal, totals.p1Secondary);
+  setText(els.p2PrimaryTotal, totals.p2Primary);
+  setText(els.p2SecondaryTotal, totals.p2Secondary);
+  setText(els.myScoreValue, totals.p1Primary + totals.p1Secondary);
+  setText(els.oppScoreValue, totals.p2Primary + totals.p2Secondary);
+
+  if (els.p1PrimaryMax) els.p1PrimaryMax.value = score.maxes.p1.primary;
+  if (els.p1SecondaryMax) els.p1SecondaryMax.value = score.maxes.p1.secondary;
+  if (els.p2PrimaryMax) els.p2PrimaryMax.value = score.maxes.p2.primary;
+  if (els.p2SecondaryMax) els.p2SecondaryMax.value = score.maxes.p2.secondary;
+
+  renderMatchTools();
+}
+
+function setScoreTurn(turn) {
+  state.scoreTurn = Math.min(5, Math.max(1, Number(turn) || 1));
+  localStorage.setItem("tv_score_turn", String(state.scoreTurn));
+  renderScoreboard();
+}
+
+function saveScoreMaxes() {
+  const score = getScoreState();
+  score.maxes.p1.primary = Math.max(0, Number(els.p1PrimaryMax?.value || 0));
+  score.maxes.p1.secondary = Math.max(0, Number(els.p1SecondaryMax?.value || 0));
+  score.maxes.p2.primary = Math.max(0, Number(els.p2PrimaryMax?.value || 0));
+  score.maxes.p2.secondary = Math.max(0, Number(els.p2SecondaryMax?.value || 0));
+  saveScoreState(score);
+  renderScoreboard();
+}
+
+function adjustTurnScore(player, type, delta) {
+  if (![1,2].includes(Number(player)) || !["primary","secondary"].includes(type)) return;
+
+  const score = getScoreState();
+  const playerKey = "p" + player;
+  const turn = String(state.scoreTurn);
+  const current = Math.max(0, Number(score.turns[turn][playerKey][type] || 0));
+  const categoryTotal = scoreCategoryTotal(score, player, type);
+  const max = Math.max(0, Number(score.maxes[playerKey][type] || 0));
+
+  let next = Math.max(0, current + delta);
+
+  if (delta > 0 && max > 0) {
+    const room = Math.max(0, max - categoryTotal);
+    next = current + Math.min(delta, room);
+  }
+
+  score.turns[turn][playerKey][type] = next;
+  saveScoreState(score);
+  renderScoreboard();
 }
 
 function renderMatchTools() {
   const match = getMatchState();
-  if (els.roundValue) els.roundValue.textContent = String(match.round);
   if (els.cpValue) els.cpValue.textContent = String(match.cp);
-  if (els.myScoreValue) els.myScoreValue.textContent = String(match.myScore);
-  if (els.oppScoreValue) els.oppScoreValue.textContent = String(match.oppScore);
   if (els.turnToggle) {
-    els.turnToggle.textContent = match.turn === "your" ? "Your turn" : "Opponent turn";
+    els.turnToggle.textContent = match.turn === "your" ? "Player 1 turn" : "Player 2 turn";
     els.turnToggle.classList.toggle("opponent", match.turn === "opponent");
   }
-}
-
-function adjustRound(delta) {
-  const match = getMatchState();
-  const next = Math.min(5, Math.max(1, match.round + delta));
-  localStorage.setItem("tv_match_round", String(next));
-  renderMatchTools();
-  toast("Battle round " + next);
 }
 
 function adjustCP(delta) {
@@ -1664,30 +1761,21 @@ function adjustCP(delta) {
   renderMatchTools();
 }
 
-function adjustScore(side, delta) {
-  const match = getMatchState();
-  const key = side === "opp" ? "tv_match_score_opp" : "tv_match_score_my";
-  const current = side === "opp" ? match.oppScore : match.myScore;
-  const next = Math.max(0, current + delta);
-  localStorage.setItem(key, String(next));
-  renderMatchTools();
-}
-
 function toggleTurn() {
   const match = getMatchState();
   const next = match.turn === "your" ? "opponent" : "your";
   localStorage.setItem("tv_match_turn", next);
   renderMatchTools();
-  toast(next === "your" ? "Your turn" : "Opponent turn");
 }
 
 function resetMatchState() {
-  if (!confirm("Reset scores, round, CP, turn and setup checklist?")) return;
+  if (!confirm("Reset scoring, CP, turn and Guide checklist?")) return;
 
-  ["tv_match_round","tv_match_cp","tv_match_turn","tv_match_score_my","tv_match_score_opp"].forEach(key => localStorage.removeItem(key));
+  ["tv_match_cp","tv_match_turn","tv_score_state","tv_score_turn"].forEach(key => localStorage.removeItem(key));
+  state.scoreTurn = 1;
   document.querySelectorAll("[data-setup-check]").forEach(input => input.checked = false);
   persistSetupChecks();
-  renderMatchTools();
+  renderScoreboard();
   toast("Match reset");
 }
 
@@ -1696,7 +1784,7 @@ function setSetupCheck(name, checked = true) {
   if (!input) return;
   input.checked = checked;
   persistSetupChecks();
-  switchPage("setup");
+  switchPage("guide");
 }
 
 function persistSetupChecks() {
@@ -1724,26 +1812,96 @@ function randomD6() {
   return Math.floor(Math.random() * 6) + 1;
 }
 
-function rollDice(count = 1) {
-  count = Math.max(1, Math.min(100, Number(count) || 1));
-  if (els.diceCount) els.diceCount.value = String(count);
+function renderDiceState() {
+  const last = state.lastDiceRoll;
 
-  const rolls = Array.from({length:count}, randomD6);
-  const total = rolls.reduce((sum, value) => sum + value, 0);
-  const sixes = rolls.filter(value => value === 6).length;
-  const ones = rolls.filter(value => value === 1).length;
+  if (!last) {
+    if (els.diceSummary) els.diceSummary.textContent = "Ready to roll.";
+    if (els.diceResults) els.diceResults.innerHTML = "";
+    if (els.diceOrder) els.diceOrder.innerHTML = "";
+    els.diceOrder?.classList.add("hidden");
+    if (els.toggleDiceOrderButton) els.toggleDiceOrderButton.textContent = "Show order";
+    return;
+  }
+
+  const counts = [1,2,3,4,5,6].map(value => ({
+    value,
+    count:last.rolls.filter(roll => roll === value).length
+  }));
+
+  const successes = last.target
+    ? last.rolls.filter(value => value >= last.target).length
+    : null;
 
   if (els.diceSummary) {
-    els.diceSummary.innerHTML = `
-      <strong>${count}D6 = ${total}</strong>
-      <span>${sixes} six${sixes === 1 ? "" : "es"} · ${ones} one${ones === 1 ? "" : "s"}</span>`;
+    els.diceSummary.innerHTML = last.target
+      ? `<strong>${successes} / ${last.rolls.length} successes</strong><span>${last.label || "Target"} ${last.target}+</span>`
+      : `<strong>${last.rolls.length} dice rolled</strong><span>Total ${last.rolls.reduce((a,b) => a+b,0)}</span>`;
   }
 
   if (els.diceResults) {
-    els.diceResults.innerHTML = rolls.map(value => `<span class="die-result die-${value}">${value}</span>`).join("");
+    els.diceResults.innerHTML = counts.map(item => `
+      <div class="die-count-card die-${item.value}">
+        <span class="die-face">${item.value}</span>
+        <strong>×${item.count}</strong>
+      </div>`).join("");
   }
 
-  switchPage("dice", {silent:true});
+  if (els.diceOrder) {
+    els.diceOrder.innerHTML = last.rolls.map(value => `<span class="die-result die-${value}">${value}</span>`).join("");
+    els.diceOrder.classList.toggle("hidden", !state.showDiceOrder);
+  }
+
+  if (els.toggleDiceOrderButton) {
+    els.toggleDiceOrderButton.textContent = state.showDiceOrder ? "Hide order" : "Show order";
+  }
+}
+
+function rollDice(count = 1, target = null, label = "") {
+  count = Math.max(1, Math.min(200, Number(count) || 1));
+  target = target ? Math.min(6, Math.max(2, Number(target))) : null;
+
+  if (els.diceCount) els.diceCount.value = String(count);
+  if (els.diceTarget) els.diceTarget.value = target ? String(target) : "";
+
+  state.lastDiceRoll = {
+    rolls:Array.from({length:count}, randomD6),
+    target,
+    label
+  };
+
+  renderDiceState();
+}
+
+function rerollMisses() {
+  const last = state.lastDiceRoll;
+  if (!last?.rolls?.length) {
+    toast("Roll some dice first.");
+    return;
+  }
+  if (!last.target) {
+    toast("Set a target first so misses are defined.");
+    return;
+  }
+
+  last.rolls = last.rolls.map(value => value < last.target ? randomD6() : value);
+  renderDiceState();
+}
+
+function rerollEverything() {
+  const last = state.lastDiceRoll;
+  if (!last?.rolls?.length) {
+    toast("Roll some dice first.");
+    return;
+  }
+
+  last.rolls = last.rolls.map(() => randomD6());
+  renderDiceState();
+}
+
+function toggleDiceOrder() {
+  state.showDiceOrder = !state.showDiceOrder;
+  renderDiceState();
 }
 
 function parseSpokenNumber(value) {
@@ -1753,9 +1911,20 @@ function parseSpokenNumber(value) {
   const words = {
     one:1,two:2,three:3,four:4,five:5,six:6,seven:7,eight:8,nine:9,ten:10,
     eleven:11,twelve:12,thirteen:13,fourteen:14,fifteen:15,sixteen:16,
-    seventeen:17,eighteen:18,nineteen:19,twenty:20
+    seventeen:17,eighteen:18,nineteen:19,twenty:20,
+    thirty:30,forty:40,fifty:50,sixty:60,seventy:70,eighty:80,ninety:90,
+    hundred:100
   };
-  return words[normalize(value)] || null;
+
+  const q = normalize(value);
+  if (words[q]) return words[q];
+
+  const parts = q.split(" ");
+  if (parts.length === 2 && words[parts[0]] && words[parts[1]] && words[parts[0]] >= 20 && words[parts[1]] < 10) {
+    return words[parts[0]] + words[parts[1]];
+  }
+
+  return null;
 }
 
 function destroyedKey(unit = state.selected) {
