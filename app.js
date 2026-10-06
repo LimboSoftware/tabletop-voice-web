@@ -2753,6 +2753,15 @@ function renderQuickLists() {
   }
 
   const html = [];
+  const needsCategoryRefresh = (roster.units || []).length > 0 &&
+    (roster.units || []).every(unit => !(unit.categories || []).length);
+
+  if (needsCategoryRefresh) {
+    html.push(
+      '<div class="roster-refresh-note">Re-import this New Recruit list once to populate unit categories for the new grouped browser.</div>'
+    );
+  }
+
   for (const groupName of groupOrder) {
     const units = groups.get(groupName) || [];
     if (!units.length) continue;
