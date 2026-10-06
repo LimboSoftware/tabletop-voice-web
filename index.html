@@ -30,7 +30,9 @@
           <small>Public Beta</small>
         </span>
       </a>
-      <div class="top-actions">
+      <div class="top-actions top-reference-actions">
+        <button class="top-reference-button" type="button" data-page-target="strats">⚡ <span>Strats</span></button>
+        <button class="top-reference-button" type="button" data-page-target="rules">? <span>Rules</span></button>
         <button id="modeToggle" class="ghost-button" type="button">Table mode</button>
       </div>
     </header>
@@ -40,14 +42,10 @@
       <button class="app-nav-button" type="button" data-page-target="datasheets"><span class="nav-icon">▤</span><span>Units</span></button>
       <button class="app-nav-button" type="button" data-page-target="score"><span class="nav-icon">◎</span><span>Score</span></button>
       <button class="app-nav-button" type="button" data-page-target="dice"><span class="nav-icon">⚄</span><span>Dice</span></button>
-      <button class="app-nav-button extra-nav" type="button" data-page-target="strats"><span class="nav-icon">⚡</span><span>Strats</span></button>
-      <button class="app-nav-button extra-nav" type="button" data-page-target="rules"><span class="nav-icon">?</span><span>Rules</span></button>
       <button class="app-nav-button extra-nav" type="button" data-page-target="guide"><span class="nav-icon">⚙</span><span>Guide</span></button>
       <div class="nav-more">
         <button id="navMoreButton" class="app-nav-button" type="button" aria-expanded="false"><span class="nav-icon">•••</span><span>More</span></button>
         <div id="navMoreMenu" class="nav-more-menu hidden">
-          <button type="button" data-page-target="strats">⚡ Stratagems</button>
-          <button type="button" data-page-target="rules">? Core rules</button>
           <button type="button" data-page-target="guide">⚙ Guide</button>
         </div>
       </div>
@@ -117,8 +115,14 @@
         <section class="detail-panel datasheet-detail-panel">
           <div id="emptyDetail" class="empty-detail datasheet-empty hidden"></div>
           <article id="detailCard" class="detail-card hidden">
-            <div class="detail-heading">
+            <div class="unit-context-bar">
               <button id="backToRosterButton" class="ghost-button compact back-to-roster hidden" type="button">← Lists</button>
+              <div id="unitTopStatuses" class="unit-top-statuses">
+                <button id="battleShockToggle" class="unit-status-toggle battle-shock-toggle" type="button">Battle-shocked</button>
+                <button id="oncePerGameToggle" class="unit-status-toggle" type="button">Once-per-game used</button>
+              </div>
+            </div>
+            <div class="detail-heading">
               <div class="detail-title-copy">
                 <span id="detailType" class="section-label">UNIT</span>
                 <h2 id="detailName"></h2>
