@@ -2,6 +2,7 @@ const state = {
   rosters: [],
   activeRoster: 0,
   selected: null,
+  selectedRosterId: null,
   mode: localStorage.getItem("tv_mode") || "mobile",
   currentPage: "setup",
   listening: false,
@@ -266,10 +267,24 @@ function extractSelectedDetachments(root) {
       const count = Number(value.number);
       const selected = !Number.isFinite(count) || count > 0;
       const group = String(value.group || value.entryGroupName || "");
+      const categories = [
+        ...(value.categories || []),
+        ...(value.categoryLinks || [])
+      ].map(category => String(category?.name || ""));
+
+      const hasDetachmentCost = (value.costs || []).some(cost =>
+        /detachment points?/i.test(String(cost?.name || "")) &&
+        Number(cost?.value || 0) > 0
+      );
+
+      const looksLikeDetachment =
+        /detachment/i.test(group) ||
+        categories.some(name => /(?:^|\b)\d*\s*dp\s+detachment\b/i.test(name)) ||
+        hasDetachmentCost;
 
       if (
         selected &&
-        /detachment/i.test(group) &&
+        looksLikeDetachment &&
         value.name &&
         !/^detachment$/i.test(String(value.name).trim())
       ) {
@@ -286,6 +301,26 @@ function extractSelectedDetachments(root) {
   }
 
   return dedupeBy(found, item => normalize(item.faction + "|" + item.name));
+}
+
+function extractArmyRules(root) {
+  const rules = [];
+
+  for (const force of root?.forces || []) {
+    for (const rule of force.rules || []) {
+      const name = cleanRuleText(rule?.name || "").trim();
+      const text = cleanRuleText(rule?.description || "").trim();
+      if (!name || !text || rule.hidden) continue;
+      rules.push({
+        name,
+        text,
+        category:"Army rule",
+        source:force.catalogueName || force.name || ""
+      });
+    }
+  }
+
+  return dedupeBy(rules, item => normalize(item.name + "|" + item.text));
 }
 
 function parseRosterFile(text, fileName) {
@@ -316,6 +351,7 @@ function parseRosterFile(text, fileName) {
     source: "new-recruit",
     points: pts ?? null,
     detachments: extractSelectedDetachments(root),
+    armyRules: extractArmyRules(root),
     units: dedupeBy(units, u => u.id || u.name),
     referenceData: extractReferenceData(root, fileName),
     importedAt: Date.now()
@@ -686,7 +722,7 @@ function getImportedDetachmentRequests() {
 
 function gdcFactionSlugCandidates(factionName = "") {
   const parts = String(factionName)
-    .split(/\s+-\s+/)
+    .split(/\s+[-—–]\s+/)
     .map(part => part.trim())
     .filter(Boolean);
 
