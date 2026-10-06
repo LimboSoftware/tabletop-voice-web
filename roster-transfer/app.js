@@ -375,18 +375,21 @@ async function createTransfer() {
 async function sendFiles(conn) {
   const chunkSize = 24_000;
   const manifest = state.files.map(file => ({
-    name: file.name,
-    rosterName: file.rosterName,
-    faction: file.faction,
-    points: file.points,
-    size: file.size,
-    chunks: Math.ceil(file.text.length / chunkSize)
+    name:file.name,
+    rosterName:file.rosterName,
+    faction:file.faction,
+    points:file.points,
+    size:file.size,
+    format:file.format,
+    encoding:file.encoding,
+    mime:file.mime,
+    chunks:Math.ceil(file.payload.length / chunkSize)
   }));
 
   conn.send({
-    type: "manifest",
-    key: state.secret,
-    files: manifest
+    type:"manifest",
+    key:state.secret,
+    files:manifest
   });
 
   const totalChunks = manifest.reduce((sum, file) => sum + file.chunks, 0);
@@ -401,10 +404,10 @@ async function sendFiles(conn) {
 
       const start = chunkIndex * chunkSize;
       conn.send({
-        type: "chunk",
+        type:"chunk",
         fileIndex,
         chunkIndex,
-        data: file.text.slice(start, start + chunkSize)
+        data:file.payload.slice(start, start + chunkSize)
       });
 
       sentChunks++;
@@ -418,11 +421,15 @@ async function sendFiles(conn) {
       if (chunkIndex % 8 === 0) await sleep(8);
     }
 
-    conn.send({type: "file-complete", fileIndex});
+    conn.send({type:"file-complete", fileIndex});
   }
 
-  conn.send({type: "complete"});
-  setSenderStatus("good", "Transfer complete", state.files.length + (state.files.length === 1 ? " list sent." : " lists sent."));
+  conn.send({type:"complete"});
+  setSenderStatus(
+    "good",
+    "Transfer complete",
+    state.files.length + (state.files.length === 1 ? " list sent." : " lists sent.")
+  );
 }
 
 function sleep(ms) {
@@ -534,13 +541,17 @@ function finishReceive() {
         throw new Error("A file was incomplete.");
       }
 
-      const text = item.chunks.join("");
-      parseRosterSummary(text, item.meta.name);
+      const payload = item.chunks.join("");
+      const fileParts = item.meta.encoding === "base64"
+        ? [base64ToBytes(payload)]
+        : [payload];
 
       return {
         ...item.meta,
-        text,
-        file: new File([text], item.meta.name, {type: "application/json"})
+        payload,
+        file:new File(fileParts, item.meta.name, {
+          type:item.meta.mime || mimeForFormat(item.meta.format)
+        })
       };
     });
   } catch (error) {
@@ -549,7 +560,7 @@ function finishReceive() {
   }
 
   els.receiveProgress.style.width = "100%";
-  setReceiverStatus("good", "Transfer complete", "Your JSON files are ready.");
+  setReceiverStatus("good", "Transfer complete", "Your roster files are ready.");
   els.receiveConnecting.classList.add("hidden");
   els.receiveComplete.classList.remove("hidden");
 
@@ -574,7 +585,7 @@ function renderReceivedFiles() {
         <strong>${escapeHtml(item.rosterName || item.name)}</strong>
         <small>${escapeHtml(meta || item.name)}</small>
       </div>
-      <a class="secondary button-link compact" download="${escapeHtml(item.name)}" href="${url}">Save JSON</a>`;
+      <a class="secondary button-link compact" download="${escapeHtml(item.name)}" href="${url}">Save file</a>`;
 
     els.receivedFiles.appendChild(card);
   });
@@ -592,7 +603,7 @@ async function shareAllFiles() {
     await navigator.share({
       files: state.receivedFiles.map(item => item.file),
       title: "New Recruit rosters",
-      text: "Save these JSON files, then import them into Tabletop Voice."
+      text: "Save these roster files, then import them into Tabletop Voice."
     });
   } catch (error) {
     if (error?.name !== "AbortError") toast("Couldn’t open the share sheet.");
