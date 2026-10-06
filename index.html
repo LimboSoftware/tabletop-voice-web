@@ -31,8 +31,6 @@
         </span>
       </a>
       <div class="top-actions top-reference-actions">
-        <button class="top-reference-button" type="button" data-page-target="strats">⚡ <span>Strats</span></button>
-        <button class="top-reference-button" type="button" data-page-target="rules">? <span>Rules</span></button>
         <button id="modeToggle" class="ghost-button" type="button">Table mode</button>
       </div>
     </header>
@@ -46,6 +44,7 @@
       <div class="nav-more">
         <button id="navMoreButton" class="app-nav-button" type="button" aria-expanded="false"><span class="nav-icon">•••</span><span>More</span></button>
         <div id="navMoreMenu" class="nav-more-menu hidden">
+          <button type="button" data-page-target="rules">? Core Rules</button>
           <button type="button" data-page-target="guide">⚙ Guide</button>
         </div>
       </div>
@@ -118,8 +117,8 @@
             <div class="unit-context-bar">
               <button id="backToRosterButton" class="ghost-button compact back-to-roster hidden" type="button">← Lists</button>
               <div id="unitTopStatuses" class="unit-top-statuses">
-                <button id="battleShockToggle" class="unit-status-toggle battle-shock-toggle" type="button">Battle-shocked</button>
-                <button id="oncePerGameToggle" class="unit-status-toggle" type="button">Once-per-game used</button>
+                <button id="battleShockToggle" class="ghost-button compact unit-status-toggle battle-shock-toggle" type="button">Battle-shocked</button>
+                <button id="oncePerGameToggle" class="ghost-button compact unit-status-toggle" type="button">Once-per-game used</button>
               </div>
             </div>
             <div class="detail-heading">
