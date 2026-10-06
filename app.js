@@ -48,7 +48,8 @@ const els = {
   armyPickerModal: $("armyPickerModal"),
   armyPickerClose: $("armyPickerClose"),
   armyPickerAll: $("armyPickerAll"),
-  armyPickerCurrent: $("armyPickerCurrent"),
+  armyPickerClear: $("armyPickerClear"),
+  activeArmySummary: $("activeArmySummary"),
   armyPickerList: $("armyPickerList"),
   toast: $("toast"),
   firstRunModal: $("firstRunModal"),
@@ -93,15 +94,13 @@ function bindEvents() {
     if (event.target === els.armyPickerModal) closeArmyPicker();
   });
   els.armyPickerAll?.addEventListener("click", () => {
-    setActiveSearchRosterIds(state.rosters.map(r => r.id));
+    setActiveSearchScopeIds(getAvailableSearchScopes().map(scope => scope.id));
     renderActiveArmySelector();
     renderArmyPicker();
     renderResults(els.searchInput.value);
   });
-  els.armyPickerCurrent?.addEventListener("click", () => {
-    const current = state.rosters[state.activeRoster];
-    if (!current) return;
-    setActiveSearchRosterIds([current.id]);
+  els.armyPickerClear?.addEventListener("click", () => {
+    setActiveSearchScopeIds([]);
     renderActiveArmySelector();
     renderArmyPicker();
     renderResults(els.searchInput.value);
@@ -142,7 +141,7 @@ async function handleFiles(event) {
       const roster = parseRosterFile(text, file.name);
       state.rosters.push(roster);
       state.activeRoster = state.rosters.length - 1;
-      setRosterSearchActive(roster.id, true);
+      activateRosterSearchScopes(roster);
       persist();
       showApp();
       renderAll();
@@ -340,13 +339,14 @@ async function loadFull40kData() {
 
     state.rosters.push(roster);
     state.activeRoster = state.rosters.length - 1;
-    setRosterSearchActive(roster.id, true);
+    activateRosterSearchScopes(roster);
     state.selected = null;
     els.searchInput.value = "";
     persist();
     renderAll();
     renderDetail(null);
     toast("Loaded " + roster.units.length + " 40K unit entries");
+    setTimeout(openArmyPicker, 150);
   } catch (error) {
     console.error(error);
     toast(error.message || "Could not load full 40K data.");
@@ -361,6 +361,24 @@ function setFullDataButtons(disabled, label) {
     button.disabled = disabled;
     button.textContent = label;
   });
+}
+
+function armyNameFromSource(sourceName = "") {
+  let name = String(sourceName || "").replace(/\.json$/i, "").trim();
+  name = name.replace(/^(imperium|chaos|xenos)\s*-\s*/i, "");
+  name = name.replace(/^library\s*-\s*/i, "");
+
+  const parts = name.split(/\s+-\s+/).map(part => part.trim()).filter(Boolean);
+  const deduped = [];
+  for (const part of parts) {
+    if (!deduped.length || normalize(deduped[deduped.length - 1]) !== normalize(part)) deduped.push(part);
+  }
+
+  return deduped.join(" — ") || name || "Unknown army";
+}
+
+function armyIdFromSource(sourceName = "") {
+  return "bsdata:" + String(sourceName || "").replace(/\.json$/i, "").trim();
 }
 
 function buildFull40kRoster(documents) {
@@ -403,6 +421,9 @@ function buildFull40kRoster(documents) {
         id:"bsdata-link-" + link.id,
         name:link.name,
         type:"Reference",
+        source:sourceName,
+        armyId:armyIdFromSource(sourceName),
+        armyName:armyNameFromSource(sourceName),
         stats:costStats(link),
         rules:[],
         profiles:[],
@@ -481,6 +502,8 @@ function parseBSDataUnit(node, displayName, sourceName, link) {
     name:displayName || unitProfile?.name || node.name || "Unit",
     type:"Unit",
     source:sourceName,
+    armyId:armyIdFromSource(sourceName),
+    armyName:armyNameFromSource(sourceName),
     stats,
     profiles:dedupeBy(weaponProfiles, p => normalize(p.name + "|" + JSON.stringify(p.values))),
     rules:allRules,
@@ -552,49 +575,115 @@ function renderAll() {
   renderResults(els.searchInput.value);
 }
 
-function getActiveSearchRosterIds() {
+function getAvailableSearchScopes() {
+  const scopes = [];
+
+  state.rosters.forEach((roster, rosterIndex) => {
+    if (roster.source === "bsdata") {
+      const groups = new Map();
+
+      for (const unit of roster.units || []) {
+        const sourceName = unit.source || "Unknown army";
+        if (/^library\s*-/i.test(String(sourceName))) continue;
+
+        const id = unit.armyId || armyIdFromSource(sourceName);
+        const label = unit.armyName || armyNameFromSource(sourceName);
+
+        if (!groups.has(id)) {
+          groups.set(id, {
+            id,
+            label,
+            subLabel: "Full 40K data",
+            roster,
+            rosterIndex,
+            units: []
+          });
+        }
+        groups.get(id).units.push(unit);
+      }
+
+      scopes.push(...[...groups.values()].sort((a,b) => a.label.localeCompare(b.label)));
+      return;
+    }
+
+    scopes.push({
+      id: "roster:" + roster.id,
+      label: roster.name,
+      subLabel: roster.faction || "Imported roster",
+      roster,
+      rosterIndex,
+      units: roster.units || []
+    });
+  });
+
+  return scopes;
+}
+
+function getActiveSearchScopeIds() {
+  const scopes = getAvailableSearchScopes();
+  const validIds = new Set(scopes.map(scope => scope.id));
+
   try {
-    const stored = JSON.parse(localStorage.getItem("tv_active_search_rosters") || "[]");
-    if (Array.isArray(stored)) {
-      const valid = stored.filter(id => state.rosters.some(r => r.id === id));
-      if (valid.length) return valid;
+    const raw = localStorage.getItem("tv_active_search_scopes");
+    if (raw !== null) {
+      const stored = JSON.parse(raw);
+      if (Array.isArray(stored)) return stored.filter(id => validIds.has(id));
+    }
+
+    // Migrate the old roster-level setting. "Full 40K Data" previously meant
+    // the whole catalogue, so migrate that roster to all of its army scopes.
+    const legacyRaw = localStorage.getItem("tv_active_search_rosters");
+    if (legacyRaw !== null) {
+      const legacy = JSON.parse(legacyRaw);
+      if (Array.isArray(legacy)) {
+        const migrated = scopes
+          .filter(scope => legacy.includes(scope.roster.id))
+          .map(scope => scope.id);
+        if (migrated.length) {
+          setActiveSearchScopeIds(migrated);
+          return migrated;
+        }
+      }
     }
   } catch {}
-  const fallback = state.rosters[state.activeRoster]?.id;
-  return fallback ? [fallback] : [];
+
+  // First use: keep imported lists active and keep the full-data experience
+  // working until the user narrows it with Choose armies.
+  return scopes.map(scope => scope.id);
 }
 
-function setRosterSearchActive(rosterId, active) {
-  const current = new Set(getActiveSearchRosterIds());
-  if (active) current.add(rosterId);
-  else current.delete(rosterId);
+function setActiveSearchScopeIds(ids) {
+  const validIds = new Set(getAvailableSearchScopes().map(scope => scope.id));
+  const clean = [...new Set((ids || []).filter(id => validIds.has(id)))];
+  try {
+    localStorage.setItem("tv_active_search_scopes", JSON.stringify(clean));
+  } catch {}
+}
 
-  if (!current.size && state.rosters.length) {
-    current.add(state.rosters[state.activeRoster]?.id || state.rosters[0].id);
+function setSearchScopeActive(scopeId, active) {
+  const current = new Set(getActiveSearchScopeIds());
+  if (active) current.add(scopeId);
+  else current.delete(scopeId);
+  setActiveSearchScopeIds([...current]);
+}
+
+function activateRosterSearchScopes(roster) {
+  if (!roster) return;
+  const existing = new Set(getActiveSearchScopeIds());
+
+  if (roster.source === "bsdata") {
+    const sources = new Set((roster.units || []).map(unit => unit.armyId || armyIdFromSource(unit.source || "")));
+    sources.forEach(id => existing.add(id));
+  } else {
+    existing.add("roster:" + roster.id);
   }
 
-  try {
-    localStorage.setItem("tv_active_search_rosters", JSON.stringify([...current]));
-  } catch {}
+  setActiveSearchScopeIds([...existing]);
 }
 
-function getSearchRosters() {
-  const ids = new Set(getActiveSearchRosterIds());
-  const selected = state.rosters
-    .map((roster, rosterIndex) => ({roster, rosterIndex}))
-    .filter(item => ids.has(item.roster.id));
-
-  if (selected.length) return selected;
-  const roster = state.rosters[state.activeRoster];
-  return roster ? [{roster, rosterIndex:state.activeRoster}] : [];
-}
-
-function setActiveSearchRosterIds(ids) {
-  const valid = [...new Set((ids || []).filter(id => state.rosters.some(r => r.id === id)))];
-  if (!valid.length && state.rosters.length) valid.push(state.rosters[state.activeRoster]?.id || state.rosters[0].id);
-  try {
-    localStorage.setItem("tv_active_search_rosters", JSON.stringify(valid));
-  } catch {}
+function getSearchCollections() {
+  const active = new Set(getActiveSearchScopeIds());
+  return getAvailableSearchScopes().filter(scope => active.has(scope.id));
 }
 
 function openArmyPicker() {
@@ -608,29 +697,31 @@ function closeArmyPicker() {
 
 function renderArmyPicker() {
   if (!els.armyPickerList) return;
-  if (!state.rosters.length) {
-    els.armyPickerList.innerHTML = '<p class="army-picker-empty">No armies loaded yet.</p>';
+
+  const scopes = getAvailableSearchScopes();
+  if (!scopes.length) {
+    els.armyPickerList.innerHTML = '<p class="army-picker-empty">No armies loaded yet. Load full 40K data or import a New Recruit roster first.</p>';
     return;
   }
 
-  const activeIds = new Set(getActiveSearchRosterIds());
-  els.armyPickerList.innerHTML = state.rosters.map((roster, index) => {
-    const active = activeIds.has(roster.id);
-    const current = index === state.activeRoster;
+  const activeIds = new Set(getActiveSearchScopeIds());
+
+  els.armyPickerList.innerHTML = scopes.map(scope => {
+    const active = activeIds.has(scope.id);
     return `
-      <label class="army-picker-row${active ? " active" : ""}${current ? " current" : ""}">
-        <input type="checkbox" data-army-picker-id="${escapeHtml(roster.id)}" ${active ? "checked" : ""}>
+      <label class="army-picker-row${active ? " active" : ""}">
+        <input type="checkbox" data-army-scope-id="${escapeHtml(scope.id)}" ${active ? "checked" : ""}>
         <span class="army-picker-box" aria-hidden="true">${active ? "✓" : ""}</span>
         <span class="army-picker-copy">
-          <strong>${escapeHtml(roster.name)}</strong>
-          <small>${escapeHtml(roster.faction || roster.source || "Roster")}${current ? " · current" : ""}</small>
+          <strong>${escapeHtml(scope.label)}</strong>
+          <small>${escapeHtml(scope.subLabel)} · ${scope.units.length} entries</small>
         </span>
       </label>`;
   }).join("");
 
-  els.armyPickerList.querySelectorAll("[data-army-picker-id]").forEach(input => {
+  els.armyPickerList.querySelectorAll("[data-army-scope-id]").forEach(input => {
     input.addEventListener("change", () => {
-      setRosterSearchActive(input.dataset.armyPickerId, input.checked);
+      setSearchScopeActive(input.dataset.armyScopeId, input.checked);
       renderArmyPicker();
       renderActiveArmySelector();
       renderResults(els.searchInput.value);
@@ -640,38 +731,36 @@ function renderArmyPicker() {
 
 function renderActiveArmySelector() {
   if (!els.activeArmySelector) return;
-  if (!state.rosters.length) {
-    els.activeArmySelector.innerHTML = "";
+
+  const scopes = getAvailableSearchScopes();
+  const activeIds = new Set(getActiveSearchScopeIds());
+  const activeScopes = scopes.filter(scope => activeIds.has(scope.id));
+
+  if (els.activeArmySummary) {
+    els.activeArmySummary.textContent = activeScopes.length
+      ? activeScopes.length + " of " + scopes.length + " armies included in voice/text search"
+      : "No armies selected — choose armies to enable search";
+  }
+
+  if (!scopes.length) {
+    els.activeArmySelector.innerHTML = '<span class="active-army-empty">No armies loaded</span>';
     return;
   }
 
-  const activeIds = new Set(getActiveSearchRosterIds());
+  if (!activeScopes.length) {
+    els.activeArmySelector.innerHTML = '<button class="active-army-empty-button" type="button">No armies selected — choose armies</button>';
+    els.activeArmySelector.querySelector("button")?.addEventListener("click", openArmyPicker);
+    return;
+  }
 
-  els.activeArmySelector.innerHTML = state.rosters.map((roster, index) => {
-    const active = activeIds.has(roster.id);
-    const current = index === state.activeRoster;
-    return `
-      <button type="button"
-        class="active-army-toggle${active ? " active" : ""}${current ? " current" : ""}"
-        data-roster-id="${escapeHtml(roster.id)}"
-        aria-pressed="${active ? "true" : "false"}">
-        <span class="active-army-check">${active ? "✓" : ""}</span>
-        <span class="active-army-copy">
-          <strong>${escapeHtml(roster.name)}</strong>
-          <small>${active ? "Included in search" : "Not searched"}${current ? " · current" : ""}</small>
-        </span>
-      </button>`;
-  }).join("");
+  const visible = activeScopes.slice(0, 4);
+  const extra = activeScopes.length - visible.length;
 
-  els.activeArmySelector.querySelectorAll("[data-roster-id]").forEach(button => {
-    button.addEventListener("click", () => {
-      const id = button.dataset.rosterId;
-      const isActive = getActiveSearchRosterIds().includes(id);
-      setRosterSearchActive(id, !isActive);
-      renderActiveArmySelector();
-      renderResults(els.searchInput.value);
-    });
-  });
+  els.activeArmySelector.innerHTML =
+    visible.map(scope => `<span class="active-army-chip">${escapeHtml(scope.label)}</span>`).join("") +
+    (extra > 0 ? `<button class="active-army-more" type="button">+${extra} more</button>` : "");
+
+  els.activeArmySelector.querySelector(".active-army-more")?.addEventListener("click", openArmyPicker);
 }
 
 function renderTabs() {
@@ -698,39 +787,60 @@ function renderResults(query = "") {
 
   const q = normalize(query);
   let results = [];
+  const collections = getSearchCollections();
 
   if (q) {
-    for (const {roster, rosterIndex} of getSearchRosters()) {
-      for (const unit of roster.units || []) {
+    for (const collection of collections) {
+      for (const unit of collection.units || []) {
         const score = scoreMatch(unit, q);
-        if (score > 0) results.push({unit, roster, rosterIndex, score});
+        if (score > 0) results.push({
+          unit,
+          roster: collection.roster,
+          rosterIndex: collection.rosterIndex,
+          scopeLabel: collection.label,
+          score
+        });
       }
     }
     results.sort((a,b) => b.score - a.score || a.unit.name.localeCompare(b.unit.name));
+  } else if (currentRoster.source === "bsdata") {
+    const currentCollections = collections.filter(collection => collection.rosterIndex === state.activeRoster);
+    results = currentCollections.flatMap(collection =>
+      (collection.units || []).map(unit => ({
+        unit,
+        roster: collection.roster,
+        rosterIndex: collection.rosterIndex,
+        scopeLabel: collection.label,
+        score: 0
+      }))
+    );
   } else {
     results = (currentRoster.units || []).map(unit => ({
       unit,
       roster: currentRoster,
       rosterIndex: state.activeRoster,
+      scopeLabel: currentRoster.name,
       score: 0
     }));
   }
 
   els.resultList.innerHTML = "";
   results.slice(0, 100).forEach(result => {
-    const {unit, roster, rosterIndex} = result;
+    const {unit, roster, rosterIndex, scopeLabel} = result;
     const button = document.createElement("button");
     button.className = "result-item" + (state.selected?.id === unit.id && state.activeRoster === rosterIndex ? " active" : "");
     button.classList.toggle("destroyed", isUnitDestroyedInRoster(unit, rosterIndex));
     button.innerHTML = `
       <strong>${escapeHtml(unit.name)}</strong>
-      <small>${escapeHtml(unit.type || "Unit")}${q && getSearchRosters().length > 1 ? ` · <span class="result-roster">${escapeHtml(roster.name)}</span>` : ""}${isUnitDestroyedInRoster(unit, rosterIndex) ? " · DESTROYED" : ""}</small>`;
+      <small>${escapeHtml(unit.type || "Unit")}${q ? ` · <span class="result-roster">${escapeHtml(scopeLabel)}</span>` : ""}${isUnitDestroyedInRoster(unit, rosterIndex) ? " · DESTROYED" : ""}</small>`;
     button.addEventListener("click", () => selectUnitFromRoster(unit, rosterIndex));
     els.resultList.appendChild(button);
   });
 
   if (!results.length) {
-    els.resultList.innerHTML = '<div class="result-item"><small>No matching entries in the selected armies.</small></div>';
+    els.resultList.innerHTML = collections.length
+      ? '<div class="result-item"><small>No matching entries in the selected armies.</small></div>'
+      : '<div class="result-item"><small>No armies selected. Choose armies above to enable search.</small></div>';
   }
 }
 
@@ -1504,8 +1614,9 @@ function scoreVoicePhrase(spoken, candidate) {
 function rankVoiceCandidates(alternatives) {
   const results = new Map();
 
-  for (const {roster, rosterIndex} of getSearchRosters()) {
-    for (const unit of roster.units || []) {
+  for (const collection of getSearchCollections()) {
+    const {roster, rosterIndex} = collection;
+    for (const unit of collection.units || []) {
       const aliases = getVoiceAliases(roster.id, unit.id);
       const candidates = [unit.name, ...aliases];
       let bestScore = 0;
@@ -1605,7 +1716,7 @@ function showVoiceShortlist(heard, ranked) {
           <span class="voice-rank">${index + 1}</span>
           <span class="voice-choice-copy">
             <strong>${escapeHtml(item.unit.name)}</strong>
-            <small>${escapeHtml(item.roster.name)}</small>
+            <small>${escapeHtml(item.unit.armyName || item.roster.name)}</small>
           </span>
           <span class="voice-match-score">${percent}%</span>
         </button>
@@ -1954,6 +2065,8 @@ function clearRosters() {
   state.selected = null;
   localStorage.removeItem("tv_rosters");
   localStorage.removeItem("tv_activeRoster");
+  localStorage.removeItem("tv_active_search_rosters");
+  localStorage.removeItem("tv_active_search_scopes");
   hideApp();
   toast("Imported rosters removed");
 }
