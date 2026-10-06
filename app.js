@@ -234,6 +234,7 @@ function parseRosterFile(text, fileName) {
     source: "new-recruit",
     points: pts ?? null,
     units: dedupeBy(units, u => u.id || u.name),
+    referenceData: extractReferenceData(root, fileName),
     importedAt: Date.now()
   };
 }
@@ -402,6 +403,184 @@ function profileToDisplay(profile) {
   };
 }
 
+const CORE_STRATAGEM_QUICKREF = [
+  {name:"Command Re-Roll", category:"Core stratagem", text:"Any phase, just after making an eligible roll for a friendly unit or model: re-roll that roll."},
+  {name:"Epic Challenge", category:"Core stratagem", text:"Fight phase, after a friendly Character is selected to fight: one Character model's melee weapons gain Precision for the phase."},
+  {name:"Insane Bravery", category:"Core stratagem", text:"Command phase, before a Battle-shock roll: that roll automatically succeeds. Once per battle."},
+  {name:"Explosives", category:"Core stratagem", text:"Your Shooting phase: an eligible Explosives/Grenades unit can attempt to inflict mortal wounds on a nearby visible enemy."},
+  {name:"Crushing Impact", category:"Core stratagem", text:"Your Charge phase after a Monster/Vehicle charges: roll against an engaged enemy to inflict mortal wounds, with some risk to your own unit."},
+  {name:"Rapid Ingress", category:"Core stratagem", text:"End of the opponent's Movement phase: an eligible unit in Strategic Reserves can make an ingress move."},
+  {name:"Fire Overwatch", category:"Core stratagem", text:"End of the opponent's Movement phase: an eligible unit can shoot using the Snap Shooting rules."},
+  {name:"Smokescreen", category:"Core stratagem", text:"Start of the opponent's Shooting phase: a friendly Smoke unit can help itself or obscured units gain the benefit of cover."},
+  {name:"Heroic Intervention", category:"Core stratagem", text:"End of the opponent's Charge phase: an eligible friendly unit can make a restricted charge."},
+  {name:"Counteroffensive", category:"Core stratagem", text:"Opponent's Fight phase, after an enemy resolves attacks: an eligible friendly unit gains Fights First and must fight next."}
+];
+
+const CORE_RULE_QUICKREF = [
+  {name:"Hit Roll", category:"Making attacks", text:"Roll one D6 per attack. An unmodified 1 fails; an unmodified 6 is a Critical Hit; otherwise compare the roll with the weapon's BS or WS."},
+  {name:"Wound Roll", category:"Making attacks", text:"Compare Strength to Toughness: 2+ at double or more, 3+ if greater, 4+ if equal, 5+ if lower, 6+ at half or less."},
+  {name:"Saving Throw", category:"Making attacks", text:"The defending player makes a save for each successful wound, modified by the attacking weapon's AP as applicable."},
+  {name:"Battle-shock", category:"Command phase", text:"Battle-shocked units have reduced battlefield effectiveness, including losing normal Objective Control and restrictions on stratagems/actions."},
+  {name:"Command Phase", category:"Battle round", text:"Start the turn, gain Command Points as applicable, resolve Battle-shock and Command abilities, then continue to Movement."},
+  {name:"Movement Phase", category:"Battle round", text:"Move eligible units, resolve Reinforcements or ingress effects, then finish the phase."},
+  {name:"Shooting Phase", category:"Battle round", text:"Select eligible units to shoot, choose targets and resolve attacks."},
+  {name:"Charge Phase", category:"Battle round", text:"Eligible units can declare charges, make charge rolls and complete charge moves."},
+  {name:"Fight Phase", category:"Battle round", text:"Eligible units fight in the appropriate order, resolving melee attacks and related moves."},
+  {name:"Strategic Reserves", category:"Reserves", text:"Units placed in Strategic Reserves can arrive later subject to the battle round and positioning restrictions that apply."},
+  {name:"Deep Strike", category:"Core ability", text:"A unit with Deep Strike can be set up in Reserves and later arrive using the distance restrictions in the rule."},
+  {name:"Cover", category:"Terrain", text:"The Benefit of Cover improves a model's protection against eligible ranged attacks according to the core terrain rules."}
+];
+
+function extractReferenceData(root, sourceName = "Imported roster") {
+  const rules = [];
+  const stratagems = [];
+  const seenRules = new Set();
+  const seenStrats = new Set();
+
+  function addRule(name, text, category = "Rule") {
+    const cleanName = cleanRuleText(name || "").trim();
+    const cleanText = cleanRuleText(text || "").trim();
+    if (!cleanName || !cleanText) return;
+    const key = normalize(cleanName + "|" + cleanText);
+    if (seenRules.has(key)) return;
+    seenRules.add(key);
+    rules.push({name:cleanName, text:cleanText, category, source:sourceName});
+  }
+
+  function addStrat(name, text, category = "Stratagem") {
+    const cleanName = cleanRuleText(name || "").trim();
+    const cleanText = cleanRuleText(text || "").trim();
+    if (!cleanName || !cleanText) return;
+    const key = normalize(cleanName + "|" + cleanText);
+    if (seenStrats.has(key)) return;
+    seenStrats.add(key);
+    stratagems.push({name:cleanName, text:cleanText, category, source:sourceName});
+  }
+
+  function walk(value) {
+    if (!value || typeof value !== "object") return;
+    if (Array.isArray(value)) {
+      value.forEach(walk);
+      return;
+    }
+
+    for (const rule of value.rules || []) {
+      if (!rule || rule.hidden) continue;
+      addRule(rule.name, rule.description, "Rule");
+    }
+
+    for (const profile of value.profiles || []) {
+      if (!profile || profile.hidden) continue;
+      const type = String(profile.typeName || "");
+      const text = (profile.characteristics || [])
+        .map(c => {
+          const val = characteristicValue(c);
+          return val ? (c.name && c.name !== "Description" ? c.name + ": " : "") + val : "";
+        })
+        .filter(Boolean)
+        .join("\n");
+
+      if (/stratagem/i.test(type)) addStrat(profile.name, text, type);
+      else if (/rule|ability/i.test(type) && text) addRule(profile.name, text, type);
+    }
+
+    for (const child of Object.values(value)) {
+      if (child && typeof child === "object") walk(child);
+    }
+  }
+
+  walk(root);
+  return {rules, stratagems};
+}
+
+function buildReferenceData(documents) {
+  const combined = {rules:[], stratagems:[]};
+  const ruleSeen = new Set();
+  const stratSeen = new Set();
+
+  for (const doc of documents || []) {
+    const extracted = extractReferenceData(doc.data, doc.name);
+    for (const rule of extracted.rules) {
+      if (doc.name === "Warhammer 40,000.json" || /^library\s*-/i.test(doc.name)) {
+        const key = normalize(rule.name + "|" + rule.text);
+        if (!ruleSeen.has(key)) {
+          ruleSeen.add(key);
+          combined.rules.push(rule);
+        }
+      }
+    }
+    for (const strat of extracted.stratagems) {
+      const key = normalize(strat.name + "|" + strat.text);
+      if (!stratSeen.has(key)) {
+        stratSeen.add(key);
+        combined.stratagems.push(strat);
+      }
+    }
+  }
+
+  return combined;
+}
+
+function getCombinedReferenceData() {
+  const rules = [...CORE_RULE_QUICKREF];
+  const stratagems = [...CORE_STRATAGEM_QUICKREF];
+  const seenRules = new Set(rules.map(item => normalize(item.name + "|" + item.text)));
+  const seenStrats = new Set(stratagems.map(item => normalize(item.name + "|" + item.text)));
+
+  const sources = [
+    state.referenceData,
+    ...state.rosters.map(r => r.referenceData).filter(Boolean)
+  ];
+
+  for (const source of sources) {
+    for (const rule of source?.rules || []) {
+      const key = normalize(rule.name + "|" + rule.text);
+      if (!seenRules.has(key)) {
+        seenRules.add(key);
+        rules.push(rule);
+      }
+    }
+    for (const strat of source?.stratagems || []) {
+      const key = normalize(strat.name + "|" + strat.text);
+      if (!seenStrats.has(key)) {
+        seenStrats.add(key);
+        stratagems.push(strat);
+      }
+    }
+  }
+
+  return {rules, stratagems};
+}
+
+function renderReferenceCards(items, container, query = "") {
+  if (!container) return;
+  const q = normalize(query);
+  const filtered = (items || [])
+    .filter(item => !q || normalize(item.name + " " + item.text + " " + (item.category || "")).includes(q))
+    .slice(0, 80);
+
+  container.innerHTML = filtered.length
+    ? filtered.map(item => `
+        <article class="reference-card">
+          <div class="reference-card-heading">
+            <h3>${escapeHtml(item.name)}</h3>
+            ${item.category ? `<span>${escapeHtml(item.category)}</span>` : ""}
+          </div>
+          <div class="reference-card-text">${formatRuleText(item.text)}</div>
+        </article>`).join("")
+    : '<div class="empty-section">No matching reference found.</div>';
+}
+
+function renderStratagems(query = "") {
+  const data = getCombinedReferenceData();
+  renderReferenceCards(data.stratagems, els.stratResults, query);
+}
+
+function renderCoreRules(query = "") {
+  const data = getCombinedReferenceData();
+  renderReferenceCards(data.rules, els.coreRuleResults, query);
+}
+
 const BSDATA_REPO = "BSData/wh40k-11e";
 const BSDATA_BRANCH = "main";
 const BSDATA_API = "https://api.github.com/repos/" + BSDATA_REPO + "/contents?ref=" + BSDATA_BRANCH;
@@ -444,7 +623,9 @@ async function loadFull40kData() {
     }
 
     await Promise.all(Array.from({length:concurrency}, worker));
+    state.referenceData = buildReferenceData(documents);
     const roster = buildFull40kRoster(documents);
+    roster.referenceData = state.referenceData;
 
     if (!roster.units.length) throw new Error("The BSData files downloaded but no unit entries could be resolved.");
 
