@@ -2483,6 +2483,70 @@ function selectUnitFromRoster(unit, rosterIndex) {
   persist();
 }
 
+function findTextUnitReference(unit) {
+  if (!unit || unit.importFormat !== "txt") return null;
+
+  const roster =
+    state.rosters.find(item => item.id === state.selectedRosterId) ||
+    state.rosters[state.activeRoster];
+
+  const faction = normalize(roster?.faction || "");
+  const exact = [];
+
+  for (const scope of getAvailableSearchScopes()) {
+    for (const candidate of scope.units || []) {
+      if (normalize(candidate.name) !== normalize(unit.name)) continue;
+
+      const scopeName = normalize(scope.label || "");
+      const factionBonus =
+        faction && scopeName && (faction.includes(scopeName) || scopeName.includes(faction))
+          ? 1
+          : 0;
+
+      exact.push({candidate, factionBonus});
+    }
+  }
+
+  exact.sort((a,b) => b.factionBonus - a.factionBonus);
+  return exact[0]?.candidate || null;
+}
+
+function mergeTextUnitReference(unit) {
+  const reference = findTextUnitReference(unit);
+  if (!reference) return unit;
+
+  const importedPoints = (unit.stats || []).find(stat => normalize(stat.label) === "pts");
+  const stats = (reference.stats || []).filter(stat => normalize(stat.label) !== "pts");
+  if (importedPoints) stats.push(importedPoints);
+
+  return {
+    ...reference,
+    id:unit.id,
+    name:unit.name,
+    categories:(reference.categories || []).length ? reference.categories : unit.categories,
+    stats,
+    textLoadout:unit.textLoadout || [],
+    importFormat:"txt",
+    limitedData:false,
+    hydratedFromAllArmies:true
+  };
+}
+
+function renderTextLoadoutSection(unit) {
+  if (!unit?.textLoadout?.length) return "";
+
+  return `
+    <section class="detail-section text-loadout-section">
+      <div class="section-heading-row">
+        <h3>Imported loadout</h3>
+        <span class="section-count">${unit.textLoadout.length}</span>
+      </div>
+      <div class="text-loadout-list">
+        ${unit.textLoadout.map(item => `<div>${escapeHtml(item)}</div>`).join("")}
+      </div>
+    </section>`;
+}
+
 function renderDetail(unit) {
   if (!unit) {
     els.emptyDetail?.classList.add("hidden");
@@ -2490,12 +2554,15 @@ function renderDetail(unit) {
     return;
   }
 
+  const sourceUnit = unit;
+  unit = mergeTextUnitReference(unit);
+
   els.emptyDetail.classList.add("hidden");
   els.detailCard.classList.remove("hidden");
   els.detailType.textContent = (unit.type || "Unit").toUpperCase();
   els.detailName.textContent = unit.name;
   els.backToRosterButton?.classList.toggle("hidden", getUnitBrowserSources().length === 0);
-  updateUnitTopStatuses(unit);
+  updateUnitTopStatuses(sourceUnit);
   updatePinButton();
 
   const statOrder = ["m","t","sv","w","ld","oc","insv"];
@@ -2532,6 +2599,19 @@ function renderDetail(unit) {
 
   if (unit.rules?.length) {
     sections.push(renderAbilitySection(unit.rules));
+  }
+
+  if (sourceUnit.importFormat === "txt") {
+    sections.push(renderTextLoadoutSection(sourceUnit));
+
+    if (sourceUnit.limitedData && !unit.hydratedFromAllArmies) {
+      sections.unshift(`
+        <section class="detail-section text-import-notice">
+          <div class="roster-refresh-note">
+            TXT exports do not contain full datasheet stats or rules. Import the ROS, ROSZ or JSON version for full data, or use Import all armies to fill matching unit datasheets.
+          </div>
+        </section>`);
+    }
   }
 
   els.detailSections.innerHTML = sections.join("") ||
