@@ -897,7 +897,7 @@ function setVoicePrompt(page = state.currentPage) {
 
   const prompts = {
     datasheets: "Say a unit name, e.g. “Death Korps of Krieg”",
-    score: "Say “Player 1 add 5 primary”",
+    score: "T" + state.scoreTurn + ": say “Player 1 add 5 primary”",
     dice: "Say “Roll 60 dice hitting on 4 plus”",
     strats: "Say a stratagem name",
     rules: "Say a core rule"
@@ -1970,26 +1970,37 @@ function toggleDiceOrder() {
 }
 
 function parseSpokenNumber(value) {
-  const direct = Number(value);
+  const q = normalize(value);
+  if (!q) return null;
+
+  const direct = Number(q);
   if (Number.isFinite(direct)) return direct;
 
-  const words = {
-    one:1,two:2,three:3,four:4,five:5,six:6,seven:7,eight:8,nine:9,ten:10,
+  const values = {
+    zero:0,one:1,two:2,three:3,four:4,five:5,six:6,seven:7,eight:8,nine:9,ten:10,
     eleven:11,twelve:12,thirteen:13,fourteen:14,fifteen:15,sixteen:16,
     seventeen:17,eighteen:18,nineteen:19,twenty:20,
-    thirty:30,forty:40,fifty:50,sixty:60,seventy:70,eighty:80,ninety:90,
-    hundred:100
+    thirty:30,forty:40,fifty:50,sixty:60,seventy:70,eighty:80,ninety:90
   };
 
-  const q = normalize(value);
-  if (words[q]) return words[q];
+  let total = 0;
+  let current = 0;
+  let sawNumber = false;
 
-  const parts = q.split(" ");
-  if (parts.length === 2 && words[parts[0]] && words[parts[1]] && words[parts[0]] >= 20 && words[parts[1]] < 10) {
-    return words[parts[0]] + words[parts[1]];
+  for (const token of q.split(" ").filter(token => token !== "and")) {
+    if (token === "hundred") {
+      current = Math.max(1, current) * 100;
+      sawNumber = true;
+      continue;
+    }
+
+    if (!(token in values)) return null;
+    current += values[token];
+    sawNumber = true;
   }
 
-  return null;
+  total += current;
+  return sawNumber ? total : null;
 }
 
 function setupSpeech() {
@@ -2543,68 +2554,109 @@ function extractVoiceAmount(q) {
   const cleaned = q
     .replace(/\bplayer\s+(?:1|2|one|two)\b/g, " ")
     .replace(/\bp[12]\b/g, " ")
+    .replace(/\b(primary|secondary|points?|vp)\b/g, " ")
+    .replace(/\b(add|added|plus|score|scores|scored|give|gives|gets?|increase|remove|removed|subtract|minus|take|takes|reduce|from|to|for|off)\b/g, " ")
     .replace(/\s+/g, " ")
     .trim();
 
   const numeric = cleaned.match(/\b(\d+)\b/);
   if (numeric) return Number(numeric[1]);
 
-  const tokens = cleaned.split(" ");
-  for (let i = 0; i < tokens.length; i++) {
-    const two = tokens.slice(i, i + 2).join(" ");
-    const twoValue = parseSpokenNumber(two);
-    if (twoValue) return twoValue;
-    const oneValue = parseSpokenNumber(tokens[i]);
-    if (oneValue) return oneValue;
+  const tokens = cleaned.split(" ").filter(Boolean);
+  for (let length = Math.min(4, tokens.length); length >= 1; length--) {
+    for (let i = 0; i <= tokens.length - length; i++) {
+      const value = parseSpokenNumber(tokens.slice(i, i + length).join(" "));
+      if (value != null) return value;
+    }
   }
+
   return null;
 }
 
 function handleScoreVoice(q) {
-  const action = /\b(remove|subtract|minus|take)\b/.test(q) ? -1 :
-    /\b(add|score|plus|give)\b/.test(q) ? 1 : 0;
+  const action = /\b(remove|removed|subtract|minus|take|takes|reduce)\b/.test(q) ? -1 :
+    /\b(add|added|plus|score|scores|scored|give|gives|gets?|increase)\b/.test(q) ? 1 : 0;
+
   const player = /\b(player 1|player one|p1)\b/.test(q) ? 1 :
     /\b(player 2|player two|p2|opponent)\b/.test(q) ? 2 : null;
+
   const type = /\bprimary\b/.test(q) ? "primary" :
     /\bsecondary\b/.test(q) ? "secondary" : null;
-  const amount = extractVoiceAmount(q);
 
+  const amount = extractVoiceAmount(q);
   if (!action || !player || !type || !amount) return false;
+
   adjustTurnScore(player, type, action * amount);
+  toast(
+    "T" + state.scoreTurn + " · Player " + player + " " +
+    (action > 0 ? "+" : "−") + amount + " " + type
+  );
+  setVoicePrompt("score");
   return true;
 }
 
 function parseDiceTarget(value) {
-  const cleaned = normalize(String(value || "")).replace(/s$/, "");
+  const cleaned = normalize(String(value || ""))
+    .replace(/\b(plus|or better|or higher|higher|up)\b/g, " ")
+    .replace(/\b([2-6])s\b/g, "$1")
+    .replace(/\s+/g, " ")
+    .trim();
+
   const number = parseSpokenNumber(cleaned);
   if (!number) return null;
   return Math.min(6, Math.max(2, number));
 }
 
 function handleDiceVoice(q) {
-  if (/^reroll (?:all )?misses$/.test(q) || /^re roll (?:all )?misses$/.test(q)) {
+  if (/^(?:reroll|re roll) (?:all )?misses$/.test(q)) {
     rerollMisses();
+    setVoicePrompt("dice");
     return true;
   }
 
-  if (/^reroll (?:all|everything)$/.test(q) || /^re roll (?:all|everything)$/.test(q)) {
+  if (/^(?:reroll|re roll) (?:all|everything)$/.test(q)) {
     rerollEverything();
+    setVoicePrompt("dice");
     return true;
   }
 
-  let match = q.match(/^roll (.+?) (?:dice|d6|die)(?: (hitting|wounding|saving|succeeding) on (.+))?$/);
-  if (!match) match = q.match(/^roll (.+?)(?: (hitting|wounding|saving|succeeding) on (.+))$/);
-  if (!match) return false;
+  if (!q.startsWith("roll ")) return false;
 
-  const count = parseSpokenNumber(match[1]);
+  const body = q.slice(5).trim();
+  const modeMatch = body.match(/\b(hitting|hit|wounding|wound|saving|save|succeeding|success|successes)\b/);
+
+  let countPart = modeMatch ? body.slice(0, modeMatch.index) : body;
+  countPart = countPart
+    .replace(/\b(dice|die|d6|d6s)\b/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  const count = parseSpokenNumber(countPart);
   if (!count) return false;
 
-  const verb = match[2] || "";
-  const target = match[3] ? parseDiceTarget(match[3]) : null;
-  const labelMap = {hitting:"Hits", wounding:"Wounds", saving:"Saves", succeeding:"Successes"};
-  const label = verb ? (labelMap[verb] || "Successes") : "";
+  let verb = "";
+  let target = null;
 
-  rollDice(count, target, label);
+  if (modeMatch) {
+    verb = modeMatch[1];
+    const tail = body.slice(modeMatch.index + modeMatch[0].length);
+    const targetMatch = tail.match(/\b(?:on|at)\s+(.+?)(?=\s+(?:and|with|reroll|re roll)\b|$)/);
+    if (targetMatch) target = parseDiceTarget(targetMatch[1]);
+  }
+
+  const labelMap = {
+    hitting:"Hits", hit:"Hits",
+    wounding:"Wounds", wound:"Wounds",
+    saving:"Saves", save:"Saves",
+    succeeding:"Successes", success:"Successes", successes:"Successes"
+  };
+
+  rollDice(count, target, labelMap[verb] || "");
+
+  if (/\b(?:reroll|re roll) (?:all )?misses\b/.test(q)) rerollMisses();
+  else if (/\b(?:reroll|re roll) (?:all|everything)\b/.test(q)) rerollEverything();
+
+  setVoicePrompt("dice");
   return true;
 }
 
