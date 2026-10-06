@@ -2713,3 +2713,338 @@ body.focus-mode .detail-panel {
     flex: 1 1 0;
   }
 }
+
+
+/* Roster browser + anchored voice search */
+.sr-only {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0,0,0,0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+
+.roster-browser {
+  width: min(1180px, 100%);
+  margin: 0 auto 14px;
+}
+
+.roster-browser-heading {
+  padding: 8px 2px 4px;
+}
+
+.roster-browser-heading h1 {
+  margin: 3px 0 10px;
+  font-size: clamp(1.6rem, 4vw, 2.5rem);
+  letter-spacing: -.035em;
+}
+
+.roster-mini-tabs {
+  padding: 0 0 12px;
+  gap: 7px;
+  scrollbar-width: none;
+}
+
+.roster-mini-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.roster-mini-tabs .roster-tab {
+  display: inline-grid;
+  gap: 2px;
+  min-width: max-content;
+  padding: 8px 12px;
+  text-align: left;
+}
+
+.roster-mini-tabs .roster-tab strong {
+  font-size: .8rem;
+}
+
+.roster-mini-tabs .roster-tab small {
+  font-size: .62rem;
+  opacity: .75;
+}
+
+.roster-unit-groups {
+  display: grid;
+  gap: 12px;
+}
+
+.roster-unit-group {
+  border: 1px solid #293444;
+  border-radius: 15px;
+  background: #101720;
+  padding: 12px;
+}
+
+.roster-unit-group-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.roster-unit-group-heading h3 {
+  margin: 0;
+  font-size: .85rem;
+  letter-spacing: .01em;
+}
+
+.roster-unit-group-heading span {
+  display: grid;
+  place-items: center;
+  min-width: 24px;
+  height: 22px;
+  padding: 0 7px;
+  border: 1px solid #304054;
+  border-radius: 999px;
+  color: #8fa0b3;
+  font-size: .64rem;
+  font-weight: 850;
+}
+
+.roster-unit-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 6px;
+}
+
+.roster-unit-button {
+  min-width: 0;
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border: 1px solid #263343;
+  border-radius: 10px;
+  background: #141c26;
+  color: #edf3f8;
+  padding: 9px 10px;
+  text-align: left;
+}
+
+.roster-unit-button:hover {
+  border-color: #3a7187;
+  background: rgba(56,189,248,.05);
+}
+
+.roster-unit-button strong {
+  min-width: 0;
+  font-size: .82rem;
+  line-height: 1.2;
+}
+
+.roster-unit-button small {
+  flex: 0 0 auto;
+  color: #8190a2;
+  font-size: .64rem;
+}
+
+.back-to-roster {
+  flex: 0 0 auto;
+  align-self: center;
+}
+
+.detail-title-copy {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.voice-dock {
+  display: block;
+  padding: 9px;
+}
+
+.voice-dock-search {
+  display: block;
+  width: 100%;
+  margin: 0 0 7px;
+}
+
+.voice-dock-search input {
+  width: 100%;
+  min-height: 42px;
+  border: 1px solid #34465a;
+  border-radius: 12px;
+  background: #0d141c;
+  color: #f2f6fa;
+  padding: 0 12px;
+  outline: none;
+  font: inherit;
+  font-size: .9rem;
+}
+
+.voice-dock-search input:focus {
+  border-color: var(--accent-strong);
+  box-shadow: 0 0 0 3px rgba(56,189,248,.08);
+}
+
+.voice-dock-row {
+  display: grid;
+  grid-template-columns: minmax(0,1fr) auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.voice-example {
+  margin: 9px 0 0 !important;
+  color: #74cfee !important;
+  font-size: .78rem !important;
+  line-height: 1.4 !important;
+}
+
+.score-cap {
+  color: #8fa0b3;
+  font-size: .66rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+/* Slightly larger mobile datasheet type while keeping the one-row layout */
+@media (max-width: 760px) {
+  .app-shell {
+    padding-bottom: 168px;
+  }
+
+  .roster-browser {
+    margin-bottom: 8px;
+  }
+
+  .roster-browser-heading {
+    padding: 3px 2px 1px;
+  }
+
+  .roster-browser-heading h1 {
+    margin-bottom: 7px;
+    font-size: 1.55rem;
+  }
+
+  .roster-mini-tabs {
+    padding-bottom: 8px;
+  }
+
+  .roster-mini-tabs .roster-tab {
+    padding: 7px 10px;
+  }
+
+  .roster-unit-groups {
+    gap: 8px;
+  }
+
+  .roster-unit-group {
+    padding: 9px;
+    border-radius: 12px;
+  }
+
+  .roster-unit-group-heading {
+    margin-bottom: 6px;
+  }
+
+  .roster-unit-grid {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+
+  .roster-unit-button {
+    min-height: 43px;
+    padding: 7px 9px;
+    border-radius: 9px;
+  }
+
+  .roster-unit-button strong {
+    font-size: .86rem;
+  }
+
+  .voice-dock {
+    width: calc(100% - 14px);
+    bottom: max(7px, env(safe-area-inset-bottom));
+    border-radius: 17px;
+    padding: 7px;
+  }
+
+  .voice-dock-search {
+    margin-bottom: 6px;
+  }
+
+  .voice-dock-search input {
+    min-height: 39px;
+    border-radius: 10px;
+    font-size: .86rem;
+  }
+
+  .voice-dock-row {
+    gap: 7px;
+  }
+
+  .voice-status {
+    min-width: 0;
+  }
+
+  .voice-status strong {
+    font-size: .72rem;
+  }
+
+  .voice-status span {
+    max-width: none;
+    font-size: .67rem;
+  }
+
+  .talk-button {
+    min-width: 142px;
+    padding: 12px 13px;
+    border-radius: 12px;
+    font-size: .72rem;
+  }
+
+  .detail-heading {
+    gap: 6px;
+  }
+
+  .back-to-roster {
+    padding: 6px 7px !important;
+  }
+
+  .detail-heading h2 {
+    font-size: 1.27rem !important;
+  }
+
+  .stat span {
+    font-size: .50rem !important;
+  }
+
+  .stat strong {
+    font-size: .98rem !important;
+  }
+
+  .weapon-table th,
+  .weapon-table .weapon-row td {
+    font-size: .65rem !important;
+  }
+
+  .weapon-table th {
+    font-size: .49rem !important;
+  }
+
+  .weapon-name strong {
+    font-size: .68rem !important;
+  }
+
+  .weapon-table .weapon-keywords {
+    font-size: .58rem !important;
+  }
+
+  .weapon-quantity {
+    font-size: .52rem !important;
+  }
+
+  .score-cap {
+    font-size: .62rem;
+  }
+}
