@@ -2025,7 +2025,7 @@ function renderDataSummary() {
     <div class="data-summary-row">
       <div>
         <strong>${escapeHtml(roster.name)}</strong>
-        <small>New Recruit list · ${roster.units?.length || 0} units${roster.points != null ? " · " + escapeHtml(roster.points) + " pts" : ""}</small>
+        <small>New Recruit ${escapeHtml(String(roster.importFormat || "json").toUpperCase())} · ${roster.units?.length || 0} units${roster.points != null ? " · " + escapeHtml(roster.points) + " pts" : ""}</small>
       </div>
     </div>`).join("");
 }
