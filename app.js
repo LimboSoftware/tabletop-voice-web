@@ -690,7 +690,7 @@ async function loadFull40kData() {
 }
 
 function setFullDataButtons(disabled, label) {
-  [els.fullDataButton, els.fullDataWelcome].filter(Boolean).forEach(button => {
+  [els.fullDataButton].filter(Boolean).forEach(button => {
     button.disabled = disabled;
     button.textContent = label;
   });
@@ -990,41 +990,30 @@ function getAvailableSearchScopes() {
   const scopes = [];
 
   state.rosters.forEach((roster, rosterIndex) => {
-    if (roster.source === "bsdata") {
-      const groups = new Map();
+    if (roster.source !== "bsdata") return;
 
-      for (const unit of roster.units || []) {
-        const sourceName = unit.source || "Unknown army";
-        if (/^library\s*-/i.test(String(sourceName))) continue;
+    const groups = new Map();
+    for (const unit of roster.units || []) {
+      const sourceName = unit.source || "Unknown army";
+      if (/^library\s*-/i.test(String(sourceName))) continue;
 
-        const id = unit.armyId || armyIdFromSource(sourceName);
-        const label = unit.armyName || armyNameFromSource(sourceName);
+      const id = unit.armyId || armyIdFromSource(sourceName);
+      const label = unit.armyName || armyNameFromSource(sourceName);
 
-        if (!groups.has(id)) {
-          groups.set(id, {
-            id,
-            label,
-            subLabel: "Full 40K data",
-            roster,
-            rosterIndex,
-            units: []
-          });
-        }
-        groups.get(id).units.push(unit);
+      if (!groups.has(id)) {
+        groups.set(id, {
+          id,
+          label,
+          subLabel:"All-armies dataset",
+          roster,
+          rosterIndex,
+          units:[]
+        });
       }
-
-      scopes.push(...[...groups.values()].sort((a,b) => a.label.localeCompare(b.label)));
-      return;
+      groups.get(id).units.push(unit);
     }
 
-    scopes.push({
-      id: "roster:" + roster.id,
-      label: roster.name,
-      subLabel: roster.faction || "Imported roster",
-      roster,
-      rosterIndex,
-      units: roster.units || []
-    });
+    scopes.push(...[...groups.values()].sort((a,b) => a.label.localeCompare(b.label)));
   });
 
   return scopes;
@@ -1040,26 +1029,8 @@ function getActiveSearchScopeIds() {
       const stored = JSON.parse(raw);
       if (Array.isArray(stored)) return stored.filter(id => validIds.has(id));
     }
-
-    // Migrate the old roster-level setting. "Full 40K Data" previously meant
-    // the whole catalogue, so migrate that roster to all of its army scopes.
-    const legacyRaw = localStorage.getItem("tv_active_search_rosters");
-    if (legacyRaw !== null) {
-      const legacy = JSON.parse(legacyRaw);
-      if (Array.isArray(legacy)) {
-        const migrated = scopes
-          .filter(scope => legacy.includes(scope.roster.id))
-          .map(scope => scope.id);
-        if (migrated.length) {
-          setActiveSearchScopeIds(migrated);
-          return migrated;
-        }
-      }
-    }
   } catch {}
 
-  // First use: keep imported lists active and keep the full-data experience
-  // working until the user narrows it with Choose armies.
   return scopes.map(scope => scope.id);
 }
 
@@ -1079,22 +1050,32 @@ function setSearchScopeActive(scopeId, active) {
 }
 
 function activateRosterSearchScopes(roster) {
-  if (!roster) return;
+  if (!roster || roster.source !== "bsdata") return;
   const existing = new Set(getActiveSearchScopeIds());
-
-  if (roster.source === "bsdata") {
-    const sources = new Set((roster.units || []).map(unit => unit.armyId || armyIdFromSource(unit.source || "")));
-    sources.forEach(id => existing.add(id));
-  } else {
-    existing.add("roster:" + roster.id);
-  }
-
+  const sources = new Set((roster.units || []).map(unit => unit.armyId || armyIdFromSource(unit.source || "")));
+  sources.forEach(id => existing.add(id));
   setActiveSearchScopeIds([...existing]);
 }
 
 function getSearchCollections() {
+  const collections = [];
+
+  state.rosters.forEach((roster, rosterIndex) => {
+    if (roster.source === "new-recruit") {
+      collections.push({
+        id:"roster:" + roster.id,
+        label:roster.name,
+        subLabel:roster.faction || "New Recruit list",
+        roster,
+        rosterIndex,
+        units:roster.units || []
+      });
+    }
+  });
+
   const active = new Set(getActiveSearchScopeIds());
-  return getAvailableSearchScopes().filter(scope => active.has(scope.id));
+  collections.push(...getAvailableSearchScopes().filter(scope => active.has(scope.id)));
+  return collections;
 }
 
 function openArmyPicker() {
@@ -1111,7 +1092,7 @@ function renderArmyPicker() {
 
   const scopes = getAvailableSearchScopes();
   if (!scopes.length) {
-    els.armyPickerList.innerHTML = '<p class="army-picker-empty">No armies loaded yet. Load full 40K data or import a New Recruit roster first.</p>';
+    els.armyPickerList.innerHTML = '<p class="army-picker-empty">Import all armies first, then choose which factions should be searched.</p>';
     return;
   }
 
@@ -1125,7 +1106,7 @@ function renderArmyPicker() {
         <span class="army-picker-box" aria-hidden="true">${active ? "✓" : ""}</span>
         <span class="army-picker-copy">
           <strong>${escapeHtml(scope.label)}</strong>
-          <small>${escapeHtml(scope.subLabel)} · ${scope.units.length} entries</small>
+          <small>${scope.units.length} entries</small>
         </span>
       </label>`;
   }).join("");
@@ -1135,7 +1116,7 @@ function renderArmyPicker() {
       setSearchScopeActive(input.dataset.armyScopeId, input.checked);
       renderArmyPicker();
       renderActiveArmySelector();
-      renderResults(els.searchInput.value);
+      renderResults(els.searchInput?.value || "");
     });
   });
 }
@@ -1149,12 +1130,12 @@ function renderActiveArmySelector() {
 
   if (els.activeArmySummary) {
     els.activeArmySummary.textContent = activeScopes.length
-      ? activeScopes.length + " of " + scopes.length + " armies included in voice/text search"
-      : "No armies selected — choose armies to enable search";
+      ? activeScopes.length + " of " + scopes.length + " all-armies factions included in datasheet search"
+      : "No all-armies factions selected";
   }
 
   if (!scopes.length) {
-    els.activeArmySelector.innerHTML = '<span class="active-army-empty">No armies loaded</span>';
+    els.activeArmySelector.innerHTML = "";
     return;
   }
 
@@ -1164,7 +1145,7 @@ function renderActiveArmySelector() {
     return;
   }
 
-  const visible = activeScopes.slice(0, 4);
+  const visible = activeScopes.slice(0, 5);
   const extra = activeScopes.length - visible.length;
 
   els.activeArmySelector.innerHTML =
