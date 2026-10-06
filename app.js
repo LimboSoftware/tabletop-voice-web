@@ -876,11 +876,11 @@ async function fetchGdcFactionData(factionName, wantedDetachments = []) {
 }
 
 function detachmentStratagemToReference(stratagem, request) {
-  const name = englishText(stratagem.name) || "Stratagem";
-  const when = englishText(stratagem.when);
-  const target = englishText(stratagem.target);
-  const effect = englishText(stratagem.effect);
-  const restrictions = englishText(stratagem.restrictions || stratagem.restriction);
+  const name = cleanGdcText(stratagem.name) || "Stratagem";
+  const when = cleanGdcText(stratagem.when);
+  const target = cleanGdcText(stratagem.target);
+  const effect = cleanGdcText(stratagem.effect);
+  const restrictions = cleanGdcText(stratagem.restrictions || stratagem.restriction);
 
   const text = [
     when ? "WHEN: " + when : "",
@@ -890,13 +890,18 @@ function detachmentStratagemToReference(stratagem, request) {
   ].filter(Boolean).join("\n");
 
   const cost = stratagem.cost != null ? stratagem.cost + "CP" : "";
-  const type = englishText(stratagem.type) || stratagem.type || "";
-  const category = [request.name, cost, type].filter(Boolean).join(" · ");
+  const type = cleanGdcText(stratagem.type) || "";
+  const category = [cost, type].filter(Boolean).join(" · ");
+  const phases = Array.isArray(stratagem.phase)
+    ? stratagem.phase.map(value => normalize(value)).filter(Boolean)
+    : [normalize(stratagem.phase)].filter(Boolean);
 
   return {
     name,
     text,
     category,
+    phases,
+    turn:normalize(stratagem.turn || ""),
     detachment:request.name,
     rosterName:request.rosterName,
     rosterId:request.rosterId || "",
@@ -1015,18 +1020,7 @@ async function getGdcFactionDataChain(factionName = "") {
 }
 
 function cleanGdcText(value) {
-  return cleanRuleText(
-    englishText(value)
-      .replace(/<br\s*\/?>/gi, "\n")
-      .replace(/<\/li>/gi, "\n")
-      .replace(/<li[^>]*>/gi, "■ ")
-      .replace(/<\/p>/gi, "\n")
-      .replace(/<[^>]+>/g, "")
-      .replace(/&quot;/g, '"')
-      .replace(/&#39;|&apos;/g, "'")
-      .replace(/&amp;/g, "&")
-      .replace(/&nbsp;/g, " ")
-  ).replace(/\n{3,}/g, "\n\n").trim();
+  return cleanRuleText(englishText(value));
 }
 
 function gdcArmyRulesToReferences(data, sourceLabel = "") {
@@ -1590,7 +1584,7 @@ function setVoicePrompt(page = state.currentPage) {
   const prompts = {
     datasheets: "Say a unit name, e.g. “Death Korps of Krieg”",
     score: "T" + state.scoreTurn + ": say “Player 1 add 5 primary”",
-    dice: "Say “Roll 60 dice hitting on 4 plus”",
+    dice: "Say “Roll 6 dice hitting on 3”",
     strats: "Say a stratagem name",
     rules: "Say a core rule"
   };
@@ -2385,8 +2379,24 @@ function titleCase(value = "") {
 
 function cleanRuleText(text = "") {
   return String(text)
+    .replace(/\\(?=<\/?[a-z][^>]*>)/gi, "")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/li>/gi, "\n")
+    .replace(/<li[^>]*>/gi, "■ ")
+    .replace(/<\/?ul[^>]*>/gi, "\n")
+    .replace(/<\/?ol[^>]*>/gi, "\n")
+    .replace(/<\/p>/gi, "\n")
+    .replace(/<p[^>]*>/gi, "")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;|&apos;/g, "'")
+    .replace(/&amp;/g, "&")
+    .replace(/&nbsp;/g, " ")
+    .replace(/\\\s*$/gm, "")
+    .replace(/^#{1,6}\s*/gm, "")
     .replace(/\^\^/g, "")
     .replace(/\*\*/g, "")
+    .replace(/__+/g, "")
     .replace(/\u00a0/g, " ")
     .replace(/[ \t]+\n/g, "\n")
     .replace(/\n{3,}/g, "\n\n")
@@ -3340,11 +3350,13 @@ function handleScoreVoice(q) {
 function parseDiceTarget(value) {
   const cleaned = normalize(String(value || ""))
     .replace(/\b(plus|or better|or higher|higher|up)\b/g, " ")
-    .replace(/\b([2-6])s\b/g, "$1")
     .replace(/\s+/g, " ")
     .trim();
 
-  const number = parseSpokenNumber(cleaned);
+  const digit = cleaned.match(/\b([2-6])(?:\s*s)?\b/);
+  if (digit) return Number(digit[1]);
+
+  const number = parseSpokenNumber(cleaned.replace(/\bs\b/g, ""));
   if (!number) return null;
   return Math.min(6, Math.max(2, number));
 }
