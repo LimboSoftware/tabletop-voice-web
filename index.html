@@ -41,99 +41,224 @@
       </a>
       <div class="top-actions">
         <button id="modeToggle" class="ghost-button" type="button">Table mode</button>
-        <button id="fullDataButton" class="ghost-button" type="button">Load full 40K data</button>
-        <button id="importButton" class="primary-button" type="button">Import roster</button>
-        <input id="fileInput" type="file" accept=".json,.rosz,.ros,.txt,application/json,text/plain" hidden />
       </div>
     </header>
 
-    <main>
-      <section id="welcome" class="welcome-card">
-        <p class="eyebrow">FREE PUBLIC BETA</p>
-        <h1>Your roster.<br />Just ask.</h1>
-        <p class="lede">Import a roster you already own, then search it by voice or text while you play. Your roster stays on this device.</p>
-        <div class="welcome-actions">
-          <button id="welcomeImport" class="primary-button large" type="button">Import roster</button>
-          <button id="fullDataWelcome" class="ghost-button large" type="button">Load full 40K data</button>
+    <nav id="appNav" class="app-nav" aria-label="App sections">
+      <button class="app-nav-button active" type="button" data-page-target="data"><span class="nav-icon">＋</span><span>Data</span></button>
+      <button class="app-nav-button" type="button" data-page-target="datasheets"><span class="nav-icon">▤</span><span>Sheets</span></button>
+      <button class="app-nav-button" type="button" data-page-target="score"><span class="nav-icon">◎</span><span>Score</span></button>
+      <button class="app-nav-button" type="button" data-page-target="dice"><span class="nav-icon">⚄</span><span>Dice</span></button>
+      <button class="app-nav-button extra-nav" type="button" data-page-target="strats"><span class="nav-icon">⚡</span><span>Strats</span></button>
+      <button class="app-nav-button extra-nav" type="button" data-page-target="rules"><span class="nav-icon">?</span><span>Rules</span></button>
+      <button class="app-nav-button extra-nav" type="button" data-page-target="setup"><span class="nav-icon">⚙</span><span>Setup</span></button>
+      <div class="nav-more">
+        <button id="navMoreButton" class="app-nav-button" type="button" aria-expanded="false"><span class="nav-icon">•••</span><span>More</span></button>
+        <div id="navMoreMenu" class="nav-more-menu hidden">
+          <button type="button" data-page-target="strats">⚡ Stratagems</button>
+          <button type="button" data-page-target="rules">? Core rules</button>
+          <button type="button" data-page-target="setup">⚙ Game setup</button>
         </div>
-        <p class="fine-print">Import your own New Recruit roster, or optionally pull the current community-maintained 40K dataset from BSData. Remote data is fetched on demand and is not bundled with Tabletop Voice.</p>
-      </section>
+      </div>
+    </nav>
 
-      <section id="workspace" class="workspace hidden" aria-live="polite">
-        <aside class="roster-panel">
-          <div class="panel-heading">
-            <div>
-              <span class="section-label">ROSTERS</span>
-              <h2 id="rosterTitle">My roster</h2>
-            </div>
-            <button id="clearRoster" class="icon-button" type="button" aria-label="Clear imported roster">×</button>
+    <main class="app-main">
+      <section id="welcome" class="app-page data-page" data-page="data">
+        <div class="page-hero compact-hero">
+          <div>
+            <p class="eyebrow">DATA & ARMIES</p>
+            <h1>Choose what you want to search.</h1>
+            <p class="lede">Import a New Recruit list for a lightweight match view, or load the wider 40K dataset and choose the armies you want active.</p>
           </div>
+          <div class="data-actions">
+            <button id="importButton" class="primary-button large" type="button">Import New Recruit</button>
+            <button id="fullDataButton" class="ghost-button large" type="button">Load full 40K data</button>
+            <input id="fileInput" type="file" accept=".json,.rosz,.ros,.txt,application/json,text/plain" hidden />
+          </div>
+        </div>
 
-          <div class="active-armies-wrap">
+        <div class="data-grid">
+          <section class="tool-card">
+            <span class="section-label">ACTIVE SEARCH ARMIES</span>
             <div class="active-armies-heading">
               <div>
-                <span>SEARCH ARMIES</span>
+                <h2>Armies</h2>
                 <small id="activeArmySummary">Choose which armies voice and text search should use</small>
               </div>
               <button id="armyPickerButton" class="ghost-button compact" type="button">Choose armies</button>
             </div>
             <div id="activeArmySelector" class="active-army-selector"></div>
-          </div>
+          </section>
 
-          <div class="match-tools">
-            <div class="match-tool">
-              <span>ROUND</span>
-              <div class="stepper">
-                <button id="roundDown" type="button">−</button>
-                <strong id="roundValue">1</strong>
-                <button id="roundUp" type="button">+</button>
-              </div>
-            </div>
-            <div class="match-tool">
-              <span>CP</span>
-              <div class="stepper">
-                <button id="cpDown" type="button">−</button>
-                <strong id="cpValue">0</strong>
-                <button id="cpUp" type="button">+</button>
-              </div>
-            </div>
-            <button id="turnToggle" class="turn-toggle" type="button">Your turn</button>
-          </div>
+          <section class="tool-card">
+            <span class="section-label">LOADED DATA</span>
+            <h2>Your data</h2>
+            <div id="dataRosterSummary" class="data-roster-summary">Nothing loaded yet.</div>
+            <button id="clearRoster" class="ghost-button compact" type="button">Clear imported data</button>
+          </section>
+        </div>
+      </section>
 
-          <div id="rosterTabs" class="roster-tabs"></div>
-          <div id="quickLists" class="quick-lists"></div>
-
-          <label class="search-wrap" for="searchInput">
-            <span>Search units, weapons or abilities</span>
-            <input id="searchInput" type="search" autocomplete="off" placeholder="e.g. Fire Dragons" />
-          </label>
-
-          <div id="resultList" class="result-list"></div>
-        </aside>
-
-        <section class="detail-panel">
-          <div id="emptyDetail" class="empty-detail">
-            <div class="mic-orb small">🎙</div>
-            <h2>Ask for a unit</h2>
-            <p>Hold the button below and say a unit, weapon or ability name.</p>
-          </div>
-
-          <article id="detailCard" class="detail-card hidden">
-            <div class="detail-heading">
+      <section id="pageDatasheets" class="app-page hidden" data-page="datasheets">
+        <section id="workspace" class="workspace" aria-live="polite">
+          <aside class="roster-panel">
+            <div class="panel-heading">
               <div>
-                <span id="detailType" class="section-label">UNIT</span>
-                <h2 id="detailName"></h2>
-              </div>
-              <div class="detail-actions">
-                <button id="destroyedButton" class="ghost-button compact" type="button">Destroyed</button>
-                <button id="focusButton" class="ghost-button compact" type="button">Focus</button>
-                <button id="pinButton" class="ghost-button compact" type="button">Pin</button>
+                <span class="section-label">DATASHEETS</span>
+                <h2 id="rosterTitle">Units</h2>
               </div>
             </div>
-            <div id="detailStats" class="stat-grid"></div>
-            <div id="detailSections" class="detail-sections"></div>
-          </article>
+
+            <div id="rosterTabs" class="roster-tabs"></div>
+            <div id="quickLists" class="quick-lists"></div>
+
+            <label class="search-wrap" for="searchInput">
+              <span>Search units, weapons or abilities</span>
+              <input id="searchInput" type="search" autocomplete="off" placeholder="e.g. Fire Dragons" />
+            </label>
+
+            <div id="resultList" class="result-list"></div>
+          </aside>
+
+          <section class="detail-panel">
+            <div id="emptyDetail" class="empty-detail">
+              <div class="mic-orb small">🎙</div>
+              <h2>Ask for a unit</h2>
+              <p>Hold the button below and say a unit name, or search on the left.</p>
+            </div>
+
+            <article id="detailCard" class="detail-card hidden">
+              <div class="detail-heading">
+                <div>
+                  <span id="detailType" class="section-label">UNIT</span>
+                  <h2 id="detailName"></h2>
+                </div>
+                <div class="detail-actions">
+                  <button id="destroyedButton" class="ghost-button compact" type="button">Destroyed</button>
+                  <button id="focusButton" class="ghost-button compact" type="button">Focus</button>
+                  <button id="pinButton" class="ghost-button compact" type="button">Pin</button>
+                </div>
+              </div>
+              <div id="detailStats" class="stat-grid"></div>
+              <div id="detailSections" class="detail-sections"></div>
+            </article>
+          </section>
         </section>
+      </section>
+
+      <section id="pageScore" class="app-page hidden utility-page" data-page="score">
+        <div class="page-heading">
+          <p class="eyebrow">MATCH</p>
+          <h1>Scoring</h1>
+          <p>Keep the match state visible without leaving the app.</p>
+        </div>
+        <div class="score-grid">
+          <section class="score-card">
+            <span>YOUR VP</span>
+            <strong id="myScoreValue">0</strong>
+            <div class="score-actions">
+              <button type="button" data-score-side="my" data-score-change="-5">−5</button>
+              <button type="button" data-score-side="my" data-score-change="-1">−1</button>
+              <button type="button" data-score-side="my" data-score-change="1">+1</button>
+              <button type="button" data-score-side="my" data-score-change="5">+5</button>
+            </div>
+          </section>
+          <section class="score-card">
+            <span>OPPONENT VP</span>
+            <strong id="oppScoreValue">0</strong>
+            <div class="score-actions">
+              <button type="button" data-score-side="opp" data-score-change="-5">−5</button>
+              <button type="button" data-score-side="opp" data-score-change="-1">−1</button>
+              <button type="button" data-score-side="opp" data-score-change="1">+1</button>
+              <button type="button" data-score-side="opp" data-score-change="5">+5</button>
+            </div>
+          </section>
+        </div>
+        <section class="match-state-card">
+          <div class="match-tool large-match-tool">
+            <span>ROUND</span>
+            <div class="stepper">
+              <button id="roundDown" type="button">−</button>
+              <strong id="roundValue">1</strong>
+              <button id="roundUp" type="button">+</button>
+            </div>
+          </div>
+          <div class="match-tool large-match-tool">
+            <span>CP</span>
+            <div class="stepper">
+              <button id="cpDown" type="button">−</button>
+              <strong id="cpValue">0</strong>
+              <button id="cpUp" type="button">+</button>
+            </div>
+          </div>
+          <button id="turnToggle" class="turn-toggle score-turn-toggle" type="button">Your turn</button>
+        </section>
+      </section>
+
+      <section id="pageDice" class="app-page hidden utility-page" data-page="dice">
+        <div class="page-heading">
+          <p class="eyebrow">DICE</p>
+          <h1>Dice roller</h1>
+          <p>Tap a preset or say “roll six dice”.</p>
+        </div>
+        <section class="dice-card">
+          <div class="dice-presets">
+            <button type="button" data-dice-count="1">1</button>
+            <button type="button" data-dice-count="2">2</button>
+            <button type="button" data-dice-count="5">5</button>
+            <button type="button" data-dice-count="10">10</button>
+            <button type="button" data-dice-count="20">20</button>
+          </div>
+          <div class="dice-custom">
+            <label for="diceCount">D6s</label>
+            <input id="diceCount" type="number" min="1" max="100" value="6" />
+            <button id="rollDiceButton" class="primary-button" type="button">Roll</button>
+          </div>
+          <div id="diceSummary" class="dice-summary">Ready to roll.</div>
+          <div id="diceResults" class="dice-results"></div>
+        </section>
+      </section>
+
+      <section id="pageStrats" class="app-page hidden utility-page" data-page="strats">
+        <div class="page-heading">
+          <p class="eyebrow">REFERENCE</p>
+          <h1>Stratagems</h1>
+          <p>Search the stratagem references available from your loaded data.</p>
+        </div>
+        <label class="reference-search">
+          <span>Search stratagems</span>
+          <input id="stratSearch" type="search" placeholder="e.g. Overwatch" autocomplete="off" />
+        </label>
+        <div id="stratResults" class="reference-results"></div>
+      </section>
+
+      <section id="pageRules" class="app-page hidden utility-page" data-page="rules">
+        <div class="page-heading">
+          <p class="eyebrow">REFERENCE</p>
+          <h1>Core rules</h1>
+          <p>Search rules and abilities from the current reference data.</p>
+        </div>
+        <label class="reference-search">
+          <span>Search core rules</span>
+          <input id="coreRuleSearch" type="search" placeholder="e.g. Battle-shock, Deep Strike" autocomplete="off" />
+        </label>
+        <div id="coreRuleResults" class="reference-results"></div>
+      </section>
+
+      <section id="pageSetup" class="app-page hidden utility-page" data-page="setup">
+        <div class="page-heading">
+          <p class="eyebrow">MATCH</p>
+          <h1>Game setup</h1>
+          <p>Keep the pre-game jobs in one place, then jump straight into scoring or datasheets.</p>
+        </div>
+        <div class="setup-grid">
+          <button class="setup-step" type="button" data-page-target="data"><span>1</span><strong>Load armies</strong><small>Import New Recruit or load full data.</small></button>
+          <button class="setup-step" type="button" id="setupChooseArmies"><span>2</span><strong>Choose active armies</strong><small>Limit voice and text lookup to this game.</small></button>
+          <label class="setup-step checklist-step"><input type="checkbox" data-setup-check="mission"><span>3</span><strong>Mission ready</strong><small>Mission and objectives agreed.</small></label>
+          <label class="setup-step checklist-step"><input type="checkbox" data-setup-check="terrain"><span>4</span><strong>Battlefield ready</strong><small>Terrain and deployment set.</small></label>
+          <label class="setup-step checklist-step"><input type="checkbox" data-setup-check="deploy"><span>5</span><strong>Deployment complete</strong><small>Armies deployed and ready to begin.</small></label>
+        </div>
+        <button id="resetMatchButton" class="ghost-button reset-match-button" type="button">Reset match counters & setup</button>
       </section>
     </main>
 
