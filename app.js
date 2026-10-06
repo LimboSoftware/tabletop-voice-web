@@ -903,10 +903,6 @@ function renderDetail(unit) {
     : '<div class="stat"><span>PROFILE</span><strong>Imported</strong></div>';
 
   const sections = [];
-  const statuses = renderStatusSection(unit);
-  if (statuses) sections.push(statuses);
-  const woundTracker = renderWoundTracker(unit);
-  if (woundTracker) sections.push(woundTracker);
 
   if (unit.profiles?.length) {
     sections.push(renderWeaponSection(unit.profiles));
@@ -917,12 +913,15 @@ function renderDetail(unit) {
     sections.push(renderAbilitySection(unit.rules));
   }
 
+  const statuses = renderStatusSection(unit);
+  if (statuses) sections.push(statuses);
+
   els.detailSections.innerHTML = sections.join("") ||
     '<section class="detail-section"><div class="empty-section">No additional profiles were found in this entry.</div></section>';
   bindDynamicDetailControls();
 }
 
-const STATUS_OPTIONS = ["Advanced","Fell Back","Charged","Battle-shocked","In Reserve","Once-per-game used"];
+const STATUS_OPTIONS = ["Battle-shocked","Once-per-game used"];
 
 function statusKey(unit = state.selected) {
   const roster = state.rosters[state.activeRoster];
@@ -1782,10 +1781,6 @@ function handleVoiceCommand(q) {
     scrollToDetailSection(".ability-section");
     return true;
   }
-  if (/^(show )?(wounds?|health)$/.test(q)) {
-    scrollToDetailSection(".wound-tracker");
-    return true;
-  }
   if (/^(next|next unit)$/.test(q)) {
     moveSelection(1);
     return true;
@@ -1796,10 +1791,6 @@ function handleVoiceCommand(q) {
   }
   if (/^(pin|pin unit|favourite|favorite)$/.test(q)) {
     toggleSelectedPin();
-    return true;
-  }
-  if (/^(reset wounds|full health|heal fully)$/.test(q)) {
-    resetWounds();
     return true;
   }
   if (/^(destroyed|mark destroyed|unit destroyed)$/.test(q)) {
@@ -1825,22 +1816,10 @@ function handleVoiceCommand(q) {
     return true;
   }
 
-  const damageMatch = q.match(/^(?:take|lose|minus) (\d+) wounds?$/);
-  if (damageMatch) {
-    adjustWounds(-Number(damageMatch[1]));
-    return true;
-  }
-
   const cpMatch = q.match(/^(?:set )?cp (\d+)$/);
   if (cpMatch) {
     localStorage.setItem("tv_match_cp", String(Number(cpMatch[1])));
     renderMatchTools();
-    return true;
-  }
-
-  const healMatch = q.match(/^(?:heal|gain|plus) (\d+) wounds?$/);
-  if (healMatch) {
-    adjustWounds(Number(healMatch[1]));
     return true;
   }
 
@@ -1942,75 +1921,6 @@ function renderQuickLists() {
   });
 }
 
-function getMaxWounds(unit) {
-  const stat = (unit?.stats || []).find(s => normalize(s.label) === "w");
-  const value = stat ? parseInt(String(stat.value), 10) : NaN;
-  return Number.isFinite(value) && value > 0 ? value : null;
-}
-
-function woundKey(unit = state.selected) {
-  const roster = state.rosters[state.activeRoster];
-  return roster && unit ? "tv_wounds_" + roster.id + "_" + unit.id : null;
-}
-
-function getCurrentWounds(unit = state.selected) {
-  const max = getMaxWounds(unit);
-  if (!max) return null;
-  const key = woundKey(unit);
-  const stored = key ? Number(localStorage.getItem(key)) : NaN;
-  return Number.isFinite(stored) ? Math.max(0, Math.min(max, stored)) : max;
-}
-
-function setCurrentWounds(value, unit = state.selected) {
-  const max = getMaxWounds(unit);
-  const key = woundKey(unit);
-  if (!max || !key) return;
-  localStorage.setItem(key, String(Math.max(0, Math.min(max, value))));
-}
-
-function adjustWounds(delta) {
-  if (!state.selected) return;
-  const current = getCurrentWounds();
-  if (current == null) {
-    toast("No numeric Wounds stat found for this unit.");
-    return;
-  }
-  setCurrentWounds(current + delta);
-  renderDetail(state.selected);
-}
-
-function resetWounds() {
-  if (!state.selected) return;
-  const max = getMaxWounds(state.selected);
-  if (!max) return;
-  setCurrentWounds(max);
-  renderDetail(state.selected);
-  toast("Wounds reset");
-}
-
-function renderWoundTracker(unit) {
-  const max = getMaxWounds(unit);
-  if (!max) return "";
-  const current = getCurrentWounds(unit);
-
-  return `
-    <section class="detail-section wound-tracker">
-      <div class="section-heading-row">
-        <h3>Wounds</h3>
-        <span class="section-count">${current}/${max}</span>
-      </div>
-      <div class="wound-controls">
-        <button type="button" class="wound-button" data-wound-change="-1">−</button>
-        <div class="wound-value">
-          <strong>${current}</strong>
-          <span>/ ${max}</span>
-        </div>
-        <button type="button" class="wound-button" data-wound-change="1">+</button>
-        <button type="button" class="ghost-button compact wound-reset">Reset</button>
-      </div>
-    </section>`;
-}
-
 function bindDynamicDetailControls() {
   document.querySelectorAll("[data-status]").forEach(button => {
     button.addEventListener("click", () => toggleStatus(button.dataset.status));
@@ -2018,10 +1928,6 @@ function bindDynamicDetailControls() {
   document.querySelectorAll("[data-phase]").forEach(button => {
     button.addEventListener("click", () => setActivePhase(button.dataset.phase));
   });
-  document.querySelectorAll("[data-wound-change]").forEach(button => {
-    button.addEventListener("click", () => adjustWounds(Number(button.dataset.woundChange)));
-  });
-  document.querySelector(".wound-reset")?.addEventListener("click", resetWounds);
 }
 
 function toggleFocusMode() {
