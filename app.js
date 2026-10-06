@@ -855,7 +855,14 @@ async function ensureDetachmentStratagems() {
 
 function renderDetachmentSummary() {
   const requests = getImportedDetachmentRequests();
-  if (!requests.length) return "";
+  const importedLists = state.rosters.filter(roster => roster.source === "new-recruit");
+
+  if (!requests.length) {
+    if (importedLists.some(roster => !Array.isArray(roster.detachments))) {
+      return '<div class="detachment-summary"><small class="detachment-loading">Re-import older New Recruit lists once to load their detachment stratagems.</small></div>';
+    }
+    return "";
+  }
 
   return `
     <div class="detachment-summary">
