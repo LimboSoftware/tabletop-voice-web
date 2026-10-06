@@ -657,6 +657,220 @@ function buildReferenceData(documents) {
   return combined;
 }
 
+const GDC_11E_RAW = "https://raw.githubusercontent.com/game-datacards/datasources/refs/heads/main/11th/gdc/";
+const gdcFactionCache = new Map();
+
+function englishText(value) {
+  if (typeof value === "string") return value;
+  if (value && typeof value === "object") return value.en || Object.values(value).find(item => typeof item === "string") || "";
+  return "";
+}
+
+function getImportedDetachmentRequests() {
+  const requests = [];
+
+  for (const roster of state.rosters) {
+    if (roster.source !== "new-recruit") continue;
+
+    for (const detachment of roster.detachments || []) {
+      requests.push({
+        name:detachment.name,
+        faction:detachment.faction || roster.faction || "",
+        rosterName:roster.name
+      });
+    }
+  }
+
+  return dedupeBy(requests, item => normalize(item.faction + "|" + item.name));
+}
+
+function gdcFactionSlugCandidates(factionName = "") {
+  const parts = String(factionName)
+    .split(/\s+-\s+/)
+    .map(part => part.trim())
+    .filter(Boolean);
+
+  const leaf = parts.at(-1) || String(factionName).trim();
+  const normal = normalize(leaf);
+  const compact = normal.replace(/\s+/g, "");
+
+  const aliases = {
+    "adeptus astartes":"spacemarines",
+    "space marines":"spacemarines",
+    "adeptus custodes":"adeptuscustodes",
+    "adepta sororitas":"adeptasororitas",
+    "sisters of battle":"adeptasororitas",
+    "adeptus mechanicus":"adeptusmechanicus",
+    "astra militarum":"astramilitarum",
+    "imperial guard":"astramilitarum",
+    "chaos space marines":"chaosspacemarines",
+    "genestealer cults":"genestealercults",
+    "leagues of votann":"votann",
+    "tau empire":"tau",
+    "t au empire":"tau",
+    "world eaters":"worldeaters",
+    "thousand sons":"thousandsons",
+    "death guard":"deathguard",
+    "emperors children":"emperorschildren",
+    "emperor s children":"emperorschildren",
+    "grey knights":"greyknights",
+    "imperial knights":"imperialknights",
+    "chaos knights":"chaosknights",
+    "black templars":"blacktemplars",
+    "blood angels":"bloodangels",
+    "dark angels":"darkangels",
+    "space wolves":"spacewolves",
+    "craftworlds":"aeldari",
+    "asuryani":"aeldari"
+  };
+
+  const candidates = [
+    aliases[normal],
+    compact,
+    normalize(String(factionName)).replace(/\s+/g, "")
+  ].filter(Boolean);
+
+  return [...new Set(candidates)];
+}
+
+async function fetchGdcFactionData(factionName, wantedDetachments = []) {
+  const cacheKey = normalize(factionName);
+  const cached = gdcFactionCache.get(cacheKey);
+  if (cached) return cached;
+
+  const wanted = new Set(wantedDetachments.map(name => normalize(name)));
+
+  for (const slug of gdcFactionSlugCandidates(factionName)) {
+    try {
+      const response = await fetch(GDC_11E_RAW + encodeURIComponent(slug) + ".json");
+      if (!response.ok) continue;
+
+      const data = await response.json();
+      const availableNames = new Set([
+        ...(data.detachments || []).map(item => normalize(englishText(item.name))),
+        ...(data.stratagems || []).map(item => normalize(englishText(item.detachment || item.detachment_name)))
+      ].filter(Boolean));
+
+      if (wanted.size && ![...wanted].some(name => availableNames.has(name))) continue;
+
+      gdcFactionCache.set(cacheKey, data);
+      return data;
+    } catch (error) {
+      console.warn("Could not load detachment reference", slug, error);
+    }
+  }
+
+  gdcFactionCache.set(cacheKey, null);
+  return null;
+}
+
+function detachmentStratagemToReference(stratagem, request) {
+  const name = englishText(stratagem.name) || "Stratagem";
+  const when = englishText(stratagem.when);
+  const target = englishText(stratagem.target);
+  const effect = englishText(stratagem.effect);
+  const restrictions = englishText(stratagem.restrictions || stratagem.restriction);
+
+  const text = [
+    when ? "WHEN: " + when : "",
+    target ? "TARGET: " + target : "",
+    effect ? "EFFECT: " + effect : "",
+    restrictions ? "RESTRICTIONS: " + restrictions : ""
+  ].filter(Boolean).join("\n");
+
+  const cost = stratagem.cost != null ? stratagem.cost + "CP" : "";
+  const type = englishText(stratagem.type) || stratagem.type || "";
+  const category = [request.name, cost, type].filter(Boolean).join(" · ");
+
+  return {
+    name,
+    text,
+    category,
+    detachment:request.name,
+    rosterName:request.rosterName,
+    source:"Game Datacards 11e"
+  };
+}
+
+async function ensureDetachmentStratagems() {
+  const requests = getImportedDetachmentRequests();
+  const key = requests
+    .map(item => normalize(item.faction + "|" + item.name))
+    .sort()
+    .join("::");
+
+  if (key === state.detachmentStratagemLoadKey || state.detachmentStratagemLoading) return;
+
+  state.detachmentStratagemLoadKey = key;
+  state.detachmentStratagemLoading = true;
+  state.detachmentStratagems = [];
+
+  if (!requests.length) {
+    state.detachmentStratagemLoading = false;
+    return;
+  }
+
+  const byFaction = new Map();
+  for (const request of requests) {
+    const key = normalize(request.faction);
+    if (!byFaction.has(key)) byFaction.set(key, []);
+    byFaction.get(key).push(request);
+  }
+
+  const collected = [];
+
+  for (const factionRequests of byFaction.values()) {
+    const faction = factionRequests[0]?.faction || "";
+    const data = await fetchGdcFactionData(faction, factionRequests.map(item => item.name));
+    if (!data) continue;
+
+    for (const request of factionRequests) {
+      const detachmentName = normalize(request.name);
+      const detachment = (data.detachments || []).find(item =>
+        normalize(englishText(item.name)) === detachmentName
+      );
+
+      const matches = (data.stratagems || []).filter(stratagem => {
+        const nameMatch = normalize(englishText(stratagem.detachment || stratagem.detachment_name)) === detachmentName;
+        const idMatch = detachment?.id && stratagem.detachment_id === detachment.id;
+        return nameMatch || idMatch;
+      });
+
+      for (const stratagem of matches) {
+        collected.push(detachmentStratagemToReference(stratagem, request));
+      }
+    }
+  }
+
+  state.detachmentStratagems = dedupeBy(
+    collected,
+    item => normalize(item.detachment + "|" + item.name + "|" + item.text)
+  );
+  state.detachmentStratagemLoading = false;
+
+  if (state.currentPage === "strats") {
+    renderStratagems(els.stratSearch?.value || "", {skipLoad:true});
+  }
+}
+
+function renderDetachmentSummary() {
+  const requests = getImportedDetachmentRequests();
+  if (!requests.length) return "";
+
+  return `
+    <div class="detachment-summary">
+      <span class="detachment-summary-label">IMPORTED DETACHMENTS</span>
+      <div class="detachment-summary-chips">
+        ${requests.map(item => `
+          <span class="detachment-summary-chip">
+            <strong>${escapeHtml(item.name)}</strong>
+            <small>${escapeHtml(item.rosterName)}</small>
+          </span>`).join("")}
+      </div>
+      ${state.detachmentStratagemLoading ? '<small class="detachment-loading">Loading detachment stratagems…</small>' : ""}
+    </div>`;
+}
+
 function getCombinedReferenceData() {
   const rules = [...CORE_RULE_QUICKREF];
   const stratagems = [...CORE_STRATAGEM_QUICKREF];
@@ -710,9 +924,23 @@ function renderReferenceCards(items, container, query = "") {
     : '<div class="empty-section">No matching reference found.</div>';
 }
 
-function renderStratagems(query = "") {
+function renderStratagems(query = "", options = {}) {
+  if (!els.stratResults) return;
+
   const data = getCombinedReferenceData();
-  renderReferenceCards(data.stratagems, els.stratResults, query);
+  const combined = dedupeBy(
+    [...state.detachmentStratagems, ...data.stratagems],
+    item => normalize((item.detachment || "") + "|" + item.name + "|" + item.text)
+  );
+
+  const scratch = document.createElement("div");
+  renderReferenceCards(combined, scratch, query);
+
+  els.stratResults.innerHTML =
+    renderDetachmentSummary() +
+    scratch.innerHTML;
+
+  if (!options.skipLoad) ensureDetachmentStratagems();
 }
 
 function renderCoreRules(query = "") {
@@ -3055,6 +3283,8 @@ function clearRosters() {
   state.activeRoster = 0;
   state.selected = null;
   state.referenceData = {rules:[], stratagems:[]};
+  state.detachmentStratagems = [];
+  state.detachmentStratagemLoadKey = "";
   localStorage.removeItem("tv_rosters");
   localStorage.removeItem("tv_activeRoster");
   localStorage.removeItem("tv_active_search_rosters");
