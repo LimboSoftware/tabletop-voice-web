@@ -210,12 +210,12 @@ function bindEvents() {
 
 function showFirstRunIfNeeded() {
   if (!els.firstRunModal) return;
-  const seen = localStorage.getItem("tv_first_run_seen") === "1";
+  const seen = localStorage.getItem("tv_beta_notice_seen_v1") === "1";
   if (!seen) els.firstRunModal.classList.remove("hidden");
 }
 
 function dismissFirstRun() {
-  localStorage.setItem("tv_first_run_seen", "1");
+  localStorage.setItem("tv_beta_notice_seen_v1", "1");
   els.firstRunModal?.classList.add("hidden");
 }
 
@@ -247,7 +247,7 @@ function parseRosterFile(text, fileName) {
   catch { throw new Error("New Recruit JSON export expected."); }
 
   if (!raw?.roster) {
-    throw new Error("This does not look like a New Recruit roster JSON export.");
+    throw new Error("This does not look like a New Recruit list JSON export.");
   }
 
   const root = raw.roster;
@@ -259,13 +259,13 @@ function parseRosterFile(text, fileName) {
     }
   }
 
-  if (!units.length) throw new Error("No units were found in this New Recruit roster.");
+  if (!units.length) throw new Error("No units were found in this New Recruit list.");
 
   const pts = (root.costs || []).find(c => String(c.name).toLowerCase() === "pts")?.value;
   return {
     id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random()),
     name: root.name || fileName.replace(/\.[^.]+$/, ""),
-    faction: (root.forces || [])[0]?.catalogueName || (root.forces || [])[0]?.name || "New Recruit roster",
+    faction: (root.forces || [])[0]?.catalogueName || (root.forces || [])[0]?.name || "New Recruit list",
     source: "new-recruit",
     points: pts ?? null,
     units: dedupeBy(units, u => u.id || u.name),
