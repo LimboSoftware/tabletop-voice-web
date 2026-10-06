@@ -532,7 +532,7 @@ function parseTextRosterFile(text, fileName) {
     points:Number.isFinite(totalPoints) ? totalPoints : null,
     detachments,
     armyRules:[],
-    units:dedupeBy(units, unit => normalize(unit.name + "|" + unit.stats?.[0]?.value)),
+    units,
     referenceData:{rules:[], stratagems:[]},
     importedAt:Date.now()
   };
