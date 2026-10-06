@@ -195,9 +195,12 @@ function parseNewRecruitSelection(selection) {
     unitProfiles.find(p => normalize(p.name) === normalize(selection.name)) ||
     unitProfiles[0];
 
-  const weapons = allProfiles
-    .filter(p => p?.typeName === "Ranged Weapons" || p?.typeName === "Melee Weapons")
-    .map(profileToDisplay);
+  const weapons = mergeWeaponProfiles(
+    collectWeaponProfiles(selection).map(({profile, quantity}) => ({
+      ...profileToDisplay(profile),
+      quantity
+    }))
+  );
 
   const abilityProfiles = allProfiles
     .filter(p => p?.typeName === "Abilities")
@@ -224,7 +227,7 @@ function parseNewRecruitSelection(selection) {
     type: "Unit",
     stats,
     rules: abilities,
-    profiles: dedupeBy(weapons, p => normalize(p.name + "|" + JSON.stringify(p.values))),
+    profiles: weapons,
     searchText: normalize([
       name,
       primaryUnitProfile.name,
@@ -232,6 +235,64 @@ function parseNewRecruitSelection(selection) {
       abilities.map(a => a.name)
     ].flat().join(" "))
   };
+}
+
+function collectWeaponProfiles(node) {
+  const found = [];
+
+  function walk(value, inheritedQuantity = 1) {
+    if (!value || typeof value !== "object") return;
+
+    if (Array.isArray(value)) {
+      value.forEach(item => walk(item, inheritedQuantity));
+      return;
+    }
+
+    const rawNumber = Number(value.number);
+    if (Number.isFinite(rawNumber) && rawNumber <= 0) return;
+
+    const quantity = Number.isFinite(rawNumber) && rawNumber > 0
+      ? rawNumber
+      : inheritedQuantity;
+
+    if (Number.isFinite(Number(value.number)) && Number(value.number) <= 0) return;
+    if (Array.isArray(value.profiles)) {
+      value.profiles.forEach(profile => {
+        if (!profile || typeof profile !== "object") return;
+        if (profile.typeName === "Ranged Weapons" || profile.typeName === "Melee Weapons") {
+          found.push({profile, quantity: Math.max(1, quantity || 1)});
+        }
+      });
+    }
+
+    if (Array.isArray(value.selections)) {
+      value.selections.forEach(child => walk(child, quantity));
+    }
+  }
+
+  walk(node, 1);
+  return found;
+}
+
+function mergeWeaponProfiles(profiles) {
+  const merged = new Map();
+
+  for (const profile of profiles || []) {
+    const key = normalize(
+      (profile.type || "") + "|" +
+      (profile.name || "") + "|" +
+      JSON.stringify(profile.values || [])
+    );
+
+    if (!merged.has(key)) {
+      merged.set(key, {...profile, quantity: Number(profile.quantity) || 1});
+    } else {
+      const existing = merged.get(key);
+      existing.quantity += Number(profile.quantity) || 1;
+    }
+  }
+
+  return [...merged.values()];
 }
 
 function collectProfiles(node) {
@@ -261,6 +322,7 @@ function collectRules(node) {
       value.forEach(walk);
       return;
     }
+    if (Number.isFinite(Number(value.number)) && Number(value.number) <= 0) return;
     for (const rule of value.rules || []) {
       if (!rule || rule.hidden) continue;
       found.push({name: rule.name || "Rule", text: rule.description || ""});
@@ -905,7 +967,15 @@ function renderDetail(unit) {
   const sections = [];
 
   if (unit.profiles?.length) {
-    sections.push(renderWeaponSection(unit.profiles));
+    const rangedWeapons = unit.profiles.filter(profile => profile.type === "Ranged Weapons");
+    const meleeWeapons = unit.profiles.filter(profile => profile.type === "Melee Weapons");
+    const otherWeapons = unit.profiles.filter(profile =>
+      profile.type !== "Ranged Weapons" && profile.type !== "Melee Weapons"
+    );
+
+    if (rangedWeapons.length) sections.push(renderWeaponSection(rangedWeapons, "Ranged weapons"));
+    if (meleeWeapons.length) sections.push(renderWeaponSection(meleeWeapons, "Melee weapons"));
+    if (otherWeapons.length) sections.push(renderWeaponSection(otherWeapons, "Weapons"));
   }
 
   if (unit.rules?.length) {
@@ -1008,7 +1078,7 @@ function renderPhaseControls(rules) {
     </section>`;
 }
 
-function renderWeaponSection(profiles) {
+function renderWeaponSection(profiles, title = "Weapons") {
   const columns = ["Range", "A", "BS/WS", "S", "AP", "D", "Keywords"];
 
   const rows = profiles.map(profile => {
@@ -1026,6 +1096,7 @@ function renderWeaponSection(profiles) {
     return {
       name: profile.name || "Weapon",
       type: profile.type || "",
+      quantity: Number.isFinite(Number(profile.quantity)) ? Math.max(1, Number(profile.quantity)) : null,
       values: [
         get("Range"),
         get("A"),
@@ -1041,7 +1112,7 @@ function renderWeaponSection(profiles) {
   return `
     <section class="detail-section weapon-section">
       <div class="section-heading-row">
-        <h3>Weapons</h3>
+        <h3>${escapeHtml(title)}</h3>
         <span class="section-count">${rows.length}</span>
       </div>
       <div class="weapon-table-wrap">
@@ -1054,13 +1125,15 @@ function renderWeaponSection(profiles) {
           </thead>
           <tbody>
             ${rows.map(row => `
-              <tr>
+              <tr class="weapon-row">
                 <td class="weapon-name">
-                  <strong>${escapeHtml(row.name)}</strong>
-                  ${row.type ? `<small>${escapeHtml(row.type.replace(" Weapons", ""))}</small>` : ""}
+                  <div class="weapon-title-line">
+                    ${row.quantity != null ? `<span class="weapon-quantity">${row.quantity}×</span>` : ""}
+                    <strong>${escapeHtml(row.name)}</strong>
+                  </div>
                 </td>
                 ${row.values.map((value, index) => `
-                  <td class="${index === 6 ? "weapon-keywords" : ""}">
+                  <td data-label="${escapeHtml(columns[index])}" class="${index === 6 ? "weapon-keywords" : ""}">
                     ${escapeHtml(value)}
                   </td>`).join("")}
               </tr>`).join("")}
