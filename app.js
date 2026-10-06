@@ -1780,6 +1780,7 @@ function selectUnit(unit) {
 function selectUnitFromRoster(unit, rosterIndex) {
   if (Number.isInteger(rosterIndex) && rosterIndex >= 0 && rosterIndex < state.rosters.length) {
     state.activeRoster = rosterIndex;
+    state.selectedRosterId = state.rosters[rosterIndex]?.id || null;
   }
 
   switchPage("datasheets", {silent:true});
@@ -1840,7 +1841,6 @@ function renderDetail(unit) {
   }
 
   if (unit.rules?.length) {
-    sections.push(renderPhaseControls(unit.rules));
     sections.push(renderAbilitySection(unit.rules));
   }
 
@@ -1852,8 +1852,13 @@ function renderDetail(unit) {
 const STATUS_OPTIONS = ["Battle-shocked","Once-per-game used"];
 
 function statusKey(unit = state.selected) {
-  const roster = state.rosters[state.activeRoster];
-  return roster && unit ? "tv_status_" + roster.id + "_" + unit.id : null;
+  if (!unit) return null;
+  const roster =
+    state.rosters.find(item => item.id === state.selectedRosterId) ||
+    state.rosters[state.activeRoster] ||
+    state.rosters.find(item => (item.units || []).some(candidate => candidate.id === unit.id));
+
+  return roster ? "tv_status_" + roster.id + "_" + unit.id : null;
 }
 
 function getStatuses(unit = state.selected) {
@@ -1875,7 +1880,7 @@ function toggleStatus(status) {
   if (statuses.has(status)) statuses.delete(status);
   else statuses.add(status);
   localStorage.setItem(key, JSON.stringify([...statuses]));
-  renderDetail(state.selected);
+  updateUnitTopStatuses(state.selected);
 }
 
 function updateUnitTopStatuses(unit = state.selected) {
@@ -1886,58 +1891,14 @@ function updateUnitTopStatuses(unit = state.selected) {
   if (els.battleShockToggle) {
     els.battleShockToggle.classList.toggle("active", battleShocked);
     els.battleShockToggle.setAttribute("aria-pressed", battleShocked ? "true" : "false");
-    els.battleShockToggle.textContent = battleShocked ? "✓ Battle-shocked" : "Battle-shocked";
+    els.battleShockToggle.textContent = "Battle-shocked";
   }
 
   if (els.oncePerGameToggle) {
     els.oncePerGameToggle.classList.toggle("active", onceUsed);
     els.oncePerGameToggle.setAttribute("aria-pressed", onceUsed ? "true" : "false");
-    els.oncePerGameToggle.textContent = onceUsed ? "✓ Once-per-game used" : "Once-per-game used";
+    els.oncePerGameToggle.textContent = "Once-per-game used";
   }
-}
-
-const PHASES = ["All","Command","Movement","Shooting","Charge","Fight"];
-
-function getActivePhase() {
-  return localStorage.getItem("tv_phase_filter") || "All";
-}
-
-function setActivePhase(phase) {
-  localStorage.setItem("tv_phase_filter", PHASES.includes(phase) ? phase : "All");
-  if (state.selected) renderDetail(state.selected);
-}
-
-function inferRulePhase(rule) {
-  const text = normalize((rule?.name || "") + " " + (rule?.text || ""));
-  if (/command phase|command step/.test(text)) return "Command";
-  if (/movement phase|normal move|advance move|fall back|set up on the battlefield|reserves/.test(text)) return "Movement";
-  if (/shooting phase|selected to shoot|ranged attack|shoot/.test(text)) return "Shooting";
-  if (/charge phase|declares a charge|charge move/.test(text)) return "Charge";
-  if (/fight phase|selected to fight|pile in|consolidation|melee attack/.test(text)) return "Fight";
-  return "All";
-}
-
-function renderPhaseControls(rules) {
-  const uniqueRules = (rules || []).filter(rule => !isCoreRule(rule));
-  if (!uniqueRules.length) return "";
-
-  const active = getActivePhase();
-  const counts = Object.fromEntries(PHASES.map(p => [p, 0]));
-  for (const rule of uniqueRules) {
-    counts.All++;
-    const phase = inferRulePhase(rule);
-    if (phase !== "All") counts[phase]++;
-  }
-  return `
-    <section class="detail-section phase-filter-section">
-      <div class="section-heading-row"><h3>Phase filter</h3></div>
-      <div class="phase-filter">
-        ${PHASES.map(phase => `
-          <button type="button" class="phase-button${active === phase ? " active" : ""}" data-phase="${phase}">
-            ${phase}${counts[phase] ? ` <span>${counts[phase]}</span>` : ""}
-          </button>`).join("")}
-      </div>
-    </section>`;
 }
 
 function renderWeaponSection(profiles, title = "Weapons") {
@@ -2055,28 +2016,24 @@ function cleanUniqueRuleText(text = "") {
 }
 
 function renderAbilitySection(rules) {
-  const activePhase = getActivePhase();
   const uniqueRules = (rules || []).filter(rule => !isCoreRule(rule));
   if (!uniqueRules.length) return "";
-  const visibleRules = activePhase === "All"
-    ? uniqueRules
-    : uniqueRules.filter(rule => inferRulePhase(rule) === activePhase);
 
   return `
     <section class="detail-section ability-section">
       <div class="section-heading-row">
         <h3>Unique abilities & rules</h3>
-        <span class="section-count">${visibleRules.length}</span>
+        <span class="section-count">${uniqueRules.length}</span>
       </div>
       <div class="ability-list">
-        ${visibleRules.length ? visibleRules.map(rule => {
+        ${uniqueRules.map(rule => {
           const text = cleanUniqueRuleText(rule.text || "");
           return `
             <article class="ability-card unique-rule-card">
               <h4>${escapeHtml(cleanRuleText(rule.name || "Rule"))}</h4>
               ${text ? `<div class="ability-text unique-rule-text">${formatRuleText(text)}</div>` : ""}
             </article>`;
-        }).join("") : '<div class="empty-section">No unique abilities matched this phase.</div>'}
+        }).join("")}
       </div>
     </section>`;
 }
@@ -2969,15 +2926,8 @@ function handleDatasheetVoiceCommand(q) {
     return true;
   }
 
-  const phaseMatch = q.match(/^(?:show )?(command|movement|shooting|charge|fight) phase$/);
-  if (phaseMatch) {
-    setActivePhase(titleCase(phaseMatch[1]));
-    scrollToDetailSection(".ability-section");
-    return true;
-  }
-
   if (/^(show )?(all abilities|all rules)$/.test(q)) {
-    setActivePhase("All");
+    scrollToDetailSection(".ability-section");
     return true;
   }
 
@@ -3264,6 +3214,7 @@ function backToRosterBrowser() {
   if (!getUnitBrowserSources().length) return;
 
   state.selected = null;
+  state.selectedRosterId = null;
   if (els.searchInput) els.searchInput.value = "";
   els.datasheetResultsShell?.classList.add("hidden");
   renderDetail(null);
@@ -3274,11 +3225,7 @@ function backToRosterBrowser() {
   window.scrollTo({top:0, behavior:"smooth"});
 }
 
-function bindDynamicDetailControls() {
-  document.querySelectorAll("[data-phase]").forEach(button => {
-    button.addEventListener("click", () => setActivePhase(button.dataset.phase));
-  });
-}
+function bindDynamicDetailControls() {}
 
 function toggleFocusMode() {
   document.body.classList.toggle("focus-mode");
