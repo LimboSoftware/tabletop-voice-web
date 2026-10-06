@@ -1234,6 +1234,7 @@ function selectUnitFromRoster(unit, rosterIndex) {
   if (Number.isInteger(rosterIndex) && rosterIndex >= 0 && rosterIndex < state.rosters.length) {
     state.activeRoster = rosterIndex;
   }
+  switchPage("datasheets", {silent:true});
   selectUnit(unit);
   renderActiveArmySelector();
   renderTabs();
@@ -2114,8 +2115,6 @@ function rankVoiceCandidates(alternatives) {
 }
 
 function chooseBestVoiceMatch(input) {
-  if (!state.rosters.length) return;
-
   const alternatives = Array.isArray(input)
     ? input
     : [{transcript:String(input || ""), confidence:0}];
@@ -2125,6 +2124,12 @@ function chooseBestVoiceMatch(input) {
 
   if (q && handleVoiceCommand(q)) {
     els.voiceHint.textContent = primary;
+    return;
+  }
+
+  if (!state.rosters.length) {
+    els.voiceHint.textContent = "No roster data loaded";
+    toast("Load or import data first for datasheet lookup.");
     return;
   }
 
@@ -2216,31 +2221,118 @@ function closeVoiceShortlist() {
 }
 
 function handleVoiceCommand(q) {
+  if (/^(?:open |show |go to )?(?:data|armies|army data|import)$/.test(q)) {
+    switchPage("data");
+    return true;
+  }
+  if (/^(?:open |show |go to )?(?:datasheets?|data sheets?|units?|unit lookup)$/.test(q)) {
+    switchPage("datasheets");
+    return true;
+  }
+  if (/^(?:open |show |go to )?(?:score|scoring|scores)$/.test(q)) {
+    switchPage("score");
+    return true;
+  }
+  if (/^(?:open |show |go to )?(?:dice|dice roller)$/.test(q)) {
+    switchPage("dice");
+    return true;
+  }
+  if (/^(?:open |show |go to )?(?:stratagems?|strats?)$/.test(q)) {
+    switchPage("strats");
+    return true;
+  }
+  if (/^(?:open |show |go to )?(?:core rules?|rules lookup|rule lookup)$/.test(q)) {
+    switchPage("rules");
+    return true;
+  }
+  if (/^(?:open |show |go to )?(?:game setup|setup)$/.test(q)) {
+    switchPage("setup");
+    return true;
+  }
+
+  const diceMatch = q.match(/^roll (\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty)(?: d6| dice| die)?$/);
+  if (diceMatch) {
+    rollDice(parseSpokenNumber(diceMatch[1]) || 1);
+    return true;
+  }
+
+  const myScoreMatch = q.match(/^(?:add |score )?(\d+) (?:points? )?(?:for me|to my score|my score)$/);
+  if (myScoreMatch) {
+    adjustScore("my", Number(myScoreMatch[1]));
+    switchPage("score");
+    return true;
+  }
+
+  const oppScoreMatch = q.match(/^(?:add |score )?(\d+) (?:points? )?(?:for opponent|to opponent score|opponent score)$/);
+  if (oppScoreMatch) {
+    adjustScore("opp", Number(oppScoreMatch[1]));
+    switchPage("score");
+    return true;
+  }
+
+  const setMyScore = q.match(/^set my score (?:to )?(\d+)$/);
+  if (setMyScore) {
+    localStorage.setItem("tv_match_score_my", String(Number(setMyScore[1])));
+    renderMatchTools();
+    switchPage("score");
+    return true;
+  }
+
+  const setOppScore = q.match(/^set opponent score (?:to )?(\d+)$/);
+  if (setOppScore) {
+    localStorage.setItem("tv_match_score_opp", String(Number(setOppScore[1])));
+    renderMatchTools();
+    switchPage("score");
+    return true;
+  }
+
+  const stratLookup = q.match(/^(?:find |search )?(?:stratagem|strat) (.+)$/);
+  if (stratLookup) {
+    switchPage("strats", {silent:true});
+    if (els.stratSearch) els.stratSearch.value = stratLookup[1];
+    renderStratagems(stratLookup[1]);
+    return true;
+  }
+
+  const ruleLookup = q.match(/^(?:find |search )?(?:rule|core rule) (.+)$/);
+  if (ruleLookup) {
+    switchPage("rules", {silent:true});
+    if (els.coreRuleSearch) els.coreRuleSearch.value = ruleLookup[1];
+    renderCoreRules(ruleLookup[1]);
+    return true;
+  }
+
   if (!state.selected && !/next|previous|back/.test(q)) return false;
 
   if (/^(show )?(weapons?|guns?|melee|ranged)$/.test(q)) {
+    switchPage("datasheets", {silent:true});
     scrollToDetailSection(".weapon-section");
     return true;
   }
   const phaseMatch = q.match(/^(?:show )?(command|movement|shooting|charge|fight) phase$/);
   if (phaseMatch) {
+    switchPage("datasheets", {silent:true});
     setActivePhase(titleCase(phaseMatch[1]));
     scrollToDetailSection(".ability-section");
     return true;
   }
   if (/^(show )?(all abilities|all rules)$/.test(q)) {
+    switchPage("datasheets", {silent:true});
     setActivePhase("All");
     return true;
   }
   if (/^(show )?(abilities|ability|rules?)$/.test(q)) {
+    switchPage("datasheets", {silent:true});
     scrollToDetailSection(".ability-section");
     return true;
   }
   if (/^(next|next unit)$/.test(q)) {
+    switchPage("datasheets", {silent:true});
     moveSelection(1);
     return true;
   }
   if (/^(previous|previous unit|back)$/.test(q)) {
+    switchPage("datasheets", {silent:true});
     moveSelection(-1);
     return true;
   }
@@ -2255,19 +2347,23 @@ function handleVoiceCommand(q) {
   if (/^(your turn|my turn)$/.test(q)) {
     localStorage.setItem("tv_match_turn", "your");
     renderMatchTools();
+    switchPage("score");
     return true;
   }
   if (/^(opponent turn|their turn)$/.test(q)) {
     localStorage.setItem("tv_match_turn", "opponent");
     renderMatchTools();
+    switchPage("score");
     return true;
   }
   if (/^(next round|round up)$/.test(q)) {
     adjustRound(1);
+    switchPage("score");
     return true;
   }
   if (/^(previous round|round down)$/.test(q)) {
     adjustRound(-1);
+    switchPage("score");
     return true;
   }
 
@@ -2275,6 +2371,7 @@ function handleVoiceCommand(q) {
   if (cpMatch) {
     localStorage.setItem("tv_match_cp", String(Number(cpMatch[1])));
     renderMatchTools();
+    switchPage("score");
     return true;
   }
 
