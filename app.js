@@ -231,10 +231,11 @@ function dismissFirstRun() {
 async function handleFiles(event) {
   const files = [...event.target.files];
   if (!files.length) return;
+
   for (const file of files) {
     try {
-      const text = await file.text();
-      const roster = parseRosterFile(text, file.name);
+      const roster = await parseRosterUpload(file);
+
       const existingIndex = state.rosters.findIndex(existing =>
         existing.source === "new-recruit" &&
         normalize(existing.name) === normalize(roster.name) &&
@@ -257,10 +258,314 @@ async function handleFiles(event) {
       toast(`Imported ${roster.name}`);
     } catch (err) {
       console.error(err);
-      toast(`Could not import ${file.name}`);
+      toast(err?.message ? `Could not import ${file.name}: ${err.message}` : `Could not import ${file.name}`);
     }
   }
+
   els.fileInput.value = "";
+}
+
+function fileExtension(name = "") {
+  const match = String(name).toLowerCase().match(/\.([^.]+)$/);
+  return match ? match[1] : "";
+}
+
+async function parseRosterUpload(file) {
+  const ext = fileExtension(file.name);
+
+  if (ext === "json") {
+    return parseRosterFile(await file.text(), file.name);
+  }
+
+  if (ext === "ros") {
+    return parseRosRosterFile(await file.text(), file.name);
+  }
+
+  if (ext === "rosz") {
+    if (typeof fflate === "undefined") {
+      throw new Error("ROSZ support could not load. Check your connection and refresh.");
+    }
+
+    const archive = fflate.unzipSync(new Uint8Array(await file.arrayBuffer()));
+    const entryName = Object.keys(archive).find(name => /\.ros$/i.test(name));
+    if (!entryName) throw new Error("This ROSZ file does not contain a .ros roster.");
+
+    return parseRosRosterFile(fflate.strFromU8(archive[entryName]), file.name);
+  }
+
+  if (ext === "txt") {
+    return parseTextRosterFile(await file.text(), file.name);
+  }
+
+  throw new Error("Supported formats are JSON, ROS, ROSZ and TXT.");
+}
+
+function xmlDirectChildren(element, localName) {
+  return [...(element?.children || [])].filter(child => child.localName === localName);
+}
+
+function xmlContainerChildren(element, containerName, childName) {
+  const container = xmlDirectChildren(element, containerName)[0];
+  return container ? xmlDirectChildren(container, childName) : [];
+}
+
+function xmlAttributes(element) {
+  const out = {};
+  for (const attr of element?.attributes || []) out[attr.name] = attr.value;
+  return out;
+}
+
+function xmlCostToObject(element) {
+  return {
+    ...xmlAttributes(element),
+    name:element.getAttribute("name") || "",
+    value:element.getAttribute("value") || "0"
+  };
+}
+
+function xmlCategoryToObject(element) {
+  return {
+    ...xmlAttributes(element),
+    name:element.getAttribute("name") || "",
+    primary:element.getAttribute("primary") === "true"
+  };
+}
+
+function xmlRuleToObject(element) {
+  const description = xmlDirectChildren(element, "description")[0];
+  return {
+    ...xmlAttributes(element),
+    name:element.getAttribute("name") || "",
+    hidden:element.getAttribute("hidden") === "true",
+    description:description?.textContent || ""
+  };
+}
+
+function xmlProfileToObject(element) {
+  return {
+    ...xmlAttributes(element),
+    name:element.getAttribute("name") || "",
+    typeName:element.getAttribute("typeName") || "",
+    hidden:element.getAttribute("hidden") === "true",
+    characteristics:xmlContainerChildren(element, "characteristics", "characteristic").map(characteristic => ({
+      ...xmlAttributes(characteristic),
+      name:characteristic.getAttribute("name") || "",
+      $text:characteristic.textContent || ""
+    }))
+  };
+}
+
+function xmlSelectionToObject(element) {
+  const numberRaw = element.getAttribute("number");
+  return {
+    ...xmlAttributes(element),
+    id:element.getAttribute("id") || "",
+    name:element.getAttribute("name") || "",
+    type:element.getAttribute("type") || "",
+    group:element.getAttribute("group") || "",
+    number:numberRaw == null || numberRaw === "" ? 1 : Number(numberRaw),
+    selections:xmlContainerChildren(element, "selections", "selection").map(xmlSelectionToObject),
+    profiles:xmlContainerChildren(element, "profiles", "profile").map(xmlProfileToObject),
+    rules:xmlContainerChildren(element, "rules", "rule").map(xmlRuleToObject),
+    costs:xmlContainerChildren(element, "costs", "cost").map(xmlCostToObject),
+    categories:xmlContainerChildren(element, "categories", "category").map(xmlCategoryToObject)
+  };
+}
+
+function xmlForceToObject(element) {
+  return {
+    ...xmlAttributes(element),
+    id:element.getAttribute("id") || "",
+    name:element.getAttribute("name") || "",
+    catalogueName:element.getAttribute("catalogueName") || element.getAttribute("name") || "",
+    selections:xmlContainerChildren(element, "selections", "selection").map(xmlSelectionToObject),
+    rules:xmlContainerChildren(element, "rules", "rule").map(xmlRuleToObject),
+    costs:xmlContainerChildren(element, "costs", "cost").map(xmlCostToObject),
+    categories:xmlContainerChildren(element, "categories", "category").map(xmlCategoryToObject)
+  };
+}
+
+function parseRosRosterFile(text, fileName) {
+  const doc = new DOMParser().parseFromString(String(text || ""), "application/xml");
+  const parseError = doc.querySelector("parsererror");
+  if (parseError) throw new Error("The ROS file could not be read as XML.");
+
+  const rosterElement = doc.documentElement?.localName === "roster"
+    ? doc.documentElement
+    : doc.querySelector("roster");
+
+  if (!rosterElement) throw new Error("This does not look like a New Recruit ROS export.");
+
+  const root = {
+    ...xmlAttributes(rosterElement),
+    name:rosterElement.getAttribute("name") || fileName.replace(/\.[^.]+$/, ""),
+    costs:xmlContainerChildren(rosterElement, "costs", "cost").map(xmlCostToObject),
+    forces:xmlContainerChildren(rosterElement, "forces", "force").map(xmlForceToObject)
+  };
+
+  return buildRosterFromNewRecruitRoot(root, fileName, "ros");
+}
+
+function parseTextRosterFile(text, fileName) {
+  const rawLines = String(text || "").replace(/\r/g, "").split("\n");
+  const lines = rawLines.map(line => line.replace(/\s+$/g, ""));
+  const firstNonEmpty = lines.find(line => line.trim()) || "";
+
+  const rosterMatch = firstNonEmpty.match(/^(.+?)\s+\(([\d,]+)\s+Points?\)$/i);
+  if (!rosterMatch) throw new Error("This does not look like a New Recruit TXT export.");
+
+  const rosterName = rosterMatch[1].trim();
+  const totalPoints = Number(rosterMatch[2].replace(/,/g, ""));
+
+  const firstSectionIndex = lines.findIndex(line => /^[A-Z][A-Z0-9 /&'()-]+$/.test(line.trim()) && line.trim() === line.trim().toUpperCase());
+  const headerLines = lines
+    .slice(1, firstSectionIndex > 0 ? firstSectionIndex : Math.min(lines.length, 12))
+    .map(line => line.trim())
+    .filter(Boolean);
+
+  const detachmentLineIndex = headerLines.findIndex(line => /\(\d+\s+Detachment Points?\)$/i.test(line));
+  const detachmentLine = detachmentLineIndex >= 0 ? headerLines[detachmentLineIndex] : "";
+  const faction =
+    (detachmentLineIndex > 0 ? headerLines[detachmentLineIndex - 1] : "") ||
+    headerLines[1] ||
+    headerLines[0] ||
+    "New Recruit list";
+
+  const detachmentText = detachmentLine
+    .replace(/\s+\(\d+\s+Detachment Points?\)$/i, "")
+    .trim();
+
+  const detachments = detachmentText
+    ? detachmentText.split(/\s+and\s+/i).map(name => ({name:name.trim(), faction})).filter(item => item.name)
+    : [];
+
+  const sectionCategoryMap = {
+    "CHARACTERS":["Character"],
+    "BATTLELINE":["Battleline"],
+    "DEDICATED TRANSPORTS":["Dedicated Transport"],
+    "TRANSPORTS":["Dedicated Transport"],
+    "INFANTRY":["Infantry"],
+    "VEHICLES":["Vehicle"],
+    "MONSTERS":["Monster"],
+    "FORTIFICATIONS":["Fortification"]
+  };
+
+  const units = [];
+  let currentSection = "";
+  let currentUnit = null;
+
+  const flushUnit = () => {
+    if (!currentUnit) return;
+    currentUnit.categories = dedupeBy(currentUnit.categories || [], value => normalize(value));
+    currentUnit.searchText = normalize([
+      currentUnit.name,
+      ...(currentUnit.textLoadout || [])
+    ].join(" "));
+    units.push(currentUnit);
+    currentUnit = null;
+  };
+
+  for (const originalLine of lines) {
+    const trimmed = originalLine.trim();
+    if (!trimmed) continue;
+
+    if (/^[A-Z][A-Z0-9 /&'()-]+$/.test(trimmed) && trimmed === trimmed.toUpperCase()) {
+      flushUnit();
+      currentSection = trimmed;
+      continue;
+    }
+
+    if (/^Attached unit\s+\d+$/i.test(trimmed)) {
+      flushUnit();
+      continue;
+    }
+
+    const unitMatch = originalLine.match(/^([^\s•◦].*?)\s+\(([\d,]+)\s+Points?\)$/i);
+    if (unitMatch) {
+      flushUnit();
+
+      const points = Number(unitMatch[2].replace(/,/g, ""));
+      const categories = [...(sectionCategoryMap[currentSection] || [])];
+
+      currentUnit = {
+        id:"txt-" + normalize(unitMatch[1]).replace(/\s+/g, "-") + "-" + units.length,
+        name:unitMatch[1].trim(),
+        type:"Unit",
+        categories,
+        stats:[{label:"Pts", value:String(points)}],
+        rules:[],
+        profiles:[],
+        textLoadout:[],
+        importFormat:"txt",
+        limitedData:true,
+        searchText:""
+      };
+      continue;
+    }
+
+    if (!currentUnit) continue;
+
+    const attachedMatch = trimmed.match(/^•\s*Attached as:\s*([^()]+?)(?:\s*\(([^)]+)\))?$/i);
+    if (attachedMatch) {
+      const role = attachedMatch[2] || attachedMatch[1];
+      if (role) currentUnit.categories.push(role.trim());
+      currentUnit.textLoadout.push(trimmed.replace(/^•\s*/, ""));
+      continue;
+    }
+
+    if (/^[•◦]/.test(trimmed)) {
+      currentUnit.textLoadout.push(trimmed.replace(/^[•◦]\s*/, ""));
+    }
+  }
+
+  flushUnit();
+
+  if (!units.length) throw new Error("No units were found in this TXT export.");
+
+  return {
+    id:crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random()),
+    name:rosterName || fileName.replace(/\.[^.]+$/, ""),
+    faction,
+    source:"new-recruit",
+    importFormat:"txt",
+    detachmentParserVersion:2,
+    points:Number.isFinite(totalPoints) ? totalPoints : null,
+    detachments,
+    armyRules:[],
+    units:dedupeBy(units, unit => normalize(unit.name + "|" + unit.stats?.[0]?.value)),
+    referenceData:{rules:[], stratagems:[]},
+    importedAt:Date.now()
+  };
+}
+
+function buildRosterFromNewRecruitRoot(root, fileName, importFormat = "json") {
+  const units = [];
+
+  for (const force of root.forces || []) {
+    for (const selection of force.selections || []) {
+      const unit = parseNewRecruitSelection(selection);
+      if (unit) units.push(unit);
+    }
+  }
+
+  if (!units.length) throw new Error("No units were found in this New Recruit list.");
+
+  const pts = (root.costs || []).find(c => String(c.name).toLowerCase() === "pts")?.value;
+
+  return {
+    id:crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random()),
+    name:root.name || fileName.replace(/\.[^.]+$/, ""),
+    faction:(root.forces || [])[0]?.catalogueName || (root.forces || [])[0]?.name || "New Recruit list",
+    source:"new-recruit",
+    importFormat,
+    detachmentParserVersion:2,
+    points:pts ?? null,
+    detachments:extractSelectedDetachments(root),
+    armyRules:extractArmyRules(root),
+    units:dedupeBy(units, u => u.id || u.name),
+    referenceData:extractReferenceData(root, fileName),
+    importedAt:Date.now()
+  };
 }
 
 function extractSelectedDetachments(root) {
@@ -337,38 +642,17 @@ function extractArmyRules(root) {
 
 function parseRosterFile(text, fileName) {
   let raw;
-  try { raw = JSON.parse(text); }
-  catch { throw new Error("New Recruit JSON export expected."); }
+  try {
+    raw = JSON.parse(text);
+  } catch {
+    throw new Error("This JSON file could not be read.");
+  }
 
   if (!raw?.roster) {
-    throw new Error("This does not look like a New Recruit list JSON export.");
+    throw new Error("This does not look like a New Recruit JSON export.");
   }
 
-  const root = raw.roster;
-  const units = [];
-  for (const force of root.forces || []) {
-    for (const selection of force.selections || []) {
-      const unit = parseNewRecruitSelection(selection);
-      if (unit) units.push(unit);
-    }
-  }
-
-  if (!units.length) throw new Error("No units were found in this New Recruit list.");
-
-  const pts = (root.costs || []).find(c => String(c.name).toLowerCase() === "pts")?.value;
-  return {
-    id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random()),
-    name: root.name || fileName.replace(/\.[^.]+$/, ""),
-    faction: (root.forces || [])[0]?.catalogueName || (root.forces || [])[0]?.name || "New Recruit list",
-    source: "new-recruit",
-    detachmentParserVersion: 2,
-    points: pts ?? null,
-    detachments: extractSelectedDetachments(root),
-    armyRules: extractArmyRules(root),
-    units: dedupeBy(units, u => u.id || u.name),
-    referenceData: extractReferenceData(root, fileName),
-    importedAt: Date.now()
-  };
+  return buildRosterFromNewRecruitRoot(raw.roster, fileName, "json");
 }
 
 function collectSelectionCategories(node) {
