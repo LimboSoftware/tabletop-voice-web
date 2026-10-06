@@ -57,7 +57,37 @@ function randomSecret() {
   return Array.from(bytes, b => b.toString(16).padStart(2, "0")).join("");
 }
 
-function parseRosterSummary(text, fileName) {
+function fileExtension(name = "") {
+  const match = String(name).toLowerCase().match(/\.([^.]+)$/);
+  return match ? match[1] : "";
+}
+
+function mimeForFormat(format) {
+  return {
+    json:"application/json",
+    ros:"application/xml",
+    rosz:"application/zip",
+    txt:"text/plain"
+  }[format] || "application/octet-stream";
+}
+
+function bytesToBase64(bytes) {
+  let binary = "";
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
+  }
+  return btoa(binary);
+}
+
+function base64ToBytes(value) {
+  const binary = atob(value);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes;
+}
+
+function parseJsonSummary(text, fileName) {
   let raw;
   try {
     raw = JSON.parse(text);
@@ -74,30 +104,117 @@ function parseRosterSummary(text, fileName) {
   const faction = (roster.forces || [])[0]?.catalogueName || (roster.forces || [])[0]?.name || "";
 
   return {
-    rosterName: roster.name || fileName.replace(/\.[^.]+$/, ""),
+    rosterName:roster.name || fileName.replace(/\.[^.]+$/, ""),
     faction,
-    points: pts ?? null
+    points:pts ?? null
+  };
+}
+
+function parseRosSummary(text, fileName) {
+  const doc = new DOMParser().parseFromString(String(text || ""), "application/xml");
+  if (doc.querySelector("parsererror")) throw new Error(fileName + " could not be read as ROS XML.");
+
+  const roster = doc.documentElement?.localName === "roster"
+    ? doc.documentElement
+    : doc.querySelector("roster");
+
+  if (!roster) throw new Error(fileName + " does not look like a New Recruit ROS export.");
+
+  const pts = [...roster.querySelectorAll(":scope > costs > cost")]
+    .find(cost => String(cost.getAttribute("name") || "").toLowerCase() === "pts")
+    ?.getAttribute("value");
+
+  const force = roster.querySelector(":scope > forces > force");
+
+  return {
+    rosterName:roster.getAttribute("name") || fileName.replace(/\.[^.]+$/, ""),
+    faction:force?.getAttribute("catalogueName") || force?.getAttribute("name") || "",
+    points:pts ?? null
+  };
+}
+
+function parseTxtSummary(text, fileName) {
+  const lines = String(text || "").replace(/\r/g, "").split("\n").map(line => line.trim());
+  const first = lines.find(Boolean) || "";
+  const match = first.match(/^(.+?)\s+\(([\d,]+)\s+Points?\)$/i);
+  if (!match) throw new Error(fileName + " does not look like a New Recruit TXT export.");
+
+  const content = lines.filter(Boolean);
+  const detachmentIndex = content.findIndex(line => /\(\d+\s+Detachment Points?\)$/i.test(line));
+  const faction =
+    (detachmentIndex > 0 ? content[detachmentIndex - 1] : "") ||
+    content[2] ||
+    content[1] ||
+    "";
+
+  return {
+    rosterName:match[1].trim(),
+    faction,
+    points:Number(match[2].replace(/,/g, ""))
+  };
+}
+
+async function readTransferFile(file) {
+  const format = fileExtension(file.name);
+  if (!["json","ros","rosz","txt"].includes(format)) {
+    throw new Error(file.name + " is not a supported New Recruit export.");
+  }
+
+  if (format === "rosz") {
+    if (typeof fflate === "undefined") {
+      throw new Error("ROSZ support could not load. Check your connection and refresh.");
+    }
+
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    const archive = fflate.unzipSync(bytes);
+    const entryName = Object.keys(archive).find(name => /\.ros$/i.test(name));
+    if (!entryName) throw new Error(file.name + " does not contain a .ros roster.");
+
+    const rosText = fflate.strFromU8(archive[entryName]);
+    const summary = parseRosSummary(rosText, file.name);
+
+    return {
+      name:file.name,
+      payload:bytesToBase64(bytes),
+      encoding:"base64",
+      mime:mimeForFormat(format),
+      format,
+      size:file.size,
+      ...summary
+    };
+  }
+
+  const text = await file.text();
+  const summary =
+    format === "json" ? parseJsonSummary(text, file.name) :
+    format === "ros" ? parseRosSummary(text, file.name) :
+    parseTxtSummary(text, file.name);
+
+  return {
+    name:file.name,
+    payload:text,
+    encoding:"text",
+    mime:mimeForFormat(format),
+    format,
+    size:file.size,
+    ...summary
   };
 }
 
 async function addFiles(fileList) {
-  const incoming = [...fileList].filter(file => file.name.toLowerCase().endsWith(".json"));
+  const incoming = [...fileList].filter(file =>
+    ["json","ros","rosz","txt"].includes(fileExtension(file.name))
+  );
+
   if (!incoming.length) {
-    toast("Choose New Recruit .json files.");
+    toast("Choose New Recruit JSON, ROS, ROSZ or TXT files.");
     return;
   }
 
   const parsed = [];
   for (const file of incoming) {
     try {
-      const text = await file.text();
-      const summary = parseRosterSummary(text, file.name);
-      parsed.push({
-        name: file.name,
-        text,
-        size: file.size,
-        ...summary
-      });
+      parsed.push(await readTransferFile(file));
     } catch (error) {
       toast(error.message);
     }
@@ -128,7 +245,7 @@ function renderSelectedFiles() {
           <strong>${escapeHtml(file.rosterName)}</strong>
           <small>${escapeHtml(meta || file.name)}</small>
         </div>
-        <span class="file-badge">JSON</span>
+        <span class="file-badge">${escapeHtml(String(file.format || "").toUpperCase())}</span>
       </div>`;
   }).join("");
 }
