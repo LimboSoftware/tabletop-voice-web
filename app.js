@@ -3,7 +3,7 @@ const state = {
   activeRoster: 0,
   selected: null,
   mode: localStorage.getItem("tv_mode") || "mobile",
-  currentPage: localStorage.getItem("tv_page") || "setup",
+  currentPage: "setup",
   listening: false,
   recognition: null,
   referenceData: {rules:[], stratagems:[]},
@@ -884,18 +884,6 @@ function normalize(value) {
   return String(value || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 }
 
-function getPageElement(page) {
-  return {
-    data: els.welcome,
-    datasheets: els.pageDatasheets,
-    score: els.pageScore,
-    dice: els.pageDice,
-    strats: els.pageStrats,
-    rules: els.pageRules,
-    setup: els.pageSetup
-  }[page] || els.welcome;
-}
-
 function switchPage(page, options = {}) {
   const valid = ["setup","datasheets","score","dice","strats","rules","guide"];
   if (!valid.includes(page)) page = "setup";
@@ -929,7 +917,8 @@ function switchPage(page, options = {}) {
 }
 
 function showApp() {
-  els.voiceDock?.classList.remove("hidden");
+  const voiceEnabled = ["datasheets","score","dice","strats","rules"].includes(state.currentPage);
+  els.voiceDock?.classList.toggle("hidden", !voiceEnabled);
 }
 
 function hideApp() {
