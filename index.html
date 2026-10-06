@@ -64,9 +64,9 @@
           <section class="tool-card setup-import-card">
             <span class="section-label">NEW RECRUIT LISTS</span>
             <h2>Import your lists</h2>
-            <p>Import multiple New Recruit JSON exports for the armies in your game.</p>
+            <p>Import multiple New Recruit JSON, ROS, ROSZ or TXT exports for the armies in your game.</p>
             <button id="importButton" class="primary-button large setup-main-action" type="button">Import New Recruit lists</button>
-            <input id="fileInput" type="file" multiple accept=".json,.txt,application/json,text/plain" hidden />
+            <input id="fileInput" type="file" multiple accept=".json,.ros,.rosz,.txt,application/json,text/plain,application/xml,text/xml,application/zip" hidden />
             <div id="dataRosterSummary" class="data-roster-summary">No New Recruit lists loaded yet.</div>
           </section>
 
@@ -368,6 +368,7 @@
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
   </div>
 
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/fflate/0.8.2/fflate.min.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
