@@ -3653,3 +3653,341 @@ body.focus-mode .detail-panel {
     font-size: .62rem;
   }
 }
+
+
+/* CP in Units browser header */
+.roster-browser-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.unit-browser-cp {
+  flex: 0 0 auto;
+  display: grid;
+  grid-template-columns: auto 30px 34px 30px;
+  align-items: center;
+  gap: 5px;
+  margin-top: 2px;
+  padding: 6px 7px;
+  border: 1px solid #2d3b4d;
+  border-radius: 11px;
+  background: #101720;
+}
+
+.unit-browser-cp > span {
+  color: #8798aa;
+  font-size: .62rem;
+  font-weight: 900;
+  letter-spacing: .08em;
+}
+
+.unit-browser-cp button {
+  width: 30px;
+  height: 30px;
+  border: 1px solid #304054;
+  border-radius: 8px;
+  background: #17202b;
+  color: #edf3f8;
+  padding: 0;
+  font-weight: 900;
+}
+
+.unit-browser-cp strong {
+  text-align: center;
+  font-size: 1.05rem;
+}
+
+.score-turn-row {
+  margin-top: 12px;
+}
+
+/* Collapsed army-rule / stratagem datasheets */
+.browser-reference-unit-group {
+  padding: 0;
+  overflow: hidden;
+}
+
+.browser-reference-unit-group > summary {
+  list-style: none;
+}
+
+.browser-reference-unit-group > summary::-webkit-details-marker {
+  display: none;
+}
+
+.browser-reference-section-summary {
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 0 12px;
+  cursor: pointer;
+  font-size: .86rem;
+  font-weight: 850;
+}
+
+.browser-reference-section-summary::after {
+  content: "⌄";
+  margin-left: 8px;
+  color: #7f91a4;
+  transition: transform .15s ease;
+}
+
+.browser-reference-unit-group[open] > .browser-reference-section-summary::after {
+  transform: rotate(180deg);
+}
+
+.browser-reference-section-summary > strong {
+  min-width: 24px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  margin-left: auto;
+  border: 1px solid #304054;
+  border-radius: 999px;
+  color: #8fa0b3;
+  font-size: .62rem;
+}
+
+.browser-reference-section-body {
+  padding: 0 9px 9px;
+}
+
+.strat-phase-tabs {
+  display: flex;
+  gap: 5px;
+  overflow-x: auto;
+  padding: 2px 0 8px;
+  scrollbar-width: none;
+}
+
+.strat-phase-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.strat-phase-tabs button {
+  flex: 0 0 auto;
+  min-height: 31px;
+  border: 1px solid #304054;
+  border-radius: 999px;
+  background: #141c26;
+  color: #90a0b2;
+  padding: 0 10px;
+  font-size: .64rem;
+  font-weight: 850;
+}
+
+.strat-phase-tabs button.active {
+  border-color: #3b7187;
+  background: rgba(56,189,248,.10);
+  color: var(--accent);
+}
+
+.phase-hidden {
+  display: none !important;
+}
+
+.browser-inline-rule-details {
+  border: 1px solid #293444;
+  border-radius: 11px;
+  background: #131a23;
+  overflow: hidden;
+}
+
+.browser-inline-rule-details > summary {
+  list-style: none;
+}
+
+.browser-inline-rule-details > summary::-webkit-details-marker {
+  display: none;
+}
+
+.browser-inline-rule-summary {
+  min-height: 45px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  cursor: pointer;
+}
+
+.browser-inline-rule-title {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.browser-inline-rule-title strong {
+  color: #f1f5f8;
+  font-size: .82rem;
+  line-height: 1.2;
+}
+
+.browser-inline-rule-title small {
+  color: #8394a7;
+  font-size: .59rem;
+}
+
+.browser-inline-rule-open {
+  margin-left: auto;
+  color: #8293a6;
+  font-size: .9rem;
+  transition: transform .15s ease;
+}
+
+.browser-inline-rule-details[open] .browser-inline-rule-open {
+  transform: rotate(45deg);
+}
+
+.browser-inline-rule-details .browser-inline-rule {
+  margin: 0;
+  border: 0;
+  border-top: 1px solid #293444;
+  border-radius: 0;
+  background: #101720;
+}
+
+.reference-detachment-heading {
+  margin: 8px 2px 1px;
+}
+
+/* Weapon keywords now live below the stat row */
+.compact-weapon-table th:nth-child(1),
+.compact-weapon-table td:nth-child(1) { width: 39% !important; }
+.compact-weapon-table th:nth-child(2),
+.compact-weapon-table td:nth-child(2) { width: 12% !important; }
+.compact-weapon-table th:nth-child(3),
+.compact-weapon-table td:nth-child(3) { width: 9% !important; }
+.compact-weapon-table th:nth-child(4),
+.compact-weapon-table td:nth-child(4) { width: 12% !important; }
+.compact-weapon-table th:nth-child(5),
+.compact-weapon-table td:nth-child(5) { width: 9% !important; }
+.compact-weapon-table th:nth-child(6),
+.compact-weapon-table td:nth-child(6) { width: 9% !important; }
+.compact-weapon-table th:nth-child(7),
+.compact-weapon-table td:nth-child(7) { width: 10% !important; }
+
+.compact-weapon-table .weapon-stat-row > td {
+  padding-top: 14px !important;
+  padding-bottom: 10px !important;
+}
+
+.compact-weapon-table .weapon-number,
+.compact-weapon-table .weapon-range-number {
+  font-size: 1.48rem !important;
+  font-weight: 900 !important;
+  line-height: 1 !important;
+}
+
+.compact-weapon-table .weapon-range-text {
+  font-size: .86rem !important;
+  font-weight: 600 !important;
+}
+
+.weapon-keyword-row td {
+  width: auto !important;
+  padding: 6px 12px 10px !important;
+  border-bottom: 1px solid #293444;
+  background: #101720;
+  text-align: left !important;
+}
+
+.weapon-keyword-row td > span {
+  margin-right: 8px;
+  color: #708196;
+  font-size: .55rem;
+  font-weight: 900;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+}
+
+.weapon-keyword-row td > strong {
+  color: #aebdca;
+  font-size: .72rem;
+  font-weight: 550;
+}
+
+@media (max-width: 760px) {
+  .roster-browser-heading {
+    align-items: flex-start;
+  }
+
+  .unit-browser-cp {
+    grid-template-columns: auto 28px 30px 28px;
+    gap: 3px;
+    padding: 4px 5px;
+  }
+
+  .unit-browser-cp button {
+    width: 28px;
+    height: 28px;
+  }
+
+  .unit-browser-cp strong {
+    font-size: .98rem;
+  }
+
+  .browser-reference-section-summary {
+    min-height: 43px;
+    padding: 0 9px;
+    font-size: .8rem;
+  }
+
+  .browser-reference-section-body {
+    padding: 0 7px 7px;
+  }
+
+  .strat-phase-tabs {
+    gap: 4px;
+    padding-bottom: 6px;
+  }
+
+  .strat-phase-tabs button {
+    min-height: 29px;
+    padding: 0 8px;
+    font-size: .59rem;
+  }
+
+  .browser-inline-rule-summary {
+    min-height: 42px;
+    padding: 7px 8px;
+  }
+
+  .browser-inline-rule-title strong {
+    font-size: .78rem;
+  }
+
+  .browser-inline-rule-title small {
+    font-size: .55rem;
+  }
+
+  .compact-weapon-table .weapon-stat-row > td {
+    padding-top: 10px !important;
+    padding-bottom: 8px !important;
+  }
+
+  .compact-weapon-table .weapon-number,
+  .compact-weapon-table .weapon-range-number {
+    font-size: 1.28rem !important;
+  }
+
+  .compact-weapon-table .weapon-range-text {
+    font-size: .66rem !important;
+  }
+
+  .weapon-keyword-row td {
+    display: table-cell !important;
+    padding: 5px 7px 7px !important;
+  }
+
+  .weapon-keyword-row td > span {
+    font-size: .48rem;
+  }
+
+  .weapon-keyword-row td > strong {
+    font-size: .62rem;
+  }
+}
