@@ -29,6 +29,7 @@ const els = {
   resultList: $("resultList"),
   rosterTabs: $("rosterTabs"),
   rosterBrowser: $("rosterBrowser"),
+  unitBrowserCp: $("unitBrowserCp"),
   backToRosterButton: $("backToRosterButton"),
   battleShockToggle: $("battleShockToggle"),
   oncePerGameToggle: $("oncePerGameToggle"),
@@ -2030,13 +2031,58 @@ function renderDataSummary() {
   }
 
   els.dataRosterSummary.innerHTML = importedLists.map(roster => `
-    <div class="data-summary-row">
+    <div class="data-summary-row removable-roster-row">
       <div>
         <strong>${escapeHtml(roster.name)}</strong>
         <small>New Recruit ${escapeHtml(String(roster.importFormat || "json").toUpperCase())} · ${roster.units?.length || 0} units${roster.points != null ? " · " + escapeHtml(roster.points) + " pts" : ""}</small>
       </div>
+      <button
+        class="remove-roster-button"
+        type="button"
+        data-remove-roster-id="${escapeHtml(roster.id)}"
+        aria-label="Remove ${escapeHtml(roster.name)}"
+        title="Remove this imported list">×</button>
     </div>`).join("");
+
+  els.dataRosterSummary.querySelectorAll("[data-remove-roster-id]").forEach(button => {
+    button.addEventListener("click", () => removeImportedRoster(button.dataset.removeRosterId));
+  });
 }
+
+function removeImportedRoster(rosterId) {
+  const index = state.rosters.findIndex(roster => roster.id === rosterId && roster.source === "new-recruit");
+  if (index < 0) return;
+
+  const removed = state.rosters[index];
+  state.rosters.splice(index, 1);
+
+  // Clear CP and roster-specific UI state for the removed list.
+  localStorage.removeItem(sourceCpStorageKey("roster:" + rosterId));
+  for (const key of Object.keys(localStorage)) {
+    if (
+      key.includes(rosterId) &&
+      (key.startsWith("tv_status_") || key.startsWith("tv_pins_") || key.startsWith("tv_recent_") || key.startsWith("tv_voice_alias"))
+    ) {
+      localStorage.removeItem(key);
+    }
+  }
+
+  state.activeRoster = Math.min(state.activeRoster, Math.max(0, state.rosters.length - 1));
+  state.selected = null;
+  state.selectedRosterId = null;
+  state.detachmentStratagemLoadKey = "";
+
+  if (state.unitBrowserSourceId === "roster:" + rosterId) {
+    state.unitBrowserSourceId = "all";
+    localStorage.setItem("tv_unit_browser_source", "all");
+  }
+
+  persist();
+  renderAll();
+  renderMatchTools();
+  toast("Removed " + removed.name);
+}
+
 
 function renderAll() {
   showApp();
@@ -2342,6 +2388,7 @@ function setUnitBrowserSource(sourceId) {
   renderTabs();
   renderQuickLists();
   updateRosterBrowserVisibility();
+  renderMatchTools();
   persist();
 }
 
@@ -2912,14 +2959,37 @@ function formatRuleText(text = "") {
   return html.join("");
 }
 
+function sourceCpStorageKey(sourceId) {
+  return "tv_source_cp_" + encodeURIComponent(String(sourceId || ""));
+}
+
+function getActiveCpSource() {
+  const source = getActiveUnitBrowserSource();
+  if (!source || source.id === "all") return null;
+  return source;
+}
+
+function getSourceCP(sourceId) {
+  if (!sourceId || sourceId === "all") return 0;
+  try {
+    return Math.max(0, Number(localStorage.getItem(sourceCpStorageKey(sourceId)) || 0));
+  } catch {
+    return 0;
+  }
+}
+
+function setSourceCP(sourceId, value) {
+  if (!sourceId || sourceId === "all") return;
+  localStorage.setItem(sourceCpStorageKey(sourceId), String(Math.max(0, Number(value) || 0)));
+}
+
 function getMatchState() {
   try {
     return {
-      cp: Math.max(0, Number(localStorage.getItem("tv_match_cp") || 0)),
       turn: localStorage.getItem("tv_match_turn") || "your"
     };
   } catch {
-    return {cp:0, turn:"your"};
+    return {turn:"your"};
   }
 }
 
@@ -3037,7 +3107,17 @@ function adjustTurnScore(player, type, delta) {
 
 function renderMatchTools() {
   const match = getMatchState();
-  if (els.cpValue) els.cpValue.textContent = String(match.cp);
+  const cpSource = getActiveCpSource();
+
+  if (els.unitBrowserCp) {
+    els.unitBrowserCp.classList.toggle("hidden", !cpSource);
+    els.unitBrowserCp.title = cpSource ? cpSource.label + " Command Points" : "";
+  }
+
+  if (els.cpValue) {
+    els.cpValue.textContent = cpSource ? String(getSourceCP(cpSource.id)) : "0";
+  }
+
   if (els.turnToggle) {
     els.turnToggle.textContent = match.turn === "your" ? "Player 1 turn" : "Player 2 turn";
     els.turnToggle.classList.toggle("opponent", match.turn === "opponent");
@@ -3045,9 +3125,14 @@ function renderMatchTools() {
 }
 
 function adjustCP(delta) {
-  const match = getMatchState();
-  const next = Math.max(0, match.cp + delta);
-  localStorage.setItem("tv_match_cp", String(next));
+  const source = getActiveCpSource();
+  if (!source) {
+    toast("Choose a specific list or army tab to track CP.");
+    return;
+  }
+
+  const next = Math.max(0, getSourceCP(source.id) + delta);
+  setSourceCP(source.id, next);
   renderMatchTools();
 }
 
@@ -3062,6 +3147,9 @@ function resetMatchState() {
   if (!confirm("Reset scoring, CP, turn and Guide checklist?")) return;
 
   ["tv_match_cp","tv_match_turn","tv_score_state","tv_score_turn"].forEach(key => localStorage.removeItem(key));
+  for (const key of Object.keys(localStorage)) {
+    if (key.startsWith("tv_source_cp_")) localStorage.removeItem(key);
+  }
   state.scoreTurn = 1;
   document.querySelectorAll("[data-setup-check]").forEach(input => input.checked = false);
   persistSetupChecks();
@@ -3163,6 +3251,47 @@ function rollDice(count = 1, target = null, label = "") {
   renderDiceState();
 }
 
+let diceAudioContext = null;
+
+function playRerollSound() {
+  try {
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextClass) return;
+
+    diceAudioContext ||= new AudioContextClass();
+    const ctx = diceAudioContext;
+    if (ctx.state === "suspended") ctx.resume().catch(() => {});
+
+    const now = ctx.currentTime;
+    const master = ctx.createGain();
+    master.gain.setValueAtTime(0.12, now);
+    master.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
+    master.connect(ctx.destination);
+
+    for (let i = 0; i < 6; i++) {
+      const oscillator = ctx.createOscillator();
+      const gain = ctx.createGain();
+      const start = now + i * 0.022;
+      const duration = 0.035 + (i % 2) * 0.01;
+
+      oscillator.type = i % 2 ? "triangle" : "square";
+      oscillator.frequency.setValueAtTime(180 + (i * 47), start);
+      oscillator.frequency.exponentialRampToValueAtTime(90 + (i * 20), start + duration);
+
+      gain.gain.setValueAtTime(0.0001, start);
+      gain.gain.exponentialRampToValueAtTime(0.13, start + 0.004);
+      gain.gain.exponentialRampToValueAtTime(0.0001, start + duration);
+
+      oscillator.connect(gain);
+      gain.connect(master);
+      oscillator.start(start);
+      oscillator.stop(start + duration + 0.01);
+    }
+  } catch (error) {
+    console.warn("Could not play reroll sound", error);
+  }
+}
+
 function rerollMisses() {
   const last = state.lastDiceRoll;
   if (!last?.rolls?.length) {
@@ -3175,6 +3304,7 @@ function rerollMisses() {
   }
 
   last.rolls = last.rolls.map(value => value < last.target ? randomD6() : value);
+  playRerollSound();
   renderDiceState();
 }
 
@@ -3186,6 +3316,7 @@ function rerollEverything() {
   }
 
   last.rolls = last.rolls.map(() => randomD6());
+  playRerollSound();
   renderDiceState();
 }
 
