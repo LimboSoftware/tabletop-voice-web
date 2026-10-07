@@ -2109,6 +2109,7 @@ function renderAll() {
 
   renderStratagems(els.stratSearch?.value || "");
   renderCoreRules(els.coreRuleSearch?.value || "");
+  renderMatchTools();
 }
 
 function getAvailableSearchScopes() {
