@@ -112,14 +112,22 @@ const els = {
 
 function boot() {
   applyMode();
-  restore();
   bindEvents();
   showFirstRunIfNeeded();
   setupSpeech();
-  renderAll();
-  renderMatchTools();
-  restoreSetupChecks();
-  switchPage(state.currentPage, {silent:true});
+
+  try {
+    restore();
+    renderAll();
+    renderMatchTools();
+    restoreSetupChecks();
+    switchPage(state.currentPage, {silent:true});
+  } catch (error) {
+    console.error("Tabletop Voice startup render failed", error);
+    toast("Some saved data could not be rendered. Controls are still available.");
+    switchPage("setup", {silent:true});
+  }
+
   if ("serviceWorker" in navigator) navigator.serviceWorker.register("./sw.js").catch(() => {});
 }
 
@@ -2669,6 +2677,60 @@ function updateUnitTopStatuses(unit = state.selected) {
     els.oncePerGameToggle.setAttribute("aria-pressed", onceUsed ? "true" : "false");
     els.oncePerGameToggle.textContent = "Once-per-game used";
   }
+}
+
+function isCoreRule(rule) {
+  const name = normalize(rule?.name || "");
+  if (!name) return false;
+
+  const coreNames = [
+    "feel no pain",
+    "fnp",
+    "deep strike",
+    "scouts",
+    "scout",
+    "infiltrators",
+    "infiltrator",
+    "stealth",
+    "lone operative",
+    "deadly demise",
+    "fights first",
+    "leader",
+    "psyker",
+    "hazardous",
+    "pistol",
+    "torrent",
+    "blast",
+    "rapid fire",
+    "assault",
+    "heavy",
+    "lethal hits",
+    "sustained hits",
+    "devastating wounds",
+    "precision",
+    "indirect fire",
+    "ignores cover",
+    "anti infantry",
+    "anti vehicle",
+    "anti monster",
+    "anti character",
+    "anti fly",
+    "twin linked",
+    "extra attacks"
+  ];
+
+  return coreNames.some(core =>
+    name === core ||
+    name.startsWith(core + " ") ||
+    name.startsWith(core + "-") ||
+    name.startsWith(core + "(")
+  );
+}
+
+function cleanUniqueRuleText(text = "") {
+  return cleanRuleText(text)
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function renderWeaponSection(profiles, title = "Weapons") {
