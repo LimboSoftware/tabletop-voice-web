@@ -4084,7 +4084,6 @@ function restore() {
   } catch {
     state.rosters = [];
   }
-  if (state.rosters.length) renderAll();
 }
 
 function clearRosters() {
