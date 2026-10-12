@@ -23,6 +23,8 @@ const els = {
   receiveProgress: $("receiveProgress"),
   receivedFiles: $("receivedFiles"),
   shareAll: $("shareAll"),
+  openTabletopVoice: $("openTabletopVoice"),
+  handoffStatus: $("handoffStatus"),
   receiveError: $("receiveError"),
   receiveErrorText: $("receiveErrorText"),
   toast: $("toast")
@@ -34,8 +36,59 @@ const state = {
   secret: null,
   activeConnection: null,
   received: [],
-  receivedFiles: []
+  receivedFiles: [],
+  handoffReady:false
 };
+
+const TRANSFER_DB_NAME = "tabletop-voice-transfer-v1";
+const TRANSFER_DB_STORE = "handoffs";
+const TRANSFER_DB_KEY = "latest";
+
+function openTransferDb() {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(TRANSFER_DB_NAME, 1);
+
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      if (!db.objectStoreNames.contains(TRANSFER_DB_STORE)) {
+        db.createObjectStore(TRANSFER_DB_STORE);
+      }
+    };
+
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error || new Error("Could not open transfer storage."));
+  });
+}
+
+async function stageReceivedFilesForApp() {
+  const db = await openTransferDb();
+  const payload = {
+    createdAt:Date.now(),
+    files:state.receivedFiles.map(item => ({
+      name:item.name,
+      rosterName:item.rosterName,
+      faction:item.faction,
+      points:item.points,
+      size:item.size,
+      format:item.format,
+      encoding:item.encoding,
+      mime:item.mime,
+      payload:item.payload
+    }))
+  };
+
+  await new Promise((resolve, reject) => {
+    const tx = db.transaction(TRANSFER_DB_STORE, "readwrite");
+    tx.objectStore(TRANSFER_DB_STORE).put(payload, TRANSFER_DB_KEY);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error || new Error("Could not stage the roster for Tabletop Voice."));
+    tx.onabort = () => reject(tx.error || new Error("Could not stage the roster for Tabletop Voice."));
+  });
+
+  db.close();
+  state.handoffReady = true;
+}
+
 
 function toast(message) {
   els.toast.textContent = message;
@@ -254,9 +307,27 @@ function renderSelectedFiles() {
           <strong>${escapeHtml(file.rosterName)}</strong>
           <small>${escapeHtml(meta || file.name)}</small>
         </div>
-        <span class="file-badge">${escapeHtml(String(file.format || "").toUpperCase())}</span>
+        <div class="file-card-actions">
+          <span class="file-badge">${escapeHtml(String(file.format || "").toUpperCase())}</span>
+          <button class="remove-transfer-file" type="button" data-remove-transfer-file="${escapeHtml(file.name)}" aria-label="Remove ${escapeHtml(file.rosterName)}" title="Remove this list">×</button>
+        </div>
       </div>`;
   }).join("");
+
+  els.fileList.querySelectorAll("[data-remove-transfer-file]").forEach(button => {
+    button.addEventListener("click", () => {
+      state.files = state.files.filter(file => file.name !== button.dataset.removeTransferFile);
+      renderSelectedFiles();
+
+      if (!state.files.length) {
+        cleanupPeer();
+        els.qrPanel.classList.add("hidden");
+        els.resetTransfer.classList.add("hidden");
+        els.createTransfer.classList.remove("hidden");
+        els.createTransfer.textContent = "Create transfer QR";
+      }
+    });
+  });
 }
 
 function escapeHtml(value = "") {
@@ -543,7 +614,7 @@ function handleIncomingData(message) {
   }
 }
 
-function finishReceive() {
+async function finishReceive() {
   try {
     state.receivedFiles = state.received.map(item => {
       if (item.chunks.some(chunk => chunk === undefined)) {
@@ -569,11 +640,28 @@ function finishReceive() {
   }
 
   els.receiveProgress.style.width = "100%";
-  setReceiverStatus("good", "Transfer complete", "Your roster files are ready.");
+  setReceiverStatus("good", "Transfer complete", "Preparing the lists for Tabletop Voice…");
   els.receiveConnecting.classList.add("hidden");
   els.receiveComplete.classList.remove("hidden");
 
   renderReceivedFiles();
+
+  try {
+    await stageReceivedFilesForApp();
+    setReceiverStatus("good", "Transfer complete", "The lists are ready to import directly into Tabletop Voice.");
+    if (els.handoffStatus) {
+      els.handoffStatus.textContent = "Ready ✓ No file download or second manual import is needed.";
+      els.handoffStatus.classList.remove("bad");
+    }
+    els.openTabletopVoice?.classList.remove("hidden");
+  } catch (error) {
+    console.error("Could not stage roster handoff", error);
+    if (els.handoffStatus) {
+      els.handoffStatus.textContent = "Automatic hand-off is unavailable on this browser. Use Download copy below, then import that file from Setup.";
+      els.handoffStatus.classList.add("bad");
+    }
+    els.openTabletopVoice?.classList.add("hidden");
+  }
 }
 
 function renderReceivedFiles() {
@@ -594,7 +682,7 @@ function renderReceivedFiles() {
         <strong>${escapeHtml(item.rosterName || item.name)}</strong>
         <small>${escapeHtml(meta || item.name)}</small>
       </div>
-      <a class="secondary button-link compact" download="${escapeHtml(item.name)}" href="${url}">Save file</a>`;
+      <a class="secondary button-link compact" download="${escapeHtml(item.name)}" href="${url}">Download copy</a>`;
 
     els.receivedFiles.appendChild(card);
   });
@@ -612,7 +700,7 @@ async function shareAllFiles() {
     await navigator.share({
       files: state.receivedFiles.map(item => item.file),
       title: "New Recruit rosters",
-      text: "Save these roster files, then import them into Tabletop Voice."
+      text: "Optional backup copies of your transferred New Recruit rosters."
     });
   } catch (error) {
     if (error?.name !== "AbortError") toast("Couldn’t open the share sheet.");
@@ -662,6 +750,12 @@ function boot() {
   });
 
   els.shareAll.addEventListener("click", shareAllFiles);
+  els.openTabletopVoice?.addEventListener("click", event => {
+    if (!state.handoffReady) {
+      event.preventDefault();
+      toast("The roster is still being prepared.");
+    }
+  });
 }
 
 window.addEventListener("beforeunload", cleanupPeer);
