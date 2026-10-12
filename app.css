@@ -4187,6 +4187,51 @@ body.focus-mode .detail-panel {
   font: inherit;
 }
 
+.share-roster-picker {
+  display: grid;
+  grid-template-columns: minmax(0,1fr) 44px;
+  gap: 7px;
+  align-items: center;
+}
+
+.share-remove-list-button {
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0;
+  font-size: 1.35rem;
+  line-height: 1;
+}
+
+.share-receive-actions {
+  display: grid;
+  gap: 7px;
+  border: 1px solid #397454;
+  border-radius: 12px;
+  background: rgba(74,190,120,.08);
+  padding: 12px;
+}
+
+.share-receive-actions > strong {
+  color: #a5efbf;
+  font-size: .9rem;
+}
+
+.share-receive-actions > small {
+  color: #9db0a5;
+  line-height: 1.4;
+}
+
+.share-receive-action-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 2px;
+}
+
+.share-receive-action-buttons button {
+  min-height: 40px;
+}
+
 .app-share-qr-panel {
   display: grid;
   justify-items: center;
