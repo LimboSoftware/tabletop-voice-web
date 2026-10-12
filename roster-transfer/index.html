@@ -78,13 +78,14 @@
       <div id="receiveComplete" class="hidden">
         <p class="eyebrow">TRANSFER COMPLETE</p>
         <h1>Your lists are ready.</h1>
-        <p class="receive-copy">Save the roster files to your phone, then import them from the Setup tab in Tabletop Voice.</p>
+        <p class="receive-copy">The transfer can now hand the rosters straight into Tabletop Voice. You do not need to save the files to your phone and import them again.</p>
+        <p id="handoffStatus" class="handoff-status">Preparing automatic import…</p>
 
         <div id="receivedFiles" class="received-files"></div>
 
         <div class="receiver-actions">
-          <button id="shareAll" class="primary hidden" type="button">Save / share all files</button>
-          <a class="secondary button-link" href="../">Open Tabletop Voice</a>
+          <a id="openTabletopVoice" class="primary button-link hidden" href="../?transfer=1">Open Tabletop Voice &amp; import automatically</a>
+          <button id="shareAll" class="secondary hidden" type="button">Save / share backup copies</button>
         </div>
       </div>
 
