@@ -255,6 +255,7 @@ function bindEvents() {
 
 function showFirstRunIfNeeded() {
   if (!els.firstRunModal) return;
+  if (new URLSearchParams(location.search).has("tvshare")) return;
   const seen = localStorage.getItem("tv_beta_notice_seen_v1") === "1";
   if (!seen) els.firstRunModal.classList.remove("hidden");
 }
@@ -1849,12 +1850,11 @@ function renderReferenceSourceTabs(container, kind) {
   container.querySelectorAll("[data-reference-source-id]").forEach(button => {
     button.addEventListener("click", () => {
       setUnitBrowserSource(button.dataset.referenceSourceId);
-      renderSourceReferencePage(kind);
     });
   });
 }
 
-async function renderSourceReferencePage(kind) {
+async function renderSourceReferencePage(kind, query = "") {
   const isStratagem = kind === "stratagem";
   const tabs = isStratagem ? els.stratSourceTabs : els.armyRuleSourceTabs;
   const container = isStratagem ? els.stratPageContent : els.armyRulePageContent;
@@ -1878,7 +1878,13 @@ async function renderSourceReferencePage(kind) {
 
   if (!current || current.id !== requestedSourceId) return;
 
-  const items = isStratagem ? data.stratagems : data.armyRules;
+  const allItems = isStratagem ? data.stratagems : data.armyRules;
+  const q = normalize(query);
+  const items = q
+    ? (allItems || []).filter(item =>
+        normalize((item.name || "") + " " + (item.text || "") + " " + (item.detachment || "")).includes(q)
+      )
+    : allItems;
 
   container.innerHTML = `
     ${data.note ? `<div class="roster-refresh-note">${escapeHtml(data.note)}</div>` : ""}
@@ -1890,8 +1896,8 @@ async function renderSourceReferencePage(kind) {
   bindUnitBrowserReferenceControls(container);
 }
 
-function renderStratagems() {
-  return renderSourceReferencePage("stratagem");
+function renderStratagems(query = "") {
+  return renderSourceReferencePage("stratagem", query);
 }
 
 function renderArmyRulesPage() {
@@ -2254,7 +2260,7 @@ function renderDataSummary() {
     <div class="data-summary-row removable-roster-row">
       <div>
         <strong>${escapeHtml(roster.name)}</strong>
-        <small>New Recruit ${escapeHtml(String(roster.importFormat || "json").toUpperCase())} · ${roster.units?.length || 0} units${roster.points != null ? " · " + escapeHtml(roster.points) + " pts" : ""}</small>
+        <small>${roster.sharedFromOpponent ? "Opponent share" : "New Recruit"} · ${escapeHtml(String(roster.importFormat || "json").toUpperCase())} · ${roster.units?.length || 0} units${roster.points != null ? " · " + escapeHtml(roster.points) + " pts" : ""}</small>
       </div>
       <button
         class="remove-roster-button"
@@ -2516,7 +2522,7 @@ function getUnitBrowserSources() {
     sources.push({
       id:"roster:" + roster.id,
       label:roster.name,
-      subLabel:(roster.points != null ? roster.points + " pts · " : "") + "New Recruit",
+      subLabel:(roster.points != null ? roster.points + " pts · " : "") + (roster.sharedFromOpponent ? "Opponent · New Recruit" : "New Recruit"),
       kind:"new-recruit",
       roster,
       faction:roster.faction || "",
