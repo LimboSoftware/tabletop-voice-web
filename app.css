@@ -4333,3 +4333,19 @@ body.focus-mode .detail-panel {
     flex: 0 0 auto;
   }
 }
+
+
+/* Final nav/share/statline polish */
+.nav-more {
+  display: block !important;
+}
+
+.stat strong {
+  font-size: 1.82rem;
+}
+
+@media (max-width: 760px) {
+  .stat strong {
+    font-size: 1.48rem !important;
+  }
+}
