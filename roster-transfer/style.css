@@ -40,6 +40,12 @@ h1{margin:0;font-size:clamp(2rem,6vw,3.5rem);line-height:.98;letter-spacing:-.04
 .file-card strong,.received-card strong{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .file-card small,.received-card small{display:block;margin-top:3px;color:var(--muted);font-size:.72rem}
 .file-badge{flex:0 0 auto;border:1px solid #34576a;border-radius:999px;padding:5px 8px;color:var(--accent);font-size:.68rem;font-weight:850}
+
+.file-card-actions{display:flex;align-items:center;gap:7px;flex:0 0 auto}
+.remove-transfer-file{width:34px;height:34px;border:1px solid #4b3840;border-radius:9px;background:#1a1418;color:#ff9daa;font-size:1.2rem;line-height:1;cursor:pointer}
+.remove-transfer-file:hover{border-color:#87505c;background:#25191e}
+.handoff-status{margin:12px 0 0;border:1px solid #356c4c;border-radius:11px;background:rgba(98,215,154,.07);color:#9ce5b9;padding:10px 12px;font-size:.8rem;line-height:1.45}
+.handoff-status.bad{border-color:#7a3f49;background:rgba(255,131,144,.07);color:#ffabb4}
 .actions,.receiver-actions{display:flex;gap:9px;flex-wrap:wrap;margin-top:16px}
 .primary,.secondary,.button-link{min-height:44px;border-radius:12px;padding:0 15px;font-weight:850;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;cursor:pointer}
 .primary{border:1px solid #53bfe8;background:linear-gradient(180deg,#6edaff,#37bde9);color:#041117}
