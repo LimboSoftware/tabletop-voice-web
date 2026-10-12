@@ -508,7 +508,9 @@ async function sendFiles(conn) {
   setSenderStatus(
     "good",
     "Transfer complete",
-    state.files.length + (state.files.length === 1 ? " list sent." : " lists sent.")
+    state.files.length +
+      (state.files.length === 1 ? " list sent. " : " lists sent. ") +
+      "Use the × on a list above if you want to remove it from this transfer page."
   );
 }
 
