@@ -175,6 +175,11 @@ function boot() {
 }
 
 function bindEvents() {
+  document.addEventListener("pointerdown", enforcePortraitOrientation, {once:true});
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) enforcePortraitOrientation();
+  });
+
   els.importButton?.addEventListener("click", () => els.fileInput.click());
   els.fileInput?.addEventListener("change", handleFiles);
   els.fullDataButton?.addEventListener("click", loadFull40kData);
