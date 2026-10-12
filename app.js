@@ -563,9 +563,10 @@ function parseTextRosterFile(text, fileName) {
     faction,
     source:"new-recruit",
     importFormat:"txt",
-    detachmentParserVersion:2,
+    detachmentParserVersion:3,
     points:Number.isFinite(totalPoints) ? totalPoints : null,
     detachments,
+    selectedDetachmentStratagems:[],
     armyRules:[],
     units,
     referenceData:{rules:[], stratagems:[]},
@@ -593,14 +594,89 @@ function buildRosterFromNewRecruitRoot(root, fileName, importFormat = "json") {
     faction:(root.forces || [])[0]?.catalogueName || (root.forces || [])[0]?.name || "New Recruit list",
     source:"new-recruit",
     importFormat,
-    detachmentParserVersion:2,
+    detachmentParserVersion:3,
     points:pts ?? null,
     detachments:extractSelectedDetachments(root),
+    selectedDetachmentStratagems:extractSelectedDetachmentStratagems(root),
     armyRules:extractArmyRules(root),
     units:dedupeBy(units, u => u.id || u.name),
     referenceData:extractReferenceData(root, fileName),
     importedAt:Date.now()
   };
+}
+
+function splitCompositeDetachmentName(name = "") {
+  const raw = String(name || "").trim();
+  if (!raw) return [];
+  const parts = raw.split(/\s+and\s+/i).map(part => part.trim()).filter(Boolean);
+  return parts.length > 1 ? parts : [raw];
+}
+
+function isSelectedDetachmentNode(value) {
+  if (!value || typeof value !== "object") return false;
+
+  const count = Number(value.number);
+  const selected = Number.isFinite(count) && count > 0;
+  if (!selected) return false;
+
+  const group = String(value.group || value.entryGroupName || "");
+  const categories = [
+    ...(value.categories || []),
+    ...(value.categoryLinks || [])
+  ].map(category => String(category?.name || ""));
+
+  const hasDetachmentCost = (value.costs || []).some(cost =>
+    /detachment points?/i.test(String(cost?.name || "")) &&
+    Number(cost?.value || 0) > 0
+  );
+
+  return (
+    /detachment/i.test(group) ||
+    categories.some(name => /(?:^|\b)\d*\s*dp\s+detachment\b/i.test(name)) ||
+    hasDetachmentCost
+  );
+}
+
+function extractSelectedDetachmentStratagems(root) {
+  const collected = [];
+
+  for (const force of root?.forces || []) {
+    const faction = force.catalogueName || force.name || "";
+
+    function walk(value) {
+      if (!value || typeof value !== "object") return;
+      if (Array.isArray(value)) {
+        value.forEach(walk);
+        return;
+      }
+
+      if (
+        isSelectedDetachmentNode(value) &&
+        value.name &&
+        !/^detachment$/i.test(String(value.name).trim())
+      ) {
+        const detachmentName = String(value.name).trim();
+        const refs = extractReferenceData(value, faction).stratagems || [];
+
+        for (const strat of refs) {
+          collected.push({
+            ...strat,
+            detachment:detachmentName,
+            source:"Imported New Recruit"
+          });
+        }
+      }
+
+      for (const child of value.selections || []) walk(child);
+    }
+
+    walk(force.selections || []);
+  }
+
+  return dedupeBy(
+    collected,
+    item => normalize((item.detachment || "") + "|" + item.name + "|" + item.text)
+  );
 }
 
 function extractSelectedDetachments(root) {
@@ -616,34 +692,14 @@ function extractSelectedDetachments(root) {
         return;
       }
 
-      const count = Number(value.number);
-      const selected = Number.isFinite(count) && count > 0;
-      const group = String(value.group || value.entryGroupName || "");
-      const categories = [
-        ...(value.categories || []),
-        ...(value.categoryLinks || [])
-      ].map(category => String(category?.name || ""));
-
-      const hasDetachmentCost = (value.costs || []).some(cost =>
-        /detachment points?/i.test(String(cost?.name || "")) &&
-        Number(cost?.value || 0) > 0
-      );
-
-      const looksLikeDetachment =
-        /detachment/i.test(group) ||
-        categories.some(name => /(?:^|\b)\d*\s*dp\s+detachment\b/i.test(name)) ||
-        hasDetachmentCost;
-
       if (
-        selected &&
-        looksLikeDetachment &&
+        isSelectedDetachmentNode(value) &&
         value.name &&
         !/^detachment$/i.test(String(value.name).trim())
       ) {
-        found.push({
-          name:String(value.name).trim(),
-          faction
-        });
+        for (const name of splitCompositeDetachmentName(value.name)) {
+          found.push({name, faction});
+        }
       }
 
       for (const child of value.selections || []) walk(child);
@@ -1408,28 +1464,30 @@ async function getUnitBrowserReferenceData(source) {
     const roster = source.roster;
     const localRules = (roster?.armyRules || []).filter(rule => rule?.name && rule?.text);
 
-    if (roster?.detachmentParserVersion !== 2) {
-      return {
-        stratagems:[],
-        armyRules:localRules,
-        note:"Re-import this New Recruit list once. Its saved detachment data came from the older parser and is not trusted."
-      };
-    }
-
     const detachmentNames = (roster?.detachments || [])
-      .map(item => String(item?.name || "").trim())
+      .flatMap(item => splitCompositeDetachmentName(item?.name || ""))
+      .map(name => String(name || "").trim())
       .filter(Boolean);
 
     const datasets = await getGdcFactionDataChain(source.faction || roster?.faction || "");
 
-    const stratagems = detachmentNames.length
-      ? dedupeBy(
-          datasets.flatMap(data =>
-            gdcStratagemsToReferences(data, detachmentNames, roster?.name || source.label)
-          ),
-          item => normalize((item.detachment || "") + "|" + item.name + "|" + item.text)
+    const externalStratagems = detachmentNames.length
+      ? datasets.flatMap(data =>
+          gdcStratagemsToReferences(data, detachmentNames, roster?.name || source.label)
         )
       : [];
+
+    const embeddedStratagems = (roster?.selectedDetachmentStratagems || [])
+      .filter(item => item?.name && item?.text)
+      .map(item => ({
+        ...item,
+        detachment:item.detachment || detachmentNames.join(" + ") || "Selected detachment"
+      }));
+
+    const stratagems = dedupeBy(
+      [...embeddedStratagems, ...externalStratagems],
+      item => normalize((item.detachment || "") + "|" + item.name + "|" + item.text)
+    );
 
     const armyRules = localRules.length
       ? localRules
@@ -1441,10 +1499,12 @@ async function getUnitBrowserReferenceData(source) {
     let note = "";
     if (!detachmentNames.length) {
       note = "No selected detachment was detected in this New Recruit list.";
-    } else if (!datasets.length) {
+    } else if (!datasets.length && !embeddedStratagems.length) {
       note = "No current faction reference data was found for this list.";
     } else if (!stratagems.length) {
-      note = "The selected detachment was detected, but no matching current stratagems were found.";
+      note = "The selected detachment was detected, but no matching stratagems were found.";
+    } else if ((roster?.detachmentParserVersion || 0) < 3) {
+      note = "Re-import this list once to pick up any detachment stratagems embedded in the newer New Recruit export.";
     }
 
     return {stratagems, armyRules, note};
