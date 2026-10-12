@@ -4075,3 +4075,261 @@ body.focus-mode .detail-panel {
     height: 32px;
   }
 }
+
+
+/* === Top army reference tabs / sharing / readability === */
+.app-nav {
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+
+.nav-more-link {
+  width: 100%;
+  display: block;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: #dce5ee;
+  padding: 12px;
+  text-align: left;
+  text-decoration: none;
+  font-weight: 750;
+}
+
+.nav-more-link:hover {
+  background: rgba(56,189,248,.08);
+  color: var(--accent);
+}
+
+.compact-reference-heading {
+  margin-bottom: 14px;
+}
+
+.reference-source-tabs {
+  margin-bottom: 14px;
+}
+
+.source-reference-content {
+  display: grid;
+  gap: 10px;
+  max-width: 1050px;
+}
+
+.dedicated-reference-list {
+  gap: 8px;
+}
+
+/* Datasheet statline: much easier to read */
+.stat {
+  padding-top: 16px;
+  padding-bottom: 16px;
+}
+
+.stat strong {
+  font-size: 1.7rem;
+  line-height: 1;
+  font-weight: 900;
+}
+
+.unit-keywords-section {
+  padding-bottom: 2px;
+}
+
+.unit-keyword-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.unit-keyword-chips span {
+  border: 1px solid #304054;
+  border-radius: 999px;
+  background: #141c26;
+  color: #aebdca;
+  padding: 5px 9px;
+  font-size: .66rem;
+  font-weight: 750;
+}
+
+/* App-to-app roster sharing */
+.share-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0,1fr));
+  gap: 14px;
+  margin-top: 18px;
+}
+
+.share-tool-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.share-tool-card h2 {
+  margin: 3px 0 5px;
+}
+
+.share-select-label,
+.share-link-fallback label {
+  color: #8fa0b3;
+  font-size: .72rem;
+  font-weight: 800;
+}
+
+.share-tool-card select,
+.share-link-fallback input {
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid #304054;
+  border-radius: 11px;
+  background: #0f151d;
+  color: #eef4f8;
+  padding: 0 11px;
+  font: inherit;
+}
+
+.app-share-qr-panel {
+  display: grid;
+  justify-items: center;
+  gap: 7px;
+  margin-top: 4px;
+  padding-top: 14px;
+  border-top: 1px solid #293444;
+  text-align: center;
+}
+
+.app-share-qr-code {
+  width: min(270px, 100%);
+  display: grid;
+  place-items: center;
+  padding: 12px;
+  border-radius: 15px;
+  background: #fff;
+}
+
+.app-share-qr-code img,
+.app-share-qr-code canvas {
+  max-width: 100%;
+  height: auto !important;
+}
+
+.app-share-qr-panel small {
+  color: #7f90a3;
+  line-height: 1.4;
+}
+
+.opponent-qr-scanner {
+  width: 100%;
+  overflow: hidden;
+  border: 1px solid #304054;
+  border-radius: 13px;
+  background: #0d141c;
+}
+
+.share-link-fallback {
+  display: grid;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.share-receive-status {
+  border: 1px solid #34465a;
+  border-radius: 11px;
+  background: #131b25;
+  color: #b9c7d4;
+  padding: 10px 12px;
+  font-size: .8rem;
+}
+
+.share-receive-status.good {
+  border-color: #397454;
+  background: rgba(74,190,120,.08);
+  color: #8fe0ad;
+}
+
+.share-receive-status.bad {
+  border-color: #7f3c49;
+  background: rgba(220,54,73,.08);
+  color: #ff9da8;
+}
+
+@media (max-width: 760px) {
+  .app-nav {
+    grid-template-columns: repeat(7, minmax(0,1fr)) !important;
+    gap: 2px !important;
+    padding: 5px 4px !important;
+  }
+
+  .app-nav-button {
+    min-height: 48px !important;
+    padding: 4px 1px !important;
+    gap: 2px !important;
+    font-size: .54rem !important;
+    border-radius: 8px !important;
+  }
+
+  .nav-icon {
+    font-size: .95rem !important;
+  }
+
+  .nav-more-menu {
+    top: 108px !important;
+  }
+
+  .stat-grid {
+    gap: 3px !important;
+    padding: 7px 8px 9px !important;
+  }
+
+  .stat {
+    padding: 8px 1px 9px !important;
+  }
+
+  .stat span {
+    font-size: .49rem !important;
+  }
+
+  .stat strong {
+    font-size: 1.38rem !important;
+    margin-top: 5px !important;
+  }
+
+  .unit-keyword-chips {
+    gap: 4px;
+  }
+
+  .unit-keyword-chips span {
+    padding: 4px 7px;
+    font-size: .59rem;
+  }
+
+  .share-grid {
+    grid-template-columns: 1fr;
+    gap: 9px;
+  }
+
+  .share-tool-card {
+    padding: 13px;
+  }
+
+  .app-share-qr-code {
+    width: min(250px, 100%);
+  }
+
+  .source-reference-page {
+    padding: 12px 8px 22px !important;
+  }
+
+  .reference-source-tabs {
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    scrollbar-width: none;
+  }
+
+  .reference-source-tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .reference-source-tabs .roster-tab {
+    flex: 0 0 auto;
+  }
+}
