@@ -150,6 +150,7 @@ function boot() {
     restoreSetupChecks();
     switchPage(state.currentPage, {silent:true});
     handleShareUrlOnBoot();
+    handlePendingRosterTransferOnBoot();
   } catch (error) {
     console.error("Tabletop Voice startup render failed", error);
     toast("Some saved data could not be rendered. Controls are still available.");
@@ -263,6 +264,131 @@ function bindEvents() {
     ["pointerup", "pointercancel", "pointerleave", "touchend"].forEach(evt => els.talkButton.addEventListener(evt, stopListening, {passive:false}));
   }
   window.addEventListener("popstate", handleBrowserBack);
+}
+
+const TRANSFER_DB_NAME = "tabletop-voice-transfer-v1";
+const TRANSFER_DB_STORE = "handoffs";
+const TRANSFER_DB_KEY = "latest";
+
+function openRosterTransferDb() {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(TRANSFER_DB_NAME, 1);
+
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      if (!db.objectStoreNames.contains(TRANSFER_DB_STORE)) {
+        db.createObjectStore(TRANSFER_DB_STORE);
+      }
+    };
+
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error || new Error("Could not open transfer storage."));
+  });
+}
+
+async function readPendingRosterTransfer() {
+  const db = await openRosterTransferDb();
+
+  const payload = await new Promise((resolve, reject) => {
+    const tx = db.transaction(TRANSFER_DB_STORE, "readonly");
+    const request = tx.objectStore(TRANSFER_DB_STORE).get(TRANSFER_DB_KEY);
+    request.onsuccess = () => resolve(request.result || null);
+    request.onerror = () => reject(request.error || new Error("Could not read transferred rosters."));
+  });
+
+  db.close();
+  return payload;
+}
+
+async function clearPendingRosterTransfer() {
+  const db = await openRosterTransferDb();
+
+  await new Promise((resolve, reject) => {
+    const tx = db.transaction(TRANSFER_DB_STORE, "readwrite");
+    tx.objectStore(TRANSFER_DB_STORE).delete(TRANSFER_DB_KEY);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error || new Error("Could not clear transferred rosters."));
+    tx.onabort = () => reject(tx.error || new Error("Could not clear transferred rosters."));
+  });
+
+  db.close();
+}
+
+function transferBase64ToBytes(value) {
+  const binary = atob(value);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes;
+}
+
+async function handlePendingRosterTransferOnBoot() {
+  const url = new URL(location.href);
+  if (!url.searchParams.has("transfer")) return;
+
+  try {
+    const bundle = await readPendingRosterTransfer();
+    if (!bundle?.files?.length) {
+      toast("No transferred roster was waiting to import.");
+      url.searchParams.delete("transfer");
+      history.replaceState(history.state || {}, "", url.pathname + url.search + url.hash);
+      return;
+    }
+
+    let imported = 0;
+    let lastRoster = null;
+
+    for (const item of bundle.files) {
+      const parts = item.encoding === "base64"
+        ? [transferBase64ToBytes(item.payload || "")]
+        : [String(item.payload || "")];
+
+      const file = new File(parts, item.name || ("transferred." + (item.format || "json")), {
+        type:item.mime || "application/octet-stream"
+      });
+
+      const roster = await parseRosterUpload(file);
+
+      const existingIndex = state.rosters.findIndex(existing =>
+        existing.source === "new-recruit" &&
+        normalize(existing.name) === normalize(roster.name) &&
+        normalize(existing.faction) === normalize(roster.faction)
+      );
+
+      if (existingIndex >= 0) {
+        state.rosters.splice(existingIndex, 1, roster);
+        state.activeRoster = existingIndex;
+      } else {
+        state.rosters.push(roster);
+        state.activeRoster = state.rosters.length - 1;
+      }
+
+      imported++;
+      lastRoster = roster;
+    }
+
+    if (lastRoster) {
+      state.unitBrowserSourceId = "roster:" + lastRoster.id;
+      localStorage.setItem("tv_unit_browser_source", state.unitBrowserSourceId);
+    }
+
+    state.detachmentStratagemLoadKey = "";
+    persist();
+    renderAll();
+    switchPage("datasheets", {silent:true});
+    await clearPendingRosterTransfer();
+
+    url.searchParams.delete("transfer");
+    history.replaceState(history.state || {}, "", url.pathname + url.search + url.hash);
+
+    toast(
+      imported === 1
+        ? "Roster imported automatically"
+        : imported + " rosters imported automatically"
+    );
+  } catch (error) {
+    console.error("Automatic roster transfer import failed", error);
+    toast("Transfer received, but automatic import failed. Use the downloaded backup from Roster Transfer.");
+  }
 }
 
 function showFirstRunIfNeeded() {
