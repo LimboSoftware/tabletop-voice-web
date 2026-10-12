@@ -82,6 +82,7 @@ const els = {
   armyRuleSourceTabs: $("armyRuleSourceTabs"),
   armyRulePageContent: $("armyRulePageContent"),
   shareRosterSelect: $("shareRosterSelect"),
+  removeShareRosterButton: $("removeShareRosterButton"),
   createAppShareButton: $("createAppShareButton"),
   appShareQrPanel: $("appShareQrPanel"),
   appShareQrCode: $("appShareQrCode"),
@@ -91,6 +92,10 @@ const els = {
   opponentShareLink: $("opponentShareLink"),
   connectOpponentLinkButton: $("connectOpponentLinkButton"),
   opponentReceiveStatus: $("opponentReceiveStatus"),
+  opponentReceiveActions: $("opponentReceiveActions"),
+  openReceivedUnitsButton: $("openReceivedUnitsButton"),
+  openReceivedStratsButton: $("openReceivedStratsButton"),
+  openReceivedRulesButton: $("openReceivedRulesButton"),
   pageSetup: $("pageSetup"),
   dataRosterSummary: $("dataRosterSummary"),
   fullDataArmySection: $("fullDataArmySection"),
@@ -166,7 +171,7 @@ function bindEvents() {
   });
   els.modeToggle.addEventListener("click", toggleMode);
   els.focusButton?.addEventListener("click", toggleFocusMode);
-  els.backToRosterButton?.addEventListener("click", backToRosterBrowser);
+  els.backToRosterButton?.addEventListener("click", handleDatasheetBack);
   els.battleShockToggle?.addEventListener("click", () => toggleStatus("Battle-shocked"));
   els.oncePerGameToggle?.addEventListener("click", () => toggleStatus("Once-per-game used"));
   els.pinButton.addEventListener("click", toggleSelectedPin);
@@ -214,7 +219,11 @@ function bindEvents() {
   els.stratSearch?.addEventListener("input", () => renderStratagems(els.stratSearch.value));
   els.coreRuleSearch?.addEventListener("input", () => renderCoreRules(els.coreRuleSearch.value));
   els.createAppShareButton?.addEventListener("click", createAppShareQr);
+  els.removeShareRosterButton?.addEventListener("click", removeSelectedShareRoster);
   els.scanOpponentQrButton?.addEventListener("click", startOpponentQrScanner);
+  els.openReceivedUnitsButton?.addEventListener("click", () => switchPage("datasheets"));
+  els.openReceivedStratsButton?.addEventListener("click", () => switchPage("strats"));
+  els.openReceivedRulesButton?.addEventListener("click", () => switchPage("army-rules"));
   els.connectOpponentLinkButton?.addEventListener("click", () => {
     const value = els.opponentShareLink?.value?.trim();
     if (value) connectOpponentShareLink(value);
@@ -253,6 +262,7 @@ function bindEvents() {
     ["pointerdown", "touchstart"].forEach(evt => els.talkButton.addEventListener(evt, startListening, {passive:false}));
     ["pointerup", "pointercancel", "pointerleave", "touchend"].forEach(evt => els.talkButton.addEventListener(evt, stopListening, {passive:false}));
   }
+  window.addEventListener("popstate", handleBrowserBack);
 }
 
 function showFirstRunIfNeeded() {
@@ -1259,6 +1269,10 @@ function buildReferenceData(documents) {
 }
 
 const GDC_11E_RAW = "https://raw.githubusercontent.com/game-datacards/datasources/refs/heads/main/11th/gdc/";
+const GDC_10E_RAW = "https://raw.githubusercontent.com/game-datacards/datasources/refs/heads/main/10th/gdc/";
+const VERIFIED_11E_LEGACY_STRAT_FALLBACKS = new Set([
+  "vindication task force"
+]);
 const gdcFactionCache = new Map();
 let gdcFactionFileIndexPromise = null;
 
@@ -1617,6 +1631,39 @@ function gdcStratagemsToReferences(data, detachmentNames = null, sourceLabel = "
     });
 }
 
+async function getVerifiedLegacyStratagemFallbacks(factionName, detachmentNames, sourceLabel = "") {
+  const wantedNames = (detachmentNames || [])
+    .filter(name => VERIFIED_11E_LEGACY_STRAT_FALLBACKS.has(normalize(name)));
+
+  if (!wantedNames.length) return [];
+
+  const slugs = await resolveGdcFactionSlugs(factionName);
+  const collected = [];
+
+  for (const slug of slugs) {
+    try {
+      const response = await fetch(GDC_10E_RAW + encodeURIComponent(slug) + ".json");
+      if (!response.ok) continue;
+
+      const data = await response.json();
+      const items = gdcStratagemsToReferences(data, wantedNames, sourceLabel)
+        .map(item => ({...item, source:"Game Datacards verified fallback"}));
+
+      collected.push(...items);
+
+      const found = new Set(collected.map(item => normalize(item.detachment || "")));
+      if (wantedNames.every(name => found.has(normalize(name)))) break;
+    } catch (error) {
+      console.warn("Could not load verified detachment fallback", slug, error);
+    }
+  }
+
+  return dedupeBy(
+    collected,
+    item => normalize((item.detachment || "") + "|" + item.name + "|" + item.text)
+  );
+}
+
 async function getUnitBrowserReferenceData(source) {
   if (!source) return {stratagems:[], armyRules:[], note:""};
 
@@ -1656,6 +1703,20 @@ async function getUnitBrowserReferenceData(source) {
         )
       : [];
 
+    const foundExternalDetachments = new Set(
+      externalStratagems.map(item => normalize(item.detachment || ""))
+    );
+    const missingExternalDetachments = detachmentNames.filter(
+      name => !foundExternalDetachments.has(normalize(name))
+    );
+    const verifiedFallbackStratagems = missingExternalDetachments.length
+      ? await getVerifiedLegacyStratagemFallbacks(
+          source.faction || roster?.faction || "",
+          missingExternalDetachments,
+          roster?.name || source.label
+        )
+      : [];
+
     const embeddedStratagems = (roster?.selectedDetachmentStratagems || [])
       .filter(item => item?.name && item?.text)
       .map(item => ({
@@ -1664,7 +1725,7 @@ async function getUnitBrowserReferenceData(source) {
       }));
 
     const stratagems = dedupeBy(
-      [...embeddedStratagems, ...externalStratagems],
+      [...embeddedStratagems, ...externalStratagems, ...verifiedFallbackStratagems],
       item => normalize((item.detachment || "") + "|" + item.name + "|" + item.text)
     );
 
@@ -2864,6 +2925,7 @@ function selectUnitFromRoster(unit, rosterIndex) {
   }
 
   switchPage("datasheets", {silent:true});
+  enterDatasheetHistory();
   selectUnit(unit);
   renderActiveArmySelector();
   renderTabs();
@@ -4540,7 +4602,26 @@ function renderQuickLists() {
   updateRosterBrowserVisibility();
 }
 
-function backToRosterBrowser() {
+function enterDatasheetHistory() {
+  if (history.state?.tvView === "datasheet") return;
+  history.pushState({...history.state, tvView:"datasheet"}, "", location.href);
+}
+
+function handleDatasheetBack() {
+  if (state.selected && history.state?.tvView === "datasheet") {
+    history.back();
+    return;
+  }
+  backToRosterBrowser();
+}
+
+function handleBrowserBack() {
+  if (state.currentPage === "datasheets" && state.selected) {
+    backToRosterBrowser({fromHistory:true});
+  }
+}
+
+function backToRosterBrowser(options = {}) {
   if (!getUnitBrowserSources().length) return;
 
   state.selected = null;
@@ -4553,6 +4634,10 @@ function backToRosterBrowser() {
   updateRosterBrowserVisibility();
   setVoicePrompt("datasheets");
   window.scrollTo({top:0, behavior:"smooth"});
+
+  if (!options.fromHistory && history.state?.tvView === "datasheet") {
+    history.replaceState({...history.state, tvView:"list"}, "", location.href);
+  }
 }
 
 function bindDynamicDetailControls() {}
@@ -4613,6 +4698,39 @@ function renderSharePage() {
     : '<option value="">No imported lists</option>';
 
   els.createAppShareButton.disabled = !rosters.length;
+  if (els.removeShareRosterButton) {
+    els.removeShareRosterButton.disabled = !rosters.length;
+    els.removeShareRosterButton.classList.toggle("hidden", !rosters.length);
+  }
+}
+
+function removeSelectedShareRoster() {
+  const roster = getRosterForAppShare();
+  if (!roster) return;
+
+  if (!confirm('Remove "' + roster.name + '" from this device? The copy already sent to another device will not be affected.')) {
+    return;
+  }
+
+  cleanupSharePeer();
+  els.appShareQrPanel?.classList.add("hidden");
+  if (els.appShareQrCode) els.appShareQrCode.innerHTML = "";
+
+  const index = state.rosters.findIndex(item => item.id === roster.id);
+  if (index >= 0) state.rosters.splice(index, 1);
+
+  state.activeRoster = Math.min(state.activeRoster, Math.max(0, state.rosters.length - 1));
+
+  if (state.unitBrowserSourceId === "roster:" + roster.id) {
+    const nextSource = getUnitBrowserSources().find(source => source.id !== "all");
+    state.unitBrowserSourceId = nextSource?.id || "all";
+    localStorage.setItem("tv_unit_browser_source", state.unitBrowserSourceId);
+  }
+
+  persist();
+  renderAll();
+  renderSharePage();
+  toast("List removed from this device");
 }
 
 function getRosterForAppShare() {
@@ -4671,6 +4789,7 @@ function setOpponentReceiveStatus(message, type = "") {
   els.opponentReceiveStatus.classList.remove("hidden","good","bad");
   if (type) els.opponentReceiveStatus.classList.add(type);
   els.opponentReceiveStatus.textContent = message;
+  if (type !== "good") els.opponentReceiveActions?.classList.add("hidden");
 }
 
 function createAppShareQr() {
@@ -4727,12 +4846,12 @@ function createAppShareQr() {
       if (message?.type !== "tv-share-hello" || message.key !== secret) return;
 
       sendAppSharePackage(conn, roster)
-        .then(() => setAppShareStatus("List sent ✓"))
+        .then(() => setAppShareStatus("List sent ✓ — use the × beside the list selector if you want to remove it from this device."))
         .catch(error => setAppShareStatus(error.message || "Transfer failed"));
     });
 
     conn.on("close", () => {
-      if (els.appShareStatus?.textContent !== "List sent ✓") {
+      if (!els.appShareStatus?.textContent?.startsWith("List sent ✓")) {
         setAppShareStatus("Opponent disconnected");
       }
     });
@@ -4800,10 +4919,14 @@ function importSharedRosterPackage(pack) {
   renderSharePage();
 
   setOpponentReceiveStatus(
-    "Imported " + roster.name + (roster.points != null ? " · " + roster.points + " pts" : "") + " ✓",
+    "SAVED TO THIS APP ✓ — " + roster.name +
+      (roster.points != null ? " · " + roster.points + " pts" : "") +
+      ". No save button is needed; the list is already stored on this device.",
     "good"
   );
-  toast("Opponent list imported");
+  els.opponentReceiveActions?.classList.remove("hidden");
+  if (els.opponentShareLink) els.opponentShareLink.value = "";
+  toast("Opponent list saved to this app");
   setTimeout(cleanupSharePeer, 250);
 }
 
