@@ -107,6 +107,7 @@ const els = {
   p2SecondaryTotal: $("p2SecondaryTotal"),
   scoreTurnLabel1: $("scoreTurnLabel1"),
   scoreTurnLabel2: $("scoreTurnLabel2"),
+  scoreResetButton: $("scoreResetButton"),
   diceCount: $("diceCount"),
   diceTarget: $("diceTarget"),
   rollDiceButton: $("rollDiceButton"),
@@ -196,6 +197,7 @@ function bindEvents() {
   document.querySelectorAll("[data-score-turn]").forEach(button => {
     button.addEventListener("click", () => setScoreTurn(Number(button.dataset.scoreTurn)));
   });
+  els.scoreResetButton?.addEventListener("click", resetScores);
   document.querySelectorAll("[data-dice-count]").forEach(button => {
     button.addEventListener("click", () => rollDice(
       Number(button.dataset.diceCount),
@@ -565,10 +567,11 @@ function parseTextRosterFile(text, fileName) {
     faction,
     source:"new-recruit",
     importFormat:"txt",
-    detachmentParserVersion:3,
+    detachmentParserVersion:4,
     points:Number.isFinite(totalPoints) ? totalPoints : null,
     detachments,
     selectedDetachmentStratagems:[],
+    detachmentRules:[],
     armyRules:[],
     units,
     referenceData:{rules:[], stratagems:[]},
@@ -596,10 +599,11 @@ function buildRosterFromNewRecruitRoot(root, fileName, importFormat = "json") {
     faction:(root.forces || [])[0]?.catalogueName || (root.forces || [])[0]?.name || "New Recruit list",
     source:"new-recruit",
     importFormat,
-    detachmentParserVersion:3,
+    detachmentParserVersion:4,
     points:pts ?? null,
     detachments:extractSelectedDetachments(root),
     selectedDetachmentStratagems:extractSelectedDetachmentStratagems(root),
+    detachmentRules:extractSelectedDetachmentRules(root),
     armyRules:extractArmyRules(root),
     units:dedupeBy(units, u => u.id || u.name),
     referenceData:extractReferenceData(root, fileName),
@@ -789,6 +793,99 @@ function extractSelectedDetachments(root) {
   }
 
   return dedupeBy(found, item => normalize(item.faction + "|" + item.name));
+}
+
+
+function extractSelectedDetachmentRules(root) {
+  const collected = [];
+
+  function collectFromDetachmentNode(node, detachmentName, sourceLabel) {
+    function walk(value) {
+      if (!value || typeof value !== "object") return;
+      if (Array.isArray(value)) {
+        value.forEach(walk);
+        return;
+      }
+
+      for (const rule of value.rules || []) {
+        if (!rule || rule.hidden || !rule.description) continue;
+
+        const name = cleanRuleText(rule.name || "Detachment rule").trim();
+        const text = cleanRuleText(rule.description || "").trim();
+        if (!name || !text) continue;
+
+        // Bundled detachment stratagem text is handled by the stratagem parser,
+        // so do not duplicate it on the Army Rules page.
+        if (parseBundledStratagemText(rule.description, rule.name || "Stratagem").length) continue;
+
+        collected.push({
+          name,
+          text,
+          category:"Detachment rule",
+          detachment:detachmentName,
+          source:sourceLabel || "Imported New Recruit"
+        });
+      }
+
+      for (const profile of value.profiles || []) {
+        if (!profile || profile.hidden) continue;
+
+        const type = String(profile.typeName || "");
+        const name = cleanRuleText(profile.name || "Detachment ability").trim();
+        const rawText = (profile.characteristics || [])
+          .map(characteristic => characteristicValue(characteristic))
+          .filter(Boolean)
+          .join("\n");
+        const text = cleanRuleText(rawText).trim();
+
+        if (!name || !text) continue;
+        if (/stratagem/i.test(type) || /stratagem/i.test(name)) continue;
+        if (parseBundledStratagemText(rawText, name).length) continue;
+        if (!/abilit|detachment|rule/i.test(type)) continue;
+
+        collected.push({
+          name,
+          text,
+          category:"Detachment ability",
+          detachment:detachmentName,
+          source:sourceLabel || "Imported New Recruit"
+        });
+      }
+
+      for (const child of value.selections || []) walk(child);
+    }
+
+    walk(node);
+  }
+
+  for (const force of root?.forces || []) {
+    const sourceLabel = force.catalogueName || force.name || "";
+
+    function walk(value) {
+      if (!value || typeof value !== "object") return;
+      if (Array.isArray(value)) {
+        value.forEach(walk);
+        return;
+      }
+
+      if (
+        isSelectedDetachmentNode(value) &&
+        value.name &&
+        !/^detachment$/i.test(String(value.name).trim())
+      ) {
+        collectFromDetachmentNode(value, String(value.name).trim(), sourceLabel);
+      }
+
+      for (const child of value.selections || []) walk(child);
+    }
+
+    walk(force.selections || []);
+  }
+
+  return dedupeBy(
+    collected,
+    item => normalize((item.detachment || "") + "|" + item.name + "|" + item.text)
+  );
 }
 
 function extractArmyRules(root) {
@@ -1543,6 +1640,8 @@ async function getUnitBrowserReferenceData(source) {
   if (source.kind === "new-recruit") {
     const roster = source.roster;
     const localRules = (roster?.armyRules || []).filter(rule => rule?.name && rule?.text);
+    const embeddedDetachmentRules = (roster?.detachmentRules || [])
+      .filter(rule => rule?.name && rule?.text);
 
     const detachmentNames = (roster?.detachments || [])
       .flatMap(item => splitCompositeDetachmentName(item?.name || ""))
@@ -1569,12 +1668,17 @@ async function getUnitBrowserReferenceData(source) {
       item => normalize((item.detachment || "") + "|" + item.name + "|" + item.text)
     );
 
-    const armyRules = localRules.length
+    const factionRules = localRules.length
       ? localRules
       : dedupeBy(
           datasets.flatMap(data => gdcArmyRulesToReferences(data, roster?.name || source.label)),
           item => normalize(item.name + "|" + item.text)
         );
+
+    const armyRules = dedupeBy(
+      [...factionRules, ...embeddedDetachmentRules],
+      item => normalize((item.detachment || "") + "|" + item.name + "|" + item.text)
+    );
 
     let note = "";
     if (!detachmentNames.length) {
@@ -1583,8 +1687,8 @@ async function getUnitBrowserReferenceData(source) {
       note = "No current faction reference data was found for this list.";
     } else if (!stratagems.length) {
       note = "The selected detachment was detected, but no matching stratagems were found.";
-    } else if ((roster?.detachmentParserVersion || 0) < 3) {
-      note = "Re-import this list once to pick up any detachment stratagems embedded in the newer New Recruit export.";
+    } else if ((roster?.detachmentParserVersion || 0) < 4) {
+      note = "Re-import this list once to pick up detachment rules, abilities and any embedded stratagems from the newer New Recruit export.";
     }
 
     return {stratagems, armyRules, note};
@@ -1634,7 +1738,7 @@ function renderBrowserReferenceCards(items, kind = "rule") {
   let lastDetachment = "";
 
   return ordered.map(item => {
-    const detachment = kind === "stratagem" ? String(item.detachment || "").trim() : "";
+    const detachment = String(item.detachment || "").trim();
     const detachmentHeading =
       detachment && detachment !== lastDetachment
         ? `<div class="reference-detachment-heading">${escapeHtml(detachment)}</div>`
@@ -3409,6 +3513,17 @@ function toggleTurn() {
   const next = match.turn === "your" ? "opponent" : "your";
   localStorage.setItem("tv_match_turn", next);
   renderMatchTools();
+}
+
+function resetScores() {
+  if (!confirm("Reset both players' scores for all five turns?")) return;
+
+  localStorage.removeItem("tv_score_state");
+  localStorage.removeItem("tv_score_turn");
+  state.scoreTurn = 1;
+  renderScoreboard();
+  setVoicePrompt("score");
+  toast("Scores reset");
 }
 
 function resetMatchState() {
