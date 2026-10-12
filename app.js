@@ -14,7 +14,11 @@ const state = {
   scoreTurn: Math.min(5, Math.max(1, Number(localStorage.getItem("tv_score_turn") || 1))),
   unitBrowserSourceId: localStorage.getItem("tv_unit_browser_source") || "all",
   lastDiceRoll: null,
-  showDiceOrder: false
+  showDiceOrder: false,
+  sharePeer: null,
+  shareConnection: null,
+  shareScanner: null,
+  pendingSharedRoster: null
 };
 
 const $ = (id) => document.getElementById(id);
@@ -70,7 +74,23 @@ const els = {
   pageScore: $("pageScore"),
   pageDice: $("pageDice"),
   pageStrats: $("pageStrats"),
+  pageArmyRules: $("pageArmyRules"),
   pageRules: $("pageRules"),
+  pageShare: $("pageShare"),
+  stratSourceTabs: $("stratSourceTabs"),
+  stratPageContent: $("stratPageContent"),
+  armyRuleSourceTabs: $("armyRuleSourceTabs"),
+  armyRulePageContent: $("armyRulePageContent"),
+  shareRosterSelect: $("shareRosterSelect"),
+  createAppShareButton: $("createAppShareButton"),
+  appShareQrPanel: $("appShareQrPanel"),
+  appShareQrCode: $("appShareQrCode"),
+  appShareStatus: $("appShareStatus"),
+  scanOpponentQrButton: $("scanOpponentQrButton"),
+  opponentQrScanner: $("opponentQrScanner"),
+  opponentShareLink: $("opponentShareLink"),
+  connectOpponentLinkButton: $("connectOpponentLinkButton"),
+  opponentReceiveStatus: $("opponentReceiveStatus"),
   pageSetup: $("pageSetup"),
   dataRosterSummary: $("dataRosterSummary"),
   fullDataArmySection: $("fullDataArmySection"),
@@ -190,6 +210,12 @@ function bindEvents() {
   els.toggleDiceOrderButton?.addEventListener("click", toggleDiceOrder);
   els.stratSearch?.addEventListener("input", () => renderStratagems(els.stratSearch.value));
   els.coreRuleSearch?.addEventListener("input", () => renderCoreRules(els.coreRuleSearch.value));
+  els.createAppShareButton?.addEventListener("click", createAppShareQr);
+  els.scanOpponentQrButton?.addEventListener("click", startOpponentQrScanner);
+  els.connectOpponentLinkButton?.addEventListener("click", () => {
+    const value = els.opponentShareLink?.value?.trim();
+    if (value) connectOpponentShareLink(value);
+  });
   els.setupChooseArmies?.addEventListener("click", openArmyPicker);
   els.resetMatchButton?.addEventListener("click", resetMatchState);
   document.querySelectorAll("[data-setup-check]").forEach(input => {
@@ -1967,7 +1993,7 @@ function setVoicePrompt(page = state.currentPage) {
 }
 
 function switchPage(page, options = {}) {
-  const valid = ["setup","datasheets","score","dice","strats","rules","guide"];
+  const valid = ["setup","datasheets","strats","army-rules","score","dice","rules","share","guide"];
   if (!valid.includes(page)) page = "setup";
 
   state.currentPage = page;
@@ -1980,13 +2006,15 @@ function switchPage(page, options = {}) {
   document.querySelectorAll("[data-page-target]").forEach(button => {
     button.classList.toggle("active", button.dataset.pageTarget === page);
   });
-  els.navMoreButton?.classList.toggle("active", ["rules","guide"].includes(page));
+  els.navMoreButton?.classList.toggle("active", ["rules","share","guide"].includes(page));
 
   els.navMoreMenu?.classList.add("hidden");
   els.navMoreButton?.setAttribute("aria-expanded", "false");
 
-  if (page === "strats") renderStratagems(els.stratSearch?.value || "");
+  if (page === "strats") renderSourceReferencePage("stratagem");
+  if (page === "army-rules") renderSourceReferencePage("rule");
   if (page === "rules") renderCoreRules(els.coreRuleSearch?.value || "");
+  if (page === "share") renderSharePage();
   if (page === "setup") renderDataSummary();
   if (page === "score") renderScoreboard();
   if (page === "dice") renderDiceState();
@@ -2537,6 +2565,7 @@ function selectUnitFromRoster(unit, rosterIndex) {
   const roster = state.rosters[state.activeRoster];
   if (roster && els.rosterTitle) els.rosterTitle.textContent = roster.name;
   persist();
+  requestAnimationFrame(() => window.scrollTo({top:0, behavior:"auto"}));
 }
 
 function findTextUnitReference(unit) {
