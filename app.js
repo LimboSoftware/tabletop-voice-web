@@ -1747,23 +1747,76 @@ function renderReferenceCards(items, container, query = "") {
     : '<div class="empty-section">No matching reference found.</div>';
 }
 
-function renderStratagems(query = "", options = {}) {
-  if (!els.stratResults) return;
+function renderReferenceSourceTabs(container, kind) {
+  if (!container) return;
 
-  const data = getCombinedReferenceData();
-  const combined = dedupeBy(
-    [...state.detachmentStratagems, ...data.stratagems],
-    item => normalize((item.detachment || "") + "|" + item.name + "|" + item.text)
-  );
+  const sources = getUnitBrowserSources();
+  const active = getActiveUnitBrowserSource();
 
-  const scratch = document.createElement("div");
-  renderReferenceCards(combined, scratch, query);
+  if (!sources.length) {
+    container.innerHTML = "";
+    return;
+  }
 
-  els.stratResults.innerHTML =
-    renderDetachmentSummary() +
-    scratch.innerHTML;
+  container.innerHTML = sources.map(source => `
+    <button
+      type="button"
+      class="roster-tab${source.id === active?.id ? " active" : ""}"
+      data-reference-source-id="${escapeHtml(source.id)}">
+      <strong>${escapeHtml(source.label)}</strong>
+      <small>${escapeHtml(source.subLabel || "")}</small>
+    </button>`).join("");
 
-  if (!options.skipLoad) ensureDetachmentStratagems();
+  container.querySelectorAll("[data-reference-source-id]").forEach(button => {
+    button.addEventListener("click", () => {
+      setUnitBrowserSource(button.dataset.referenceSourceId);
+      renderSourceReferencePage(kind);
+    });
+  });
+}
+
+async function renderSourceReferencePage(kind) {
+  const isStratagem = kind === "stratagem";
+  const tabs = isStratagem ? els.stratSourceTabs : els.armyRuleSourceTabs;
+  const container = isStratagem ? els.stratPageContent : els.armyRulePageContent;
+
+  renderReferenceSourceTabs(tabs, kind);
+  if (!container) return;
+
+  const source = getActiveUnitBrowserSource();
+
+  if (!source) {
+    container.innerHTML = '<div class="empty-section">Import a New Recruit list or choose a whole army first.</div>';
+    return;
+  }
+
+  container.innerHTML = '<div class="browser-reference-loading">Loading ' +
+    (isStratagem ? "stratagems" : "army rules") + '…</div>';
+
+  const requestedSourceId = source.id;
+  const data = await getUnitBrowserReferenceData(source);
+  const current = getActiveUnitBrowserSource();
+
+  if (!current || current.id !== requestedSourceId) return;
+
+  const items = isStratagem ? data.stratagems : data.armyRules;
+
+  container.innerHTML = `
+    ${data.note ? `<div class="roster-refresh-note">${escapeHtml(data.note)}</div>` : ""}
+    ${isStratagem ? renderStratagemPhaseTabs(items) : ""}
+    <div class="ability-list browser-reference-list dedicated-reference-list">
+      ${renderBrowserReferenceCards(items || [], isStratagem ? "stratagem" : "rule")}
+    </div>`;
+
+  bindUnitBrowserReferenceControls(container);
+}
+
+function renderStratagems() {
+  return renderSourceReferencePage("stratagem");
+}
+
+function renderArmyRulesPage() {
+  return renderSourceReferencePage("rule");
 }
 
 function renderCoreRules(query = "") {
@@ -2195,7 +2248,6 @@ function renderAll() {
     updateRosterBrowserVisibility();
   }
 
-  renderStratagems(els.stratSearch?.value || "");
   renderCoreRules(els.coreRuleSearch?.value || "");
   renderMatchTools();
 }
@@ -2478,6 +2530,10 @@ function setUnitBrowserSource(sourceId) {
   renderQuickLists();
   updateRosterBrowserVisibility();
   renderMatchTools();
+
+  if (state.currentPage === "strats") renderSourceReferencePage("stratagem");
+  if (state.currentPage === "army-rules") renderSourceReferencePage("rule");
+
   persist();
 }
 
@@ -4234,12 +4290,8 @@ function renderQuickLists() {
       </section>`);
   }
 
-  html.push(renderUnitBrowserReferences(source));
-
   els.quickLists.innerHTML = html.join("") ||
     '<div class="empty-section">No units were found in this data source.</div>';
-
-  refreshUnitBrowserReferences(source.id);
 
   els.quickLists.querySelectorAll("[data-entry-index]").forEach(button => {
     button.addEventListener("click", () => {
