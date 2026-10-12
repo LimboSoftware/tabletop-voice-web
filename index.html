@@ -321,7 +321,10 @@
             <span class="section-label">SEND A LIST</span>
             <h2>Show your opponent a QR</h2>
             <label class="share-select-label" for="shareRosterSelect">Imported list</label>
-            <select id="shareRosterSelect"></select>
+            <div class="share-roster-picker">
+              <select id="shareRosterSelect"></select>
+              <button id="removeShareRosterButton" class="ghost-button share-remove-list-button" type="button" title="Remove selected list from this device" aria-label="Remove selected list from this device">×</button>
+            </div>
             <button id="createAppShareButton" class="primary-button large" type="button">Create share QR</button>
             <div id="appShareQrPanel" class="app-share-qr-panel hidden">
               <div id="appShareQrCode" class="app-share-qr-code"></div>
@@ -343,6 +346,15 @@
               </div>
             </div>
             <div id="opponentReceiveStatus" class="share-receive-status hidden"></div>
+            <div id="opponentReceiveActions" class="share-receive-actions hidden">
+              <strong>List ready to use</strong>
+              <small>It is already saved locally. Choose where you want to go next.</small>
+              <div class="share-receive-action-buttons">
+                <button id="openReceivedUnitsButton" class="primary-button" type="button">Open Units</button>
+                <button id="openReceivedStratsButton" class="ghost-button" type="button">Open Strats</button>
+                <button id="openReceivedRulesButton" class="ghost-button" type="button">Open Army Rules</button>
+              </div>
+            </div>
           </section>
         </div>
       </section>
