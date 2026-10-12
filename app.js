@@ -1269,10 +1269,6 @@ function buildReferenceData(documents) {
 }
 
 const GDC_11E_RAW = "https://raw.githubusercontent.com/game-datacards/datasources/refs/heads/main/11th/gdc/";
-const GDC_10E_RAW = "https://raw.githubusercontent.com/game-datacards/datasources/refs/heads/main/10th/gdc/";
-const VERIFIED_11E_LEGACY_STRAT_FALLBACKS = new Set([
-  "vindication task force"
-]);
 const gdcFactionCache = new Map();
 let gdcFactionFileIndexPromise = null;
 
@@ -1631,39 +1627,6 @@ function gdcStratagemsToReferences(data, detachmentNames = null, sourceLabel = "
     });
 }
 
-async function getVerifiedLegacyStratagemFallbacks(factionName, detachmentNames, sourceLabel = "") {
-  const wantedNames = (detachmentNames || [])
-    .filter(name => VERIFIED_11E_LEGACY_STRAT_FALLBACKS.has(normalize(name)));
-
-  if (!wantedNames.length) return [];
-
-  const slugs = await resolveGdcFactionSlugs(factionName);
-  const collected = [];
-
-  for (const slug of slugs) {
-    try {
-      const response = await fetch(GDC_10E_RAW + encodeURIComponent(slug) + ".json");
-      if (!response.ok) continue;
-
-      const data = await response.json();
-      const items = gdcStratagemsToReferences(data, wantedNames, sourceLabel)
-        .map(item => ({...item, source:"Game Datacards verified fallback"}));
-
-      collected.push(...items);
-
-      const found = new Set(collected.map(item => normalize(item.detachment || "")));
-      if (wantedNames.every(name => found.has(normalize(name)))) break;
-    } catch (error) {
-      console.warn("Could not load verified detachment fallback", slug, error);
-    }
-  }
-
-  return dedupeBy(
-    collected,
-    item => normalize((item.detachment || "") + "|" + item.name + "|" + item.text)
-  );
-}
-
 async function getUnitBrowserReferenceData(source) {
   if (!source) return {stratagems:[], armyRules:[], note:""};
 
@@ -1709,13 +1672,6 @@ async function getUnitBrowserReferenceData(source) {
     const missingExternalDetachments = detachmentNames.filter(
       name => !foundExternalDetachments.has(normalize(name))
     );
-    const verifiedFallbackStratagems = missingExternalDetachments.length
-      ? await getVerifiedLegacyStratagemFallbacks(
-          source.faction || roster?.faction || "",
-          missingExternalDetachments,
-          roster?.name || source.label
-        )
-      : [];
 
     const embeddedStratagems = (roster?.selectedDetachmentStratagems || [])
       .filter(item => item?.name && item?.text)
@@ -1725,7 +1681,7 @@ async function getUnitBrowserReferenceData(source) {
       }));
 
     const stratagems = dedupeBy(
-      [...embeddedStratagems, ...externalStratagems, ...verifiedFallbackStratagems],
+      [...embeddedStratagems, ...externalStratagems],
       item => normalize((item.detachment || "") + "|" + item.name + "|" + item.text)
     );
 
@@ -1746,8 +1702,12 @@ async function getUnitBrowserReferenceData(source) {
       note = "No selected detachment was detected in this New Recruit list.";
     } else if (!datasets.length && !embeddedStratagems.length) {
       note = "No current faction reference data was found for this list.";
+    } else if (missingExternalDetachments.length) {
+      note = "Some selected detachments are not yet present in the current 11th-edition reference data: " +
+        missingExternalDetachments.join(", ") +
+        ". No older-edition stratagems will be shown.";
     } else if (!stratagems.length) {
-      note = "The selected detachment was detected, but no matching stratagems were found.";
+      note = "The selected detachment was detected, but no matching current-edition stratagems were found.";
     } else if ((roster?.detachmentParserVersion || 0) < 4) {
       note = "Re-import this list once to pick up detachment rules, abilities and any embedded stratagems from the newer New Recruit export.";
     }
