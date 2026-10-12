@@ -38,13 +38,16 @@
     <nav id="appNav" class="app-nav" aria-label="App sections">
       <button class="app-nav-button active" type="button" data-page-target="setup"><span class="nav-icon">＋</span><span>Setup</span></button>
       <button class="app-nav-button" type="button" data-page-target="datasheets"><span class="nav-icon">▤</span><span>Units</span></button>
+      <button class="app-nav-button" type="button" data-page-target="strats"><span class="nav-icon">⚡</span><span>Strats</span></button>
+      <button class="app-nav-button" type="button" data-page-target="army-rules"><span class="nav-icon">◆</span><span>Army Rules</span></button>
       <button class="app-nav-button" type="button" data-page-target="score"><span class="nav-icon">◎</span><span>Score</span></button>
       <button class="app-nav-button" type="button" data-page-target="dice"><span class="nav-icon">⚄</span><span>Dice</span></button>
-      <button class="app-nav-button extra-nav" type="button" data-page-target="guide"><span class="nav-icon">⚙</span><span>Guide</span></button>
       <div class="nav-more">
         <button id="navMoreButton" class="app-nav-button" type="button" aria-expanded="false"><span class="nav-icon">•••</span><span>More</span></button>
         <div id="navMoreMenu" class="nav-more-menu hidden">
           <button type="button" data-page-target="rules">? Core Rules</button>
+          <button type="button" data-page-target="share">⇄ Share Lists</button>
+          <a class="nav-more-link" href="./roster-transfer/">▦ Phone QR Transfer</a>
           <button type="button" data-page-target="guide">⚙ Guide</button>
         </div>
       </div>
@@ -270,17 +273,26 @@
         </section>
       </section>
 
-      <section id="pageStrats" class="app-page hidden utility-page" data-page="strats">
-        <div class="page-heading">
-          <p class="eyebrow">REFERENCE</p>
+      <section id="pageStrats" class="app-page hidden utility-page source-reference-page" data-page="strats">
+        <div class="page-heading compact-reference-heading">
+          <p class="eyebrow">ARMY REFERENCE</p>
           <h1>Stratagems</h1>
-          <p>Search the stratagem references available from your loaded data.</p>
+          <p>Shows the stratagems available to the selected imported list or whole army.</p>
         </div>
-        <label class="reference-search">
-          <span>Search stratagems</span>
-          <input id="stratSearch" type="search" placeholder="e.g. Overwatch" autocomplete="off" />
-        </label>
-        <div id="stratResults" class="reference-results"></div>
+        <div id="stratSourceTabs" class="roster-tabs roster-mini-tabs reference-source-tabs"></div>
+        <div id="stratPageContent" class="source-reference-content"></div>
+        <input id="stratSearch" class="hidden" type="search" />
+        <div id="stratResults" class="hidden"></div>
+      </section>
+
+      <section id="pageArmyRules" class="app-page hidden utility-page source-reference-page" data-page="army-rules">
+        <div class="page-heading compact-reference-heading">
+          <p class="eyebrow">ARMY REFERENCE</p>
+          <h1>Army Rules</h1>
+          <p>Rules that apply to the selected imported list or whole army.</p>
+        </div>
+        <div id="armyRuleSourceTabs" class="roster-tabs roster-mini-tabs reference-source-tabs"></div>
+        <div id="armyRulePageContent" class="source-reference-content"></div>
       </section>
 
       <section id="pageRules" class="app-page hidden utility-page" data-page="rules">
@@ -294,6 +306,44 @@
           <input id="coreRuleSearch" type="search" placeholder="e.g. Battle-shock, Deep Strike" autocomplete="off" />
         </label>
         <div id="coreRuleResults" class="reference-results"></div>
+      </section>
+
+      <section id="pageShare" class="app-page hidden utility-page share-page" data-page="share">
+        <div class="page-heading">
+          <p class="eyebrow">APP TO APP</p>
+          <h1>Share Lists</h1>
+          <p>Send one of your imported lists directly to another copy of Tabletop Voice, or scan an opponent's QR to import theirs.</p>
+        </div>
+
+        <div class="share-grid">
+          <section class="tool-card share-tool-card">
+            <span class="section-label">SEND A LIST</span>
+            <h2>Show your opponent a QR</h2>
+            <label class="share-select-label" for="shareRosterSelect">Imported list</label>
+            <select id="shareRosterSelect"></select>
+            <button id="createAppShareButton" class="primary-button large" type="button">Create share QR</button>
+            <div id="appShareQrPanel" class="app-share-qr-panel hidden">
+              <div id="appShareQrCode" class="app-share-qr-code"></div>
+              <strong id="appShareStatus">Waiting for opponent…</strong>
+              <small>Keep this page open until their app says the list was received.</small>
+            </div>
+          </section>
+
+          <section class="tool-card share-tool-card">
+            <span class="section-label">GET OPPONENT LIST</span>
+            <h2>Scan their Tabletop Voice QR</h2>
+            <button id="scanOpponentQrButton" class="primary-button large" type="button">Scan opponent QR</button>
+            <div id="opponentQrScanner" class="opponent-qr-scanner hidden"></div>
+            <div class="share-link-fallback">
+              <label for="opponentShareLink">Or paste a share link</label>
+              <div class="copy-row">
+                <input id="opponentShareLink" type="text" placeholder="Paste Tabletop Voice share link">
+                <button id="connectOpponentLinkButton" class="ghost-button compact" type="button">Import</button>
+              </div>
+            </div>
+            <div id="opponentReceiveStatus" class="share-receive-status hidden"></div>
+          </section>
+        </div>
       </section>
 
       <section id="pageSetup" class="app-page hidden utility-page" data-page="guide">
@@ -369,6 +419,9 @@
   </div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/fflate/0.8.2/fflate.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.5/peerjs.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
