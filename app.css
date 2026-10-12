@@ -4150,6 +4150,69 @@ body.focus-mode .detail-panel {
   font-weight: 750;
 }
 
+.attached-group-section {
+  margin-top: 18px;
+  border-top: 2px solid #355064;
+  padding-top: 18px;
+}
+
+.attached-datasheet-list {
+  display: grid;
+  gap: 18px;
+}
+
+.attached-datasheet {
+  border: 1px solid #304054;
+  border-radius: 16px;
+  background: #0c131b;
+  overflow: hidden;
+}
+
+.attached-datasheet-heading {
+  padding: 13px 15px 11px;
+  border-bottom: 1px solid #293444;
+  background: #111923;
+}
+
+.attached-datasheet-heading span {
+  display: block;
+  color: var(--accent);
+  font-size: .64rem;
+  font-weight: 900;
+  letter-spacing: .09em;
+}
+
+.attached-datasheet-heading h3 {
+  margin: 4px 0 0;
+  font-size: 1.08rem;
+}
+
+.attached-stat-grid {
+  margin: 0;
+  border-radius: 0;
+  border: 0;
+  border-bottom: 1px solid #293444;
+  background: #0f151d;
+}
+
+.attached-datasheet-sections {
+  padding: 0 14px 14px;
+}
+
+.attached-datasheet-sections > .detail-section {
+  margin-top: 14px;
+}
+
+@media (max-width: 760px) {
+  .attached-datasheet-sections {
+    padding: 0 9px 10px;
+  }
+
+  .attached-datasheet-heading {
+    padding: 11px 12px 9px;
+  }
+}
+
 /* App-to-app roster sharing */
 .share-grid {
   display: grid;
