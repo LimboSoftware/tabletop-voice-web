@@ -137,8 +137,22 @@ const els = {
   voiceHeardText: $("voiceHeardText")
 };
 
+
+async function enforcePortraitOrientation() {
+  try {
+    if (screen.orientation?.lock) {
+      await screen.orientation.lock("portrait-primary");
+    }
+  } catch {
+    // Browser tabs often refuse orientation locks; installed PWAs generally allow them.
+  }
+}
+
+const SHOW_ATTACHED_DATASHEETS = true;
+
 function boot() {
   applyMode();
+  enforcePortraitOrientation();
   bindEvents();
   showFirstRunIfNeeded();
   setupSpeech();
@@ -727,6 +741,9 @@ function buildRosterFromNewRecruitRoot(root, fileName, importFormat = "json") {
 
   if (!units.length) throw new Error("No units were found in this New Recruit list.");
 
+  const uniqueUnits = dedupeBy(units, u => u.id || u.name);
+  resolveRosterAttachments(uniqueUnits);
+
   const pts = (root.costs || []).find(c => String(c.name).toLowerCase() === "pts")?.value;
 
   return {
@@ -741,7 +758,7 @@ function buildRosterFromNewRecruitRoot(root, fileName, importFormat = "json") {
     selectedDetachmentStratagems:extractSelectedDetachmentStratagems(root),
     detachmentRules:extractSelectedDetachmentRules(root),
     armyRules:extractArmyRules(root),
-    units:dedupeBy(units, u => u.id || u.name),
+    units:uniqueUnits,
     referenceData:extractReferenceData(root, fileName),
     importedAt:Date.now()
   };
@@ -1109,6 +1126,84 @@ function collectBSDataCategories(node) {
   return dedupeBy(names, value => normalize(value));
 }
 
+
+function collectSelectionIds(node) {
+  const ids = [];
+
+  function walk(value) {
+    if (!value || typeof value !== "object") return;
+    if (Array.isArray(value)) {
+      value.forEach(walk);
+      return;
+    }
+
+    if (value.id) ids.push(String(value.id));
+    for (const child of value.selections || []) walk(child);
+  }
+
+  walk(node);
+  return [...new Set(ids)];
+}
+
+function normalizeUnitAssociations(associations = []) {
+  return (associations || [])
+    .filter(item => item && typeof item === "object")
+    .map(item => ({
+      type:String(item.type || ""),
+      from:String(item.from || ""),
+      to:String(item.to || ""),
+      name:String(item.name || ""),
+      action:String(item.action || "")
+    }));
+}
+
+function resolveRosterAttachments(units = []) {
+  const bySelectionId = new Map();
+
+  for (const unit of units) {
+    for (const id of unit.selectionIds || []) {
+      if (id) bySelectionId.set(String(id), unit);
+    }
+  }
+
+  const link = (bodyguard, attached, role) => {
+    if (!bodyguard || !attached || bodyguard === attached) return;
+
+    bodyguard.attachedUnits ||= [];
+    if (!bodyguard.attachedUnits.some(item => item.id === attached.id)) {
+      bodyguard.attachedUnits.push({
+        id:attached.id,
+        name:attached.name,
+        role:role || "Attached Character"
+      });
+    }
+
+    attached.attachedTo = {
+      id:bodyguard.id,
+      name:bodyguard.name,
+      role:role || "Attached Character"
+    };
+  };
+
+  for (const bodyguard of units) {
+    for (const association of bodyguard.incomingAssociations || []) {
+      if (!/leading|supporting/i.test(association.name || "")) continue;
+      const attached = bySelectionId.get(String(association.from || ""));
+      link(bodyguard, attached, association.name);
+    }
+  }
+
+  for (const attached of units) {
+    for (const association of attached.outgoingAssociations || []) {
+      if (!/leading|supporting/i.test(association.name || "")) continue;
+      const bodyguard = bySelectionId.get(String(association.to || ""));
+      link(bodyguard, attached, association.name);
+    }
+  }
+
+  return units;
+}
+
 function parseNewRecruitSelection(selection) {
   const allProfiles = collectProfiles(selection);
   const unitProfiles = allProfiles.filter(p => p?.typeName === "Unit");
@@ -1154,6 +1249,9 @@ function parseNewRecruitSelection(selection) {
     stats,
     rules: abilities,
     profiles: weapons,
+    selectionIds:collectSelectionIds(selection),
+    incomingAssociations:normalizeUnitAssociations(selection.incomingAssociations || []),
+    outgoingAssociations:normalizeUnitAssociations(selection.associations || []),
     searchText: normalize([
       name,
       primaryUnitProfile.name,
@@ -3120,6 +3218,117 @@ function renderUnitKeywordsSection(unit) {
     </section>`;
 }
 
+
+function getRosterForDisplayedUnit(unit) {
+  if (!unit) return null;
+
+  return (
+    state.rosters.find(roster =>
+      roster.source === "new-recruit" &&
+      (roster.id === state.selectedRosterId || (roster.units || []).some(item => item.id === unit.id))
+    ) ||
+    state.rosters[state.activeRoster] ||
+    null
+  );
+}
+
+function getAttachedDatasheetCompanions(unit) {
+  if (!SHOW_ATTACHED_DATASHEETS || !unit) return [];
+
+  const roster = getRosterForDisplayedUnit(unit);
+  if (!roster?.units?.length) return [];
+
+  const byId = new Map(roster.units.map(item => [item.id, item]));
+  const companions = [];
+
+  const add = (item, role) => {
+    if (!item || item.id === unit.id || companions.some(entry => entry.unit.id === item.id)) return;
+    companions.push({unit:item, role});
+  };
+
+  if (unit.attachedUnits?.length) {
+    for (const attachment of unit.attachedUnits) {
+      add(byId.get(attachment.id), attachment.role || "Attached Character");
+    }
+    return companions;
+  }
+
+  if (unit.attachedTo?.id) {
+    const bodyguard = byId.get(unit.attachedTo.id);
+    add(bodyguard, "Bodyguard Unit");
+
+    for (const attachment of bodyguard?.attachedUnits || []) {
+      if (attachment.id === unit.id) continue;
+      add(byId.get(attachment.id), attachment.role || "Attached Character");
+    }
+  }
+
+  return companions;
+}
+
+function getDisplayStats(unit) {
+  const displayStats = getDisplayStats(unit);
+
+  return displayStats;
+}
+
+function renderAttachedDatasheetBlock(entry) {
+  const sourceUnit = entry.unit;
+  const unit = mergeTextUnitReference(sourceUnit);
+  const displayStats = getDisplayStats(unit);
+  const sections = [];
+
+  if (unit.profiles?.length) {
+    const rangedWeapons = unit.profiles.filter(profile => profile.type === "Ranged Weapons");
+    const meleeWeapons = unit.profiles.filter(profile => profile.type === "Melee Weapons");
+    const otherWeapons = unit.profiles.filter(profile =>
+      profile.type !== "Ranged Weapons" && profile.type !== "Melee Weapons"
+    );
+
+    if (rangedWeapons.length) sections.push(renderWeaponSection(rangedWeapons, "Ranged weapons"));
+    if (meleeWeapons.length) sections.push(renderWeaponSection(meleeWeapons, "Melee weapons"));
+    if (otherWeapons.length) sections.push(renderWeaponSection(otherWeapons, "Weapons"));
+  }
+
+  if (unit.rules?.length) sections.push(renderAbilitySection(unit.rules));
+  sections.push(renderUnitKeywordsSection(unit));
+
+  return `
+    <div class="attached-datasheet">
+      <div class="attached-datasheet-heading">
+        <span>${escapeHtml(String(entry.role || "Attached Character").toUpperCase())}</span>
+        <h3>${escapeHtml(unit.name)}</h3>
+      </div>
+      ${displayStats.length ? `
+        <div class="stat-grid attached-stat-grid">
+          ${displayStats.map(stat => `
+            <div class="stat">
+              <span>${escapeHtml(stat.label)}</span>
+              <strong>${escapeHtml(stat.value)}</strong>
+            </div>`).join("")}
+        </div>` : ""}
+      <div class="attached-datasheet-sections">
+        ${sections.filter(Boolean).join("")}
+      </div>
+    </div>`;
+}
+
+function renderAttachedDatasheets(unit) {
+  const companions = getAttachedDatasheetCompanions(unit);
+  if (!companions.length) return "";
+
+  return `
+    <section class="detail-section attached-group-section">
+      <div class="section-heading-row">
+        <h3>Attached unit profiles</h3>
+        <span class="section-count">${companions.length}</span>
+      </div>
+      <div class="attached-datasheet-list">
+        ${companions.map(renderAttachedDatasheetBlock).join("")}
+      </div>
+    </section>`;
+}
+
 function renderDetail(unit) {
   if (!unit) {
     els.emptyDetail?.classList.add("hidden");
@@ -3188,6 +3397,9 @@ function renderDetail(unit) {
   }
 
   sections.push(renderUnitKeywordsSection(unit));
+
+  const attachedDatasheets = renderAttachedDatasheets(sourceUnit);
+  if (attachedDatasheets) sections.push(attachedDatasheets);
 
   els.detailSections.innerHTML = sections.filter(Boolean).join("") ||
     '<section class="detail-section"><div class="empty-section">No additional profiles were found in this entry.</div></section>';
