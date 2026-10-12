@@ -1,4 +1,4 @@
-const CACHE = "tabletop-voice-beta-v20";
+const CACHE = "tabletop-voice-beta-v21";
 const ASSETS = ["./", "./index.html", "./app.css", "./app.js", "./manifest.webmanifest", "./icon.svg"];
 
 self.addEventListener("install", event => {
