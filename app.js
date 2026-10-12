@@ -52,6 +52,7 @@ const els = {
   voiceHint: $("voiceHint"),
   modeToggle: $("modeToggle"),
   focusButton: $("focusButton"),
+  linkedUnitButton: $("linkedUnitButton"),
   pinButton: $("pinButton"),
   roundDown: $("roundDown"),
   roundUp: $("roundUp"),
@@ -148,7 +149,6 @@ async function enforcePortraitOrientation() {
   }
 }
 
-const SHOW_ATTACHED_DATASHEETS = true;
 
 function boot() {
   applyMode();
@@ -191,6 +191,7 @@ function bindEvents() {
   });
   els.modeToggle.addEventListener("click", toggleMode);
   els.focusButton?.addEventListener("click", toggleFocusMode);
+  els.linkedUnitButton?.addEventListener("click", cycleLinkedUnit);
   els.backToRosterButton?.addEventListener("click", handleDatasheetBack);
   els.battleShockToggle?.addEventListener("click", () => toggleStatus("Battle-shocked"));
   els.oncePerGameToggle?.addEventListener("click", () => toggleStatus("Once-per-game used"));
@@ -1166,43 +1167,38 @@ function resolveRosterAttachments(units = []) {
   const bySelectionId = new Map();
 
   for (const unit of units) {
+    delete unit.attachedUnits;
+    delete unit.attachedTo;
+    delete unit.linkedUnitIds;
+
     for (const id of unit.selectionIds || []) {
       if (id) bySelectionId.set(String(id), unit);
     }
   }
 
-  const link = (bodyguard, attached, role) => {
-    if (!bodyguard || !attached || bodyguard === attached) return;
-
-    bodyguard.attachedUnits ||= [];
-    if (!bodyguard.attachedUnits.some(item => item.id === attached.id)) {
-      bodyguard.attachedUnits.push({
-        id:attached.id,
-        name:attached.name,
-        role:role || "Attached Character"
-      });
-    }
-
-    attached.attachedTo = {
-      id:bodyguard.id,
-      name:bodyguard.name,
-      role:role || "Attached Character"
-    };
-  };
-
   for (const bodyguard of units) {
+    const linked = [{unit:bodyguard, order:0}];
+
     for (const association of bodyguard.incomingAssociations || []) {
       if (!/leading|supporting/i.test(association.name || "")) continue;
-      const attached = bySelectionId.get(String(association.from || ""));
-      link(bodyguard, attached, association.name);
-    }
-  }
 
-  for (const attached of units) {
-    for (const association of attached.outgoingAssociations || []) {
-      if (!/leading|supporting/i.test(association.name || "")) continue;
-      const bodyguard = bySelectionId.get(String(association.to || ""));
-      link(bodyguard, attached, association.name);
+      const attached = bySelectionId.get(String(association.from || ""));
+      if (!attached || attached === bodyguard) continue;
+
+      const order = /leading/i.test(association.name || "") ? 1 : 2;
+      linked.push({unit:attached, order});
+    }
+
+    const group = dedupeBy(
+      linked.sort((a,b) => a.order - b.order).map(item => item.unit),
+      item => item.id
+    );
+
+    if (group.length < 2) continue;
+
+    const ids = group.map(item => item.id);
+    for (const unit of group) {
+      unit.linkedUnitIds = ids;
     }
   }
 
@@ -3098,6 +3094,65 @@ function scoreMatch(unit, q) {
   return hits ? 20 + hits * 10 : 0;
 }
 
+function getLinkedRosterForUnit(unit) {
+  if (!unit) return null;
+
+  if (state.selectedRosterId) {
+    const exact = state.rosters.find(roster =>
+      roster.source === "new-recruit" &&
+      roster.id === state.selectedRosterId &&
+      (roster.units || []).some(item => item.id === unit.id)
+    );
+    if (exact) return exact;
+  }
+
+  return state.rosters.find(roster =>
+    roster.source === "new-recruit" &&
+    (roster.units || []).some(item => item.id === unit.id)
+  ) || null;
+}
+
+function getLinkedUnits(unit) {
+  if (!unit?.linkedUnitIds?.length) return [];
+
+  const roster = getLinkedRosterForUnit(unit);
+  if (!roster) return [];
+
+  const byId = new Map((roster.units || []).map(item => [item.id, item]));
+  return unit.linkedUnitIds.map(id => byId.get(id)).filter(Boolean);
+}
+
+function updateLinkedUnitButton(unit = state.selected) {
+  if (!els.linkedUnitButton) return;
+
+  const linked = getLinkedUnits(unit);
+  if (linked.length < 2) {
+    els.linkedUnitButton.classList.add("hidden");
+    els.linkedUnitButton.textContent = "Linked";
+    els.linkedUnitButton.removeAttribute("title");
+    return;
+  }
+
+  const currentIndex = Math.max(0, linked.findIndex(item => item.id === unit.id));
+  const next = linked[(currentIndex + 1) % linked.length];
+
+  els.linkedUnitButton.classList.remove("hidden");
+  els.linkedUnitButton.textContent = "Linked " + (currentIndex + 1) + "/" + linked.length;
+  els.linkedUnitButton.title = "Next linked datasheet: " + next.name;
+}
+
+function cycleLinkedUnit() {
+  const linked = getLinkedUnits(state.selected);
+  if (linked.length < 2) return;
+
+  const currentIndex = linked.findIndex(item => item.id === state.selected?.id);
+  const next = linked[(currentIndex + 1 + linked.length) % linked.length];
+
+  selectUnit(next);
+  updateLinkedUnitButton(next);
+  requestAnimationFrame(() => window.scrollTo({top:0, behavior:"auto"}));
+}
+
 function selectUnit(unit) {
   state.selected = unit;
   rememberRecentUnit(unit);
@@ -3224,116 +3279,6 @@ function renderUnitKeywordsSection(unit) {
 }
 
 
-function getRosterForDisplayedUnit(unit) {
-  if (!unit) return null;
-
-  return (
-    state.rosters.find(roster =>
-      roster.source === "new-recruit" &&
-      (roster.id === state.selectedRosterId || (roster.units || []).some(item => item.id === unit.id))
-    ) ||
-    state.rosters[state.activeRoster] ||
-    null
-  );
-}
-
-function getAttachedDatasheetCompanions(unit) {
-  if (!SHOW_ATTACHED_DATASHEETS || !unit) return [];
-
-  const roster = getRosterForDisplayedUnit(unit);
-  if (!roster?.units?.length) return [];
-
-  const byId = new Map(roster.units.map(item => [item.id, item]));
-  const companions = [];
-
-  const add = (item, role) => {
-    if (!item || item.id === unit.id || companions.some(entry => entry.unit.id === item.id)) return;
-    companions.push({unit:item, role});
-  };
-
-  if (unit.attachedUnits?.length) {
-    for (const attachment of unit.attachedUnits) {
-      add(byId.get(attachment.id), attachment.role || "Attached Character");
-    }
-    return companions;
-  }
-
-  if (unit.attachedTo?.id) {
-    const bodyguard = byId.get(unit.attachedTo.id);
-    add(bodyguard, "Bodyguard Unit");
-
-    for (const attachment of bodyguard?.attachedUnits || []) {
-      if (attachment.id === unit.id) continue;
-      add(byId.get(attachment.id), attachment.role || "Attached Character");
-    }
-  }
-
-  return companions;
-}
-
-function getDisplayStats(unit) {
-  const displayStats = getDisplayStats(unit);
-
-  return displayStats;
-}
-
-function renderAttachedDatasheetBlock(entry) {
-  const sourceUnit = entry.unit;
-  const unit = mergeTextUnitReference(sourceUnit);
-  const displayStats = getDisplayStats(unit);
-  const sections = [];
-
-  if (unit.profiles?.length) {
-    const rangedWeapons = unit.profiles.filter(profile => profile.type === "Ranged Weapons");
-    const meleeWeapons = unit.profiles.filter(profile => profile.type === "Melee Weapons");
-    const otherWeapons = unit.profiles.filter(profile =>
-      profile.type !== "Ranged Weapons" && profile.type !== "Melee Weapons"
-    );
-
-    if (rangedWeapons.length) sections.push(renderWeaponSection(rangedWeapons, "Ranged weapons"));
-    if (meleeWeapons.length) sections.push(renderWeaponSection(meleeWeapons, "Melee weapons"));
-    if (otherWeapons.length) sections.push(renderWeaponSection(otherWeapons, "Weapons"));
-  }
-
-  if (unit.rules?.length) sections.push(renderAbilitySection(unit.rules));
-  sections.push(renderUnitKeywordsSection(unit));
-
-  return `
-    <div class="attached-datasheet">
-      <div class="attached-datasheet-heading">
-        <span>${escapeHtml(String(entry.role || "Attached Character").toUpperCase())}</span>
-        <h3>${escapeHtml(unit.name)}</h3>
-      </div>
-      ${displayStats.length ? `
-        <div class="stat-grid attached-stat-grid">
-          ${displayStats.map(stat => `
-            <div class="stat">
-              <span>${escapeHtml(stat.label)}</span>
-              <strong>${escapeHtml(stat.value)}</strong>
-            </div>`).join("")}
-        </div>` : ""}
-      <div class="attached-datasheet-sections">
-        ${sections.filter(Boolean).join("")}
-      </div>
-    </div>`;
-}
-
-function renderAttachedDatasheets(unit) {
-  const companions = getAttachedDatasheetCompanions(unit);
-  if (!companions.length) return "";
-
-  return `
-    <section class="detail-section attached-group-section">
-      <div class="section-heading-row">
-        <h3>Attached unit profiles</h3>
-        <span class="section-count">${companions.length}</span>
-      </div>
-      <div class="attached-datasheet-list">
-        ${companions.map(renderAttachedDatasheetBlock).join("")}
-      </div>
-    </section>`;
-}
-
 function renderDetail(unit) {
   if (!unit) {
     els.emptyDetail?.classList.add("hidden");
@@ -3350,6 +3295,7 @@ function renderDetail(unit) {
   els.detailName.textContent = unit.name;
   els.backToRosterButton?.classList.toggle("hidden", getUnitBrowserSources().length === 0);
   updateUnitTopStatuses(sourceUnit);
+  updateLinkedUnitButton(sourceUnit);
   updatePinButton();
 
   const statOrder = ["m","t","sv","w","ld","oc","insv"];
@@ -3402,9 +3348,6 @@ function renderDetail(unit) {
   }
 
   sections.push(renderUnitKeywordsSection(unit));
-
-  const attachedDatasheets = renderAttachedDatasheets(sourceUnit);
-  if (attachedDatasheets) sections.push(attachedDatasheets);
 
   els.detailSections.innerHTML = sections.filter(Boolean).join("") ||
     '<section class="detail-section"><div class="empty-section">No additional profiles were found in this entry.</div></section>';
@@ -5375,6 +5318,11 @@ function persist() {
 function restore() {
   try {
     state.rosters = JSON.parse(localStorage.getItem("tv_rosters") || "[]");
+    state.rosters.forEach(roster => {
+      if (roster.source === "new-recruit" && Array.isArray(roster.units)) {
+        resolveRosterAttachments(roster.units);
+      }
+    });
     state.activeRoster = Math.min(Number(localStorage.getItem("tv_activeRoster") || 0), Math.max(0, state.rosters.length - 1));
   } catch {
     state.rosters = [];
