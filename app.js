@@ -2193,6 +2193,7 @@ function setVoicePrompt(page = state.currentPage) {
 function switchPage(page, options = {}) {
   const valid = ["setup","datasheets","strats","army-rules","score","dice","rules","share","guide"];
   if (!valid.includes(page)) page = "setup";
+  if (page !== "share" && state.shareScanner) stopShareScanner();
 
   state.currentPage = page;
   localStorage.setItem("tv_page", page);
@@ -4688,6 +4689,7 @@ function importSharedRosterPackage(pack) {
     "good"
   );
   toast("Opponent list imported");
+  setTimeout(cleanupSharePeer, 250);
 }
 
 function connectOpponentShare(peerId, key) {
