@@ -143,6 +143,7 @@ function boot() {
     renderMatchTools();
     restoreSetupChecks();
     switchPage(state.currentPage, {silent:true});
+    handleShareUrlOnBoot();
   } catch (error) {
     console.error("Tabletop Voice startup render failed", error);
     toast("Some saved data could not be rendered. Controls are still available.");
@@ -4371,6 +4372,364 @@ function toggleMode() {
 function applyMode() {
   document.body.classList.toggle("table-mode", state.mode === "table");
   els.modeToggle.textContent = state.mode === "table" ? "Mobile mode" : "Table mode";
+}
+
+function shareRandomSecret() {
+  const bytes = new Uint8Array(18);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, value => value.toString(16).padStart(2, "0")).join("");
+}
+
+function cleanupSharePeer() {
+  try { state.shareConnection?.close(); } catch {}
+  try { state.sharePeer?.destroy(); } catch {}
+  state.shareConnection = null;
+  state.sharePeer = null;
+}
+
+async function stopShareScanner() {
+  const scanner = state.shareScanner;
+  state.shareScanner = null;
+  if (!scanner) return;
+
+  try {
+    const running = scanner.getState?.();
+    if (running === 2 || running === 3) await scanner.stop();
+  } catch {}
+
+  try { scanner.clear(); } catch {}
+  els.opponentQrScanner?.classList.add("hidden");
+}
+
+function renderSharePage() {
+  const rosters = state.rosters.filter(roster => roster.source === "new-recruit");
+  if (!els.shareRosterSelect || !els.createAppShareButton) return;
+
+  els.shareRosterSelect.innerHTML = rosters.length
+    ? rosters.map(roster => `
+        <option value="${escapeHtml(roster.id)}">
+          ${escapeHtml(roster.name)}${roster.points != null ? " · " + escapeHtml(roster.points) + " pts" : ""}
+        </option>`).join("")
+    : '<option value="">No imported lists</option>';
+
+  els.createAppShareButton.disabled = !rosters.length;
+}
+
+function getRosterForAppShare() {
+  const rosterId = els.shareRosterSelect?.value;
+  return state.rosters.find(roster =>
+    roster.source === "new-recruit" && roster.id === rosterId
+  ) || null;
+}
+
+function buildAppSharePackage(roster) {
+  return {
+    type:"tabletop-voice-roster",
+    version:1,
+    exportedAt:Date.now(),
+    roster:{
+      ...roster,
+      id:roster.id,
+      sharedFromOpponent:false
+    }
+  };
+}
+
+async function sendAppSharePackage(conn, roster) {
+  const payload = JSON.stringify(buildAppSharePackage(roster));
+  const chunkSize = 24000;
+  const totalChunks = Math.max(1, Math.ceil(payload.length / chunkSize));
+
+  conn.send({
+    type:"tv-share-manifest",
+    name:roster.name,
+    chunks:totalChunks,
+    length:payload.length
+  });
+
+  for (let index = 0; index < totalChunks; index++) {
+    if (!conn.open) throw new Error("Opponent disconnected.");
+
+    conn.send({
+      type:"tv-share-chunk",
+      index,
+      data:payload.slice(index * chunkSize, (index + 1) * chunkSize)
+    });
+
+    if (index % 8 === 0) await new Promise(resolve => setTimeout(resolve, 8));
+  }
+
+  conn.send({type:"tv-share-complete"});
+}
+
+function setAppShareStatus(message) {
+  if (els.appShareStatus) els.appShareStatus.textContent = message;
+}
+
+function setOpponentReceiveStatus(message, type = "") {
+  if (!els.opponentReceiveStatus) return;
+  els.opponentReceiveStatus.classList.remove("hidden","good","bad");
+  if (type) els.opponentReceiveStatus.classList.add(type);
+  els.opponentReceiveStatus.textContent = message;
+}
+
+function createAppShareQr() {
+  const roster = getRosterForAppShare();
+  if (!roster) {
+    toast("Choose an imported list first.");
+    return;
+  }
+
+  if (typeof Peer === "undefined" || typeof QRCode === "undefined") {
+    toast("Sharing libraries did not load. Refresh and try again.");
+    return;
+  }
+
+  cleanupSharePeer();
+  const secret = shareRandomSecret();
+  const peer = new Peer(undefined, {debug:1});
+  state.sharePeer = peer;
+
+  els.appShareQrPanel?.classList.remove("hidden");
+  if (els.appShareQrCode) els.appShareQrCode.innerHTML = "";
+  setAppShareStatus("Creating QR…");
+
+  peer.on("open", id => {
+    const url = new URL(location.href);
+    url.search = "";
+    url.hash = "";
+    url.searchParams.set("tvshare", id);
+    url.searchParams.set("key", secret);
+
+    if (els.appShareQrCode) {
+      els.appShareQrCode.innerHTML = "";
+      new QRCode(els.appShareQrCode, {
+        text:url.toString(),
+        width:240,
+        height:240,
+        correctLevel:QRCode.CorrectLevel.M
+      });
+    }
+
+    setAppShareStatus("Waiting for opponent…");
+  });
+
+  peer.on("connection", conn => {
+    if (conn.metadata?.key !== secret) {
+      conn.close();
+      return;
+    }
+
+    state.shareConnection = conn;
+    setAppShareStatus("Opponent connected…");
+
+    conn.on("data", message => {
+      if (message?.type !== "tv-share-hello" || message.key !== secret) return;
+
+      sendAppSharePackage(conn, roster)
+        .then(() => setAppShareStatus("List sent ✓"))
+        .catch(error => setAppShareStatus(error.message || "Transfer failed"));
+    });
+
+    conn.on("close", () => {
+      if (els.appShareStatus?.textContent !== "List sent ✓") {
+        setAppShareStatus("Opponent disconnected");
+      }
+    });
+  });
+
+  peer.on("error", error => {
+    console.error("Share peer error", error);
+    setAppShareStatus("Could not create transfer");
+  });
+}
+
+function parseOpponentShareLink(value) {
+  let url;
+  try {
+    url = new URL(value, location.href);
+  } catch {
+    return null;
+  }
+
+  const peerId = url.searchParams.get("tvshare");
+  const key = url.searchParams.get("key");
+  if (!peerId || !key) return null;
+  return {peerId,key};
+}
+
+function importSharedRosterPackage(pack) {
+  if (pack?.type !== "tabletop-voice-roster" || pack.version !== 1 || !pack.roster) {
+    throw new Error("This QR did not contain a compatible Tabletop Voice list.");
+  }
+
+  const incoming = pack.roster;
+  if (!Array.isArray(incoming.units) || !incoming.name) {
+    throw new Error("The received roster was incomplete.");
+  }
+
+  const roster = {
+    ...incoming,
+    id:crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random()),
+    source:"new-recruit",
+    sharedFromOpponent:true,
+    importedAt:Date.now()
+  };
+
+  const duplicateIndex = state.rosters.findIndex(existing =>
+    existing.source === "new-recruit" &&
+    existing.sharedFromOpponent &&
+    normalize(existing.name) === normalize(roster.name) &&
+    normalize(existing.faction) === normalize(roster.faction)
+  );
+
+  if (duplicateIndex >= 0) {
+    state.rosters.splice(duplicateIndex, 1, roster);
+    state.activeRoster = duplicateIndex;
+  } else {
+    state.rosters.push(roster);
+    state.activeRoster = state.rosters.length - 1;
+  }
+
+  state.unitBrowserSourceId = "roster:" + roster.id;
+  localStorage.setItem("tv_unit_browser_source", state.unitBrowserSourceId);
+  state.detachmentStratagemLoadKey = "";
+
+  persist();
+  renderAll();
+  renderSharePage();
+
+  setOpponentReceiveStatus(
+    "Imported " + roster.name + (roster.points != null ? " · " + roster.points + " pts" : "") + " ✓",
+    "good"
+  );
+  toast("Opponent list imported");
+}
+
+function connectOpponentShare(peerId, key) {
+  if (typeof Peer === "undefined") {
+    setOpponentReceiveStatus("Sharing library did not load. Refresh and try again.", "bad");
+    return;
+  }
+
+  cleanupSharePeer();
+  setOpponentReceiveStatus("Connecting to opponent…");
+
+  const chunks = [];
+  let expectedChunks = 0;
+
+  const peer = new Peer(undefined, {debug:1});
+  state.sharePeer = peer;
+
+  peer.on("open", () => {
+    const conn = peer.connect(peerId, {
+      reliable:true,
+      metadata:{key}
+    });
+
+    state.shareConnection = conn;
+
+    conn.on("open", () => {
+      setOpponentReceiveStatus("Connected. Receiving list…");
+      conn.send({type:"tv-share-hello", key});
+    });
+
+    conn.on("data", message => {
+      if (!message?.type) return;
+
+      if (message.type === "tv-share-manifest") {
+        expectedChunks = Number(message.chunks || 0);
+        chunks.length = expectedChunks;
+        setOpponentReceiveStatus("Receiving " + (message.name || "opponent list") + "…");
+        return;
+      }
+
+      if (message.type === "tv-share-chunk") {
+        chunks[Number(message.index)] = String(message.data || "");
+        return;
+      }
+
+      if (message.type === "tv-share-complete") {
+        try {
+          if (!expectedChunks || chunks.some(chunk => typeof chunk !== "string")) {
+            throw new Error("The transfer was incomplete.");
+          }
+
+          const pack = JSON.parse(chunks.join(""));
+          importSharedRosterPackage(pack);
+
+          const url = new URL(location.href);
+          url.searchParams.delete("tvshare");
+          url.searchParams.delete("key");
+          history.replaceState({}, "", url.pathname + url.search + url.hash);
+        } catch (error) {
+          console.error(error);
+          setOpponentReceiveStatus(error.message || "Could not import opponent list.", "bad");
+        }
+      }
+    });
+
+    conn.on("error", error => {
+      console.error("Opponent share connection error", error);
+      setOpponentReceiveStatus("Could not receive the opponent list.", "bad");
+    });
+  });
+
+  peer.on("error", error => {
+    console.error("Opponent share peer error", error);
+    setOpponentReceiveStatus("Could not connect. Ask them to create a fresh QR.", "bad");
+  });
+}
+
+function connectOpponentShareLink(value) {
+  const parsed = parseOpponentShareLink(value);
+  if (!parsed) {
+    setOpponentReceiveStatus("That is not a Tabletop Voice share QR/link.", "bad");
+    return;
+  }
+
+  stopShareScanner();
+  connectOpponentShare(parsed.peerId, parsed.key);
+}
+
+async function startOpponentQrScanner() {
+  if (typeof Html5Qrcode === "undefined") {
+    toast("QR scanner did not load. You can still paste the share link below.");
+    return;
+  }
+
+  await stopShareScanner();
+  els.opponentQrScanner?.classList.remove("hidden");
+
+  const scanner = new Html5Qrcode("opponentQrScanner");
+  state.shareScanner = scanner;
+
+  try {
+    await scanner.start(
+      {facingMode:"environment"},
+      {fps:10, qrbox:{width:230,height:230}},
+      decodedText => {
+        stopShareScanner();
+        if (els.opponentShareLink) els.opponentShareLink.value = decodedText;
+        connectOpponentShareLink(decodedText);
+      },
+      () => {}
+    );
+  } catch (error) {
+    console.error("QR scanner error", error);
+    setOpponentReceiveStatus("Camera scanner could not start. Paste the share link instead.", "bad");
+    await stopShareScanner();
+  }
+}
+
+function handleShareUrlOnBoot() {
+  const params = new URLSearchParams(location.search);
+  const peerId = params.get("tvshare");
+  const key = params.get("key");
+  if (!peerId || !key) return;
+
+  switchPage("share", {silent:true});
+  connectOpponentShare(peerId, key);
 }
 
 function persist() {
