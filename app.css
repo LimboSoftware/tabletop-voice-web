@@ -4349,3 +4349,14 @@ body.focus-mode .detail-panel {
     font-size: 1.48rem !important;
   }
 }
+
+
+.share-link-fallback .copy-row {
+  display: grid;
+  grid-template-columns: minmax(0,1fr) auto;
+  gap: 7px;
+}
+
+.share-link-fallback .copy-row .ghost-button {
+  min-height: 44px;
+}
