@@ -2748,6 +2748,40 @@ function renderTextLoadoutSection(unit) {
     </section>`;
 }
 
+function getDisplayUnitKeywords(unit) {
+  const unitName = normalize(unit?.name || "");
+
+  return dedupeBy(
+    (unit?.categories || [])
+      .map(value => String(value || "").trim())
+      .filter(Boolean)
+      .filter(value => {
+        const key = normalize(value);
+        if (!key || key === unitName) return false;
+        if (["unit","uncategorized","configuration","reference","illegal units"].includes(key)) return false;
+        if (/^allies:/.test(key)) return false;
+        return true;
+      }),
+    value => normalize(value)
+  );
+}
+
+function renderUnitKeywordsSection(unit) {
+  const keywords = getDisplayUnitKeywords(unit);
+  if (!keywords.length) return "";
+
+  return `
+    <section class="detail-section unit-keywords-section">
+      <div class="section-heading-row">
+        <h3>Unit keywords</h3>
+        <span class="section-count">${keywords.length}</span>
+      </div>
+      <div class="unit-keyword-chips">
+        ${keywords.map(keyword => `<span>${escapeHtml(keyword)}</span>`).join("")}
+      </div>
+    </section>`;
+}
+
 function renderDetail(unit) {
   if (!unit) {
     els.emptyDetail?.classList.add("hidden");
@@ -2815,7 +2849,9 @@ function renderDetail(unit) {
     }
   }
 
-  els.detailSections.innerHTML = sections.join("") ||
+  sections.push(renderUnitKeywordsSection(unit));
+
+  els.detailSections.innerHTML = sections.filter(Boolean).join("") ||
     '<section class="detail-section"><div class="empty-section">No additional profiles were found in this entry.</div></section>';
   bindDynamicDetailControls();
 }
