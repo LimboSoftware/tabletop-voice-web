@@ -638,12 +638,99 @@ function isSelectedDetachmentNode(value) {
   );
 }
 
+function parseBundledStratagemText(rawText, fallbackName = "Stratagem") {
+  const raw = String(rawText || "").replace(/\r/g, "").trim();
+  if (!raw) return [];
+
+  const headingRegex = /^#{2,6}\s+(.+)$/gm;
+  const headings = [...raw.matchAll(headingRegex)];
+  if (!headings.length) return [];
+
+  const results = [];
+
+  const addBlock = (name, body) => {
+    let text = String(body || "").trim();
+    if (!text) return;
+
+    const lines = text.split("\n");
+    let cost = "";
+
+    while (lines.length && !lines[0].trim()) lines.shift();
+    if (lines.length && /^\d+\s*CP$/i.test(lines[0].trim())) {
+      cost = lines.shift().trim().replace(/\s+/g, "");
+    }
+
+    text = cleanRuleText(lines.join("\n"));
+    if (!text) return;
+
+    results.push({
+      name:cleanRuleText(name || fallbackName),
+      text,
+      category:cost || "Stratagem",
+      source:"Imported New Recruit"
+    });
+  };
+
+  const preface = raw.slice(0, headings[0].index).trim();
+  if (preface) addBlock(fallbackName, preface);
+
+  headings.forEach((heading, index) => {
+    const bodyStart = heading.index + heading[0].length;
+    const bodyEnd = headings[index + 1]?.index ?? raw.length;
+    addBlock(heading[1].trim(), raw.slice(bodyStart, bodyEnd));
+  });
+
+  return results;
+}
+
 function extractSelectedDetachmentStratagems(root) {
   const collected = [];
 
-  for (const force of root?.forces || []) {
-    const faction = force.catalogueName || force.name || "";
+  function collectFromDetachmentNode(node, detachmentName) {
+    function walk(value) {
+      if (!value || typeof value !== "object") return;
+      if (Array.isArray(value)) {
+        value.forEach(walk);
+        return;
+      }
 
+      for (const profile of value.profiles || []) {
+        if (!profile || profile.hidden) continue;
+
+        const type = String(profile.typeName || "");
+        const rawText = (profile.characteristics || [])
+          .map(characteristic => characteristicValue(characteristic))
+          .filter(Boolean)
+          .join("\n");
+
+        const bundled = parseBundledStratagemText(rawText, profile.name || "Stratagem");
+
+        if (bundled.length) {
+          bundled.forEach(item => collected.push({...item, detachment:detachmentName}));
+        } else if (/stratagem/i.test(type) && rawText) {
+          collected.push({
+            name:cleanRuleText(profile.name || "Stratagem"),
+            text:cleanRuleText(rawText),
+            category:type || "Stratagem",
+            detachment:detachmentName,
+            source:"Imported New Recruit"
+          });
+        }
+      }
+
+      for (const rule of value.rules || []) {
+        if (!rule || rule.hidden || !rule.description) continue;
+        const bundled = parseBundledStratagemText(rule.description, rule.name || "Stratagem");
+        bundled.forEach(item => collected.push({...item, detachment:detachmentName}));
+      }
+
+      for (const child of value.selections || []) walk(child);
+    }
+
+    walk(node);
+  }
+
+  for (const force of root?.forces || []) {
     function walk(value) {
       if (!value || typeof value !== "object") return;
       if (Array.isArray(value)) {
@@ -656,16 +743,7 @@ function extractSelectedDetachmentStratagems(root) {
         value.name &&
         !/^detachment$/i.test(String(value.name).trim())
       ) {
-        const detachmentName = String(value.name).trim();
-        const refs = extractReferenceData(value, faction).stratagems || [];
-
-        for (const strat of refs) {
-          collected.push({
-            ...strat,
-            detachment:detachmentName,
-            source:"Imported New Recruit"
-          });
-        }
+        collectFromDetachmentNode(value, String(value.name).trim());
       }
 
       for (const child of value.selections || []) walk(child);
@@ -676,7 +754,7 @@ function extractSelectedDetachmentStratagems(root) {
 
   return dedupeBy(
     collected,
-    item => normalize((item.detachment || "") + "|" + item.name + "|" + item.text)
+    item => normalize(item.name + "|" + item.text)
   );
 }
 
