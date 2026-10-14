@@ -5021,3 +5021,101 @@ body {
     border-radius: 2px;
   }
 }
+
+
+/* === OnePageRules / Army Forge adapter === */
+.opr-import-card {
+  margin-top: 9px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(360px, .9fr);
+  gap: 18px 24px;
+  align-items: center;
+}
+
+.opr-import-copy h2 {
+  margin: 6px 0 5px;
+}
+
+.opr-import-copy p {
+  margin: 0;
+  max-width: 760px;
+  color: #95a3af;
+  line-height: 1.55;
+}
+
+.opr-import-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 7px;
+}
+
+.opr-import-controls input {
+  min-width: 0;
+  min-height: 50px;
+  padding: 0 12px;
+  border: 1px solid #354350;
+  border-radius: 3px;
+  outline: 0;
+  background: #0b1015;
+  color: #edf3f6;
+  font: inherit;
+  font-size: 16px;
+}
+
+.opr-import-controls input:focus {
+  border-color: var(--accent-strong);
+  box-shadow: 0 0 0 2px rgba(57,184,213,.12);
+}
+
+.opr-import-status {
+  grid-column: 1 / -1;
+  color: #7f8e9a;
+  line-height: 1.45;
+}
+
+.opr-weapon-table {
+  min-width: 620px;
+}
+
+.opr-weapon-table th:nth-child(2),
+.opr-weapon-table td:nth-child(2) {
+  width: 110px;
+}
+
+.opr-weapon-table th:nth-child(3),
+.opr-weapon-table td:nth-child(3) {
+  width: 80px;
+}
+
+.opr-weapon-special {
+  min-width: 220px;
+  text-align: left !important;
+  color: #c4d1d8 !important;
+  line-height: 1.4;
+}
+
+@media (max-width: 760px) {
+  .opr-import-card {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+
+  .opr-import-controls {
+    grid-template-columns: 1fr;
+  }
+
+  .opr-import-controls .primary-button {
+    width: 100%;
+  }
+
+  .opr-weapon-table {
+    min-width: 0;
+  }
+
+  .opr-weapon-table .opr-weapon-special {
+    grid-column: 1 / -1;
+    min-width: 0;
+    padding-top: 9px;
+    border-top: 1px solid #25303f !important;
+  }
+}
