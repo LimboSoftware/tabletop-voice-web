@@ -63,6 +63,7 @@
           <button type="button" data-page-target="rules">? Core Rules</button>
           <button type="button" data-page-target="share">⇄ Share Lists</button>
           <a class="nav-more-link" href="./roster-transfer/">▦ Phone QR Transfer</a>
+          <button type="button" data-page-target="updates">✉ Get updates</button>
           <button type="button" data-page-target="guide">⚙ Guide</button>
           <a class="nav-more-link" href="./privacy.html" target="_blank" rel="noopener noreferrer">ⓘ Privacy &amp; About</a>
         </div>
@@ -378,6 +379,30 @@
             </div>
           </section>
         </div>
+      </section>
+
+      <section id="pageUpdates" class="app-page hidden utility-page updates-page" data-page="updates">
+        <div class="page-heading">
+          <p class="eyebrow">TABLETOP VOICE</p>
+          <h1>Get updates</h1>
+          <p>Get occasional emails about new features, beta updates and future releases.</p>
+        </div>
+
+        <section class="tool-card updates-card">
+          <form id="updatesForm" class="updates-form">
+            <label for="updatesEmail">Email address</label>
+            <div class="updates-input-row">
+              <input id="updatesEmail" name="email" type="email" inputmode="email" autocomplete="email" maxlength="254" placeholder="you@example.com" required />
+              <button id="updatesSubmit" class="primary-button" type="submit">Sign me up</button>
+            </div>
+            <div class="updates-honeypot" aria-hidden="true">
+              <label for="updatesCompany">Company</label>
+              <input id="updatesCompany" name="company" type="text" tabindex="-1" autocomplete="off" />
+            </div>
+            <p id="updatesStatus" class="updates-status" role="status" aria-live="polite"></p>
+          </form>
+          <small class="updates-note">We use double opt-in, so Brevo will email you a confirmation link first. No spam, and you can unsubscribe at any time. <a href="./privacy.html" target="_blank" rel="noopener noreferrer">Privacy &amp; data use</a></small>
+        </section>
       </section>
 
       <section id="pageSetup" class="app-page hidden utility-page" data-page="guide">
