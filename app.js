@@ -28,6 +28,9 @@ const els = {
   fileInput: $("fileInput"),
   importButton: $("importButton"),
   fullDataButton: $("fullDataButton"),
+  oprShareInput: $("oprShareInput"),
+  oprImportButton: $("oprImportButton"),
+  oprImportStatus: $("oprImportStatus"),
   clearRoster: $("clearRoster"),
   searchInput: $("searchInput"),
   resultList: $("resultList"),
@@ -186,6 +189,13 @@ function bindEvents() {
   els.importButton?.addEventListener("click", () => els.fileInput.click());
   els.fileInput?.addEventListener("change", handleFiles);
   els.fullDataButton?.addEventListener("click", loadFull40kData);
+  els.oprImportButton?.addEventListener("click", loadOprArmyForgeList);
+  els.oprShareInput?.addEventListener("keydown", event => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      loadOprArmyForgeList();
+    }
+  });
   els.clearRoster.addEventListener("click", clearRosters);
   els.searchInput.addEventListener("input", () => {
     state.selected = null;
@@ -462,6 +472,372 @@ async function handleFiles(event) {
   }
 
   els.fileInput.value = "";
+}
+
+const OPR_GAME_NAMES = {
+  gf:"Grimdark Future",
+  gff:"Grimdark Future: Firefight",
+  aof:"Age of Fantasy",
+  aofs:"Age of Fantasy: Skirmish",
+  aofr:"Age of Fantasy: Regiments"
+};
+
+function oprGameName(code = "") {
+  const key = String(code || "").toLowerCase();
+  return OPR_GAME_NAMES[key] || (key ? key.toUpperCase() : "OnePageRules");
+}
+
+function extractOprArmyId(value = "") {
+  const trimmed = String(value || "").trim();
+  if (!trimmed) return null;
+
+  try {
+    const url = new URL(trimmed);
+    const id = url.searchParams.get("id");
+    return id && /^[A-Za-z0-9_-]+$/.test(id) ? id : null;
+  } catch {
+    return /^[A-Za-z0-9_-]+$/.test(trimmed) ? trimmed : null;
+  }
+}
+
+function oprRuleLabel(rule = {}) {
+  if (rule.label) return String(rule.label);
+  const name = String(rule.name || "Rule");
+  const rating = rule.rating;
+  return rating !== undefined && rating !== null && rating !== ""
+    ? name + "(" + rating + ")"
+    : name;
+}
+
+function buildOprRuleLookup(data) {
+  const byId = new Map();
+  const byName = new Map();
+
+  for (const rule of data?.specialRules || []) {
+    if (!rule || !rule.name) continue;
+    if (rule.id) byId.set(String(rule.id), rule);
+    byName.set(normalize(rule.name), rule);
+  }
+
+  return {byId, byName};
+}
+
+function resolveOprRule(rule, lookup, category = "Special rule") {
+  if (!rule?.name) return null;
+
+  const definition =
+    (rule.id && lookup.byId.get(String(rule.id))) ||
+    lookup.byName.get(normalize(rule.name)) ||
+    null;
+
+  const rating = rule.rating;
+  let text = String(definition?.description || rule.description || "").trim();
+  if (rating !== undefined && rating !== null && rating !== "") {
+    text = text.replace(/\bX\b/g, String(rating));
+  }
+
+  return {
+    name:oprRuleLabel(rule),
+    text,
+    category
+  };
+}
+
+function collectOprUnitRuleRefs(unit) {
+  const refs = [...(unit?.rules || [])];
+
+  for (const item of unit?.items || []) {
+    refs.push(...(item?.content || []));
+  }
+
+  for (const selected of unit?.selectedUpgrades || []) {
+    for (const gain of selected?.option?.gains || []) {
+      if (gain?.type === "ArmyBookRule") refs.push(gain);
+      if (gain?.type === "ArmyBookItem") refs.push(...(gain.content || []));
+    }
+  }
+
+  return dedupeBy(
+    refs.filter(rule => rule?.name),
+    rule => normalize(oprRuleLabel(rule))
+  );
+}
+
+function oprWeaponKey(weapon = {}) {
+  return normalize([
+    weapon.name,
+    weapon.range,
+    weapon.attacks,
+    (weapon.specialRules || []).map(oprRuleLabel).join("|")
+  ].join("|"));
+}
+
+function mergeOprLoadouts(units) {
+  const merged = new Map();
+
+  for (const unit of units || []) {
+    for (const weapon of unit?.loadout || unit?.weapons || []) {
+      if (!weapon?.name) continue;
+      const key = oprWeaponKey(weapon);
+      if (!merged.has(key)) {
+        merged.set(key, {...weapon, count:Number(weapon.count || 1)});
+      } else {
+        const current = merged.get(key);
+        current.count = Number(current.count || 0) + Number(weapon.count || 1);
+      }
+    }
+  }
+
+  return [...merged.values()];
+}
+
+function collapseOprCombinedUnits(units = []) {
+  const raw = Array.isArray(units) ? units : [];
+  const roots = raw.filter(unit => !unit?.joinToUnit);
+  const used = new Set();
+  const output = [];
+
+  for (const root of roots) {
+    const group = [root];
+    used.add(root.selectionId || root);
+
+    if (root.combined && root.selectionId) {
+      for (const candidate of raw) {
+        if (candidate?.joinToUnit === root.selectionId) {
+          group.push(candidate);
+          used.add(candidate.selectionId || candidate);
+        }
+      }
+    }
+
+    if (group.length === 1) {
+      output.push(root);
+      continue;
+    }
+
+    output.push({
+      ...root,
+      size:group.reduce((sum, unit) => sum + Number(unit.size || 0), 0),
+      cost:group.reduce((sum, unit) => sum + Number(unit.cost || 0), 0),
+      rules:dedupeBy(group.flatMap(unit => unit.rules || []), rule => normalize(oprRuleLabel(rule))),
+      items:group.flatMap(unit => unit.items || []),
+      selectedUpgrades:group.flatMap(unit => unit.selectedUpgrades || []),
+      loadout:mergeOprLoadouts(group),
+      notes:group.map(unit => String(unit.notes || "").trim()).filter(Boolean).join("\n")
+    });
+  }
+
+  for (const unit of raw) {
+    const key = unit?.selectionId || unit;
+    if (!used.has(key)) output.push(unit);
+  }
+
+  return output;
+}
+
+function buildOprWeaponProfile(weapon) {
+  const special = (weapon?.specialRules || [])
+    .map(oprRuleLabel)
+    .filter(Boolean)
+    .join(", ");
+
+  const range = Number(weapon?.range || 0);
+
+  return {
+    name:String(weapon?.name || "Weapon"),
+    type:"OPR Weapon",
+    system:"opr",
+    quantity:Math.max(1, Number(weapon?.count || 1)),
+    values:[
+      {label:"Range", value:range > 0 ? range + '\"' : "Melee"},
+      {label:"A", value:String(Number(weapon?.attacks || 0) || "—")},
+      {label:"Special", value:special || "—"}
+    ]
+  };
+}
+
+function buildOprUnit(rawUnit, data, index) {
+  const lookup = buildOprRuleLookup(data);
+  const ruleRefs = collectOprUnitRuleRefs(rawUnit);
+  const rules = ruleRefs
+    .map(rule => resolveOprRule(rule, lookup))
+    .filter(Boolean);
+
+  if (rawUnit?.notes) {
+    rules.push({name:"Notes", text:String(rawUnit.notes), category:"Notes"});
+  }
+
+  const hero = ruleRefs.some(rule => normalize(rule.name) === "hero");
+  const displayName = String(rawUnit?.customName || rawUnit?.name || rawUnit?.genericName || "Unit");
+  const baseName = String(rawUnit?.name || rawUnit?.genericName || "");
+
+  return {
+    id:"opr-" + String(rawUnit?.selectionId || rawUnit?.id || index),
+    name:displayName,
+    type:"OPR Unit",
+    system:"opr",
+    gameSystem:String(data?.gameSystem || ""),
+    categories:hero ? ["Hero"] : [],
+    stats:[
+      {label:"Quality", value:Number(rawUnit?.quality) ? rawUnit.quality + "+" : "—"},
+      {label:"Defence", value:Number(rawUnit?.defense) ? rawUnit.defense + "+" : "—"},
+      {label:"Models", value:String(Number(rawUnit?.size || 1))},
+      {label:"Pts", value:String(Number(rawUnit?.cost || 0))}
+    ],
+    rules:dedupeBy(rules, rule => normalize(rule.name + "|" + rule.text)),
+    profiles:mergeOprLoadouts([rawUnit]).map(buildOprWeaponProfile),
+    searchText:normalize([
+      displayName,
+      baseName,
+      rawUnit?.genericName,
+      ruleRefs.map(oprRuleLabel),
+      (rawUnit?.loadout || rawUnit?.weapons || []).map(weapon => [
+        weapon.name,
+        (weapon.specialRules || []).map(oprRuleLabel)
+      ])
+    ].flat(3).join(" "))
+  };
+}
+
+function buildOprArmyRules(data) {
+  const lookup = buildOprRuleLookup(data);
+  const refs = [];
+
+  for (const unit of data?.units || []) {
+    refs.push(...collectOprUnitRuleRefs(unit));
+    for (const weapon of unit?.loadout || unit?.weapons || []) {
+      refs.push(...(weapon?.specialRules || []));
+    }
+  }
+
+  const rules = dedupeBy(
+    refs
+      .map(rule => resolveOprRule(rule, lookup))
+      .filter(rule => rule?.name && rule?.text),
+    rule => normalize(rule.name + "|" + rule.text)
+  );
+
+  for (const spell of data?.spells || []) {
+    if (!spell?.name || !spell?.effect) continue;
+    rules.push({
+      name:String(spell.name),
+      text:String(spell.effect),
+      category:spell.threshold != null ? "Spell · " + spell.threshold + "+" : "Spell"
+    });
+  }
+
+  return dedupeBy(rules, rule => normalize(rule.name + "|" + rule.text));
+}
+
+function buildOprRoster(data, armyId) {
+  if (!data || !Array.isArray(data.units) || !data.units.length) {
+    throw new Error("Army Forge returned no units for this shared list.");
+  }
+
+  const collapsed = collapseOprCombinedUnits(data.units);
+  const units = collapsed.map((unit, index) => buildOprUnit(unit, data, index));
+  const factionNames = Array.isArray(data.armyNames)
+    ? data.armyNames.filter(Boolean)
+    : [];
+
+  return {
+    id:crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random()),
+    externalId:String(armyId),
+    name:String(data.name || factionNames[0] || "OnePageRules army"),
+    faction:factionNames.join(" + ") || "OnePageRules",
+    source:"opr",
+    importFormat:"army-forge-link",
+    gameSystem:String(data.gameSystem || ""),
+    gameName:oprGameName(data.gameSystem),
+    points:Number.isFinite(Number(data.listPoints)) ? Number(data.listPoints) : null,
+    units,
+    armyRules:buildOprArmyRules(data),
+    referenceData:{rules:[], stratagems:[]},
+    importedAt:Date.now()
+  };
+}
+
+async function loadOprArmyForgeList() {
+  const armyId = extractOprArmyId(els.oprShareInput?.value || "");
+  if (!armyId) {
+    if (els.oprImportStatus) {
+      els.oprImportStatus.textContent = "Paste an Army Forge Share as Link URL first.";
+    }
+    toast("Paste a valid Army Forge share link.");
+    return;
+  }
+
+  const button = els.oprImportButton;
+  if (button) {
+    button.disabled = true;
+    button.textContent = "Importing…";
+  }
+  if (els.oprImportStatus) {
+    els.oprImportStatus.textContent = "Loading the shared list from Army Forge…";
+  }
+
+  try {
+    const response = await fetch("./api/opr-army?id=" + encodeURIComponent(armyId), {
+      headers:{"Accept":"application/json"}
+    });
+
+    let data = {};
+    try { data = await response.json(); } catch {}
+
+    if (!response.ok) {
+      throw new Error(data.error || "Could not load that Army Forge list.");
+    }
+
+    const roster = buildOprRoster(data, armyId);
+    const existingIndex = state.rosters.findIndex(existing =>
+      existing.source === "opr" && existing.externalId === armyId
+    );
+
+    if (existingIndex >= 0) {
+      state.rosters.splice(existingIndex, 1, roster);
+      state.activeRoster = existingIndex;
+    } else {
+      state.rosters.push(roster);
+      state.activeRoster = state.rosters.length - 1;
+    }
+
+    state.unitBrowserSourceId = "roster:" + roster.id;
+    localStorage.setItem("tv_unit_browser_source", state.unitBrowserSourceId);
+    state.selected = null;
+    state.selectedRosterId = null;
+
+    persist();
+    renderAll();
+    switchPage("datasheets", {silent:true});
+
+    if (els.oprShareInput) els.oprShareInput.value = "";
+    if (els.oprImportStatus) {
+      els.oprImportStatus.textContent =
+        "Imported " + roster.units.length + " units · " + roster.gameName +
+        (roster.points != null ? " · " + roster.points + " pts" : "");
+    }
+    toast("Imported " + roster.name);
+  } catch (error) {
+    console.error("OPR import failed", error);
+    if (els.oprImportStatus) {
+      els.oprImportStatus.textContent = error.message || "Could not import this Army Forge list.";
+    }
+    toast(error.message || "Could not import OPR list.");
+  } finally {
+    if (button) {
+      button.disabled = false;
+      button.textContent = "Import OPR list";
+    }
+  }
+}
+
+function rosterSourceSummary(roster) {
+  if (roster?.source === "opr") {
+    return "OnePageRules · " + (roster.gameName || oprGameName(roster.gameSystem)) + " · Army Forge";
+  }
+
+  return (roster?.sharedFromOpponent ? "Opponent share" : "New Recruit") +
+    " · " + String(roster?.importFormat || "json").toUpperCase();
 }
 
 function fileExtension(name = "") {
@@ -1737,7 +2113,7 @@ async function ensureDetachmentStratagems() {
 
 function renderDetachmentSummary() {
   const requests = getImportedDetachmentRequests();
-  const importedLists = state.rosters.filter(roster => roster.source === "new-recruit");
+  const importedLists = state.rosters.filter(roster => roster.source === "new-recruit" || roster.source === "opr");
 
   if (!requests.length) {
     if (importedLists.some(roster => !Array.isArray(roster.detachments))) {
@@ -1847,6 +2223,14 @@ async function getUnitBrowserReferenceData(source) {
         item => normalize(item.name + "|" + item.text)
       ),
       note:""
+    };
+  }
+
+  if (source.kind === "opr") {
+    return {
+      stratagems:[],
+      armyRules:(source.roster?.armyRules || []).filter(rule => rule?.name && rule?.text),
+      note:"OnePageRules list imported from Army Forge."
     };
   }
 
@@ -2047,8 +2431,8 @@ function renderUnitBrowserReferences(source, data = null) {
   return `
     <div id="unitBrowserReferences" class="unit-browser-references">
       ${data.note ? `<div class="roster-refresh-note">${escapeHtml(data.note)}</div>` : ""}
-      ${renderUnitBrowserReferenceSection("Stratagems", data.stratagems, "stratagem")}
-      ${renderUnitBrowserReferenceSection("Army Rules", data.armyRules, "rule")}
+      ${source.kind === "opr" ? "" : renderUnitBrowserReferenceSection("Stratagems", data.stratagems, "stratagem")}
+      ${renderUnitBrowserReferenceSection(source.kind === "opr" ? "Rules" : "Army Rules", data.armyRules, "rule")}
     </div>`;
 }
 
@@ -2193,7 +2577,7 @@ async function renderSourceReferencePage(kind, query = "") {
   const source = getActiveUnitBrowserSource();
 
   if (!source) {
-    container.innerHTML = '<div class="empty-section">Import a New Recruit list or choose a whole army first.</div>';
+    container.innerHTML = '<div class="empty-section">Import a list or choose an army source first.</div>';
     return;
   }
 
@@ -2642,7 +3026,7 @@ function renderDataSummary() {
   if (!els.dataRosterSummary) return;
 
   if (!importedLists.length) {
-    els.dataRosterSummary.innerHTML = '<p class="muted-copy">No New Recruit lists loaded yet.</p>';
+    els.dataRosterSummary.innerHTML = '<p class="muted-copy">No imported lists loaded yet.</p>';
     return;
   }
 
@@ -2650,7 +3034,7 @@ function renderDataSummary() {
     <div class="data-summary-row removable-roster-row">
       <div>
         <strong>${escapeHtml(roster.name)}</strong>
-        <small>${roster.sharedFromOpponent ? "Opponent share" : "New Recruit"} · ${escapeHtml(String(roster.importFormat || "json").toUpperCase())} · ${roster.units?.length || 0} units${roster.points != null ? " · " + escapeHtml(roster.points) + " pts" : ""}</small>
+        <small>${escapeHtml(rosterSourceSummary(roster))} · ${roster.units?.length || 0} units${roster.points != null ? " · " + escapeHtml(roster.points) + " pts" : ""}</small>
       </div>
       <button
         class="remove-roster-button"
@@ -2666,7 +3050,7 @@ function renderDataSummary() {
 }
 
 function removeImportedRoster(rosterId) {
-  const index = state.rosters.findIndex(roster => roster.id === rosterId && roster.source === "new-recruit");
+  const index = state.rosters.findIndex(roster => roster.id === rosterId && (roster.source === "new-recruit" || roster.source === "opr"));
   if (index < 0) return;
 
   const removed = state.rosters[index];
@@ -2802,7 +3186,7 @@ function getSearchCollections() {
   const collections = [];
 
   state.rosters.forEach((roster, rosterIndex) => {
-    if (roster.source === "new-recruit") {
+    if (roster.source === "new-recruit" || roster.source === "opr") {
       collections.push({
         id:"roster:" + roster.id,
         label:roster.name,
@@ -2902,18 +3286,22 @@ function renderActiveArmySelector() {
 function getImportedRosterEntries() {
   return state.rosters
     .map((roster, index) => ({roster, index}))
-    .filter(item => item.roster.source === "new-recruit");
+    .filter(item => item.roster.source === "new-recruit" || item.roster.source === "opr");
 }
 
 function getUnitBrowserSources() {
   const sources = [];
 
   for (const {roster, index} of getImportedRosterEntries()) {
+    const kind = roster.source === "opr" ? "opr" : "new-recruit";
     sources.push({
       id:"roster:" + roster.id,
       label:roster.name,
-      subLabel:(roster.points != null ? roster.points + " pts · " : "") + (roster.sharedFromOpponent ? "Opponent · New Recruit" : "New Recruit"),
-      kind:"new-recruit",
+      subLabel:(roster.points != null ? roster.points + " pts · " : "") +
+        (roster.source === "opr"
+          ? (roster.gameName || oprGameName(roster.gameSystem)) + " · Army Forge"
+          : (roster.sharedFromOpponent ? "Opponent · New Recruit" : "New Recruit")),
+      kind,
       roster,
       faction:roster.faction || "",
       detachments:roster.detachments || [],
@@ -2921,7 +3309,7 @@ function getUnitBrowserSources() {
         unit,
         rosterIndex:index,
         sourceLabel:roster.name,
-        sourceKind:"new-recruit"
+        sourceKind:kind
       }))
     });
   }
@@ -2952,7 +3340,7 @@ function getUnitBrowserSources() {
   const seen = new Set();
 
   // Prefer New Recruit versions where a unit exists in both a list and a whole-army source.
-  const sourceRank = source => source.kind === "new-recruit" ? 0 : 1;
+  const sourceRank = source => (source.kind === "new-recruit" || source.kind === "opr") ? 0 : 1;
   for (const source of [...sources].sort((a,b) => sourceRank(a) - sourceRank(b))) {
     for (const entry of source.entries) {
       const key = normalize(entry.unit.name);
@@ -2992,7 +3380,7 @@ function setUnitBrowserSource(sourceId) {
   localStorage.setItem("tv_unit_browser_source", source.id);
   state.selected = null;
 
-  if (source.kind === "new-recruit" && source.entries[0]) {
+  if ((source.kind === "new-recruit" || source.kind === "opr") && source.entries[0]) {
     state.activeRoster = source.entries[0].rosterIndex;
   } else if (source.kind === "whole-army" && source.entries[0]) {
     state.activeRoster = source.entries[0].rosterIndex;
@@ -3015,7 +3403,7 @@ function setUnitBrowserSource(sourceId) {
 function getUnitBrowserGroup(unit) {
   const categories = new Set((unit.categories || []).map(category => normalize(category)));
 
-  if (categories.has("character") || categories.has("epic hero")) return "Characters";
+  if (categories.has("character") || categories.has("epic hero") || categories.has("hero")) return "Characters";
   if (categories.has("battleline")) return "Battleline";
   if (categories.has("dedicated transport")) return "Transports";
   if (categories.has("vehicle")) return "Vehicles";
@@ -3358,19 +3746,25 @@ function renderDetail(unit) {
   const sections = [];
 
   if (unit.profiles?.length) {
-    const rangedWeapons = unit.profiles.filter(profile => profile.type === "Ranged Weapons");
-    const meleeWeapons = unit.profiles.filter(profile => profile.type === "Melee Weapons");
-    const otherWeapons = unit.profiles.filter(profile =>
-      profile.type !== "Ranged Weapons" && profile.type !== "Melee Weapons"
-    );
+    if (unit.system === "opr") {
+      sections.push(renderOprWeaponSection(unit.profiles, "Weapons"));
+    } else {
+      const rangedWeapons = unit.profiles.filter(profile => profile.type === "Ranged Weapons");
+      const meleeWeapons = unit.profiles.filter(profile => profile.type === "Melee Weapons");
+      const otherWeapons = unit.profiles.filter(profile =>
+        profile.type !== "Ranged Weapons" && profile.type !== "Melee Weapons"
+      );
 
-    if (rangedWeapons.length) sections.push(renderWeaponSection(rangedWeapons, "Ranged weapons"));
-    if (meleeWeapons.length) sections.push(renderWeaponSection(meleeWeapons, "Melee weapons"));
-    if (otherWeapons.length) sections.push(renderWeaponSection(otherWeapons, "Weapons"));
+      if (rangedWeapons.length) sections.push(renderWeaponSection(rangedWeapons, "Ranged weapons"));
+      if (meleeWeapons.length) sections.push(renderWeaponSection(meleeWeapons, "Melee weapons"));
+      if (otherWeapons.length) sections.push(renderWeaponSection(otherWeapons, "Weapons"));
+    }
   }
 
   if (unit.rules?.length) {
-    sections.push(renderAbilitySection(unit.rules));
+    sections.push(unit.system === "opr"
+      ? renderOprAbilitySection(unit.rules)
+      : renderAbilitySection(unit.rules));
   }
 
   if (sourceUnit.importFormat === "txt") {
@@ -3428,6 +3822,10 @@ function toggleStatus(status) {
 }
 
 function updateUnitTopStatuses(unit = state.selected) {
+  const opr = unit?.system === "opr";
+  els.battleShockToggle?.classList.toggle("hidden", opr);
+  els.oncePerGameToggle?.classList.toggle("hidden", opr);
+
   const active = new Set(unit ? getStatuses(unit) : []);
   const battleShocked = active.has("Battle-shocked");
   const onceUsed = active.has("Once-per-game used");
@@ -3579,6 +3977,74 @@ function renderWeaponSection(profiles, title = "Weapons") {
     </section>`;
 }
 
+function renderOprWeaponSection(profiles, title = "Weapons") {
+  const rows = (profiles || []).map(profile => {
+    const values = new Map(
+      (profile.values || []).map(item => [normalize(item.label), item.value ?? ""])
+    );
+    return {
+      name:profile.name || "Weapon",
+      quantity:Number.isFinite(Number(profile.quantity)) ? Math.max(1, Number(profile.quantity)) : null,
+      range:values.get("range") || "—",
+      attacks:values.get("a") || "—",
+      special:values.get("special") || "—"
+    };
+  });
+
+  return `
+    <section class="detail-section weapon-section opr-weapon-section">
+      <div class="section-heading-row">
+        <h3>${escapeHtml(title)}</h3>
+        <span class="section-count">${rows.length}</span>
+      </div>
+      <div class="weapon-table-wrap">
+        <table class="weapon-table compact-weapon-table opr-weapon-table">
+          <thead>
+            <tr>
+              <th class="weapon-name-column">Weapon</th>
+              <th>Range</th>
+              <th>A</th>
+              <th>Special rules</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows.map(row => `
+              <tr class="weapon-row weapon-stat-row">
+                <td class="weapon-name">
+                  <div class="weapon-title-line">
+                    ${row.quantity != null ? `<span class="weapon-quantity">${row.quantity}×</span>` : ""}
+                    <strong>${escapeHtml(row.name)}</strong>
+                  </div>
+                </td>
+                <td data-label="Range" class="weapon-range-text">${escapeHtml(row.range)}</td>
+                <td data-label="A" class="weapon-number">${escapeHtml(row.attacks)}</td>
+                <td data-label="Special rules" class="opr-weapon-special">${escapeHtml(row.special)}</td>
+              </tr>`).join("")}
+          </tbody>
+        </table>
+      </div>
+    </section>`;
+}
+
+function renderOprAbilitySection(rules) {
+  if (!rules?.length) return "";
+
+  return `
+    <section class="detail-section ability-section">
+      <div class="section-heading-row">
+        <h3>Special rules</h3>
+        <span class="section-count">${rules.length}</span>
+      </div>
+      <div class="ability-list">
+        ${rules.map(rule => `
+          <article class="ability-card unique-rule-card">
+            <h4>${escapeHtml(cleanRuleText(rule.name || "Rule"))}</h4>
+            ${rule.text ? `<div class="ability-text unique-rule-text">${formatRuleText(rule.text)}</div>` : ""}
+          </article>`).join("")}
+      </div>
+    </section>`;
+}
+
 function renderAbilitySection(rules) {
   const uniqueRules = (rules || []).filter(rule => !isCoreRule(rule));
   if (!uniqueRules.length) return "";
@@ -3684,7 +4150,7 @@ function sourceCpStorageKey(sourceId) {
 
 function getActiveCpSource() {
   const source = getActiveUnitBrowserSource();
-  if (!source || source.id === "all") return null;
+  if (!source || source.id === "all" || source.kind === "opr") return null;
   return source;
 }
 
@@ -4972,7 +5438,7 @@ async function stopShareScanner() {
 }
 
 function renderSharePage() {
-  const rosters = state.rosters.filter(roster => roster.source === "new-recruit");
+  const rosters = state.rosters.filter(roster => roster.source === "new-recruit" || roster.source === "opr");
   if (!els.shareRosterSelect || !els.createAppShareButton) return;
 
   els.shareRosterSelect.innerHTML = rosters.length
@@ -5021,7 +5487,7 @@ function removeSelectedShareRoster() {
 function getRosterForAppShare() {
   const rosterId = els.shareRosterSelect?.value;
   return state.rosters.find(roster =>
-    roster.source === "new-recruit" && roster.id === rosterId
+    (roster.source === "new-recruit" || roster.source === "opr") && roster.id === rosterId
   ) || null;
 }
 
@@ -5175,13 +5641,13 @@ function importSharedRosterPackage(pack) {
   const roster = {
     ...incoming,
     id:crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random()),
-    source:"new-recruit",
+    source:incoming.source === "opr" ? "opr" : "new-recruit",
     sharedFromOpponent:true,
     importedAt:Date.now()
   };
 
   const duplicateIndex = state.rosters.findIndex(existing =>
-    existing.source === "new-recruit" &&
+    existing.source === roster.source &&
     existing.sharedFromOpponent &&
     normalize(existing.name) === normalize(roster.name) &&
     normalize(existing.faction) === normalize(roster.faction)
