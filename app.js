@@ -206,7 +206,9 @@ function bindEvents() {
   els.fullDataButton?.addEventListener("click", loadFull40kData);
   els.oprImportButton?.addEventListener("click", loadOprArmyForgeList);
   els.oprShareInput?.addEventListener("keydown", event => {
-    if (event.key === "Enter") {
+    const isTextarea = event.currentTarget?.tagName === "TEXTAREA";
+    const submit = event.key === "Enter" && (!isTextarea || event.ctrlKey || event.metaKey);
+    if (submit) {
       event.preventDefault();
       loadOprArmyForgeList();
     }
@@ -489,7 +491,7 @@ const GAME_PROVIDERS = [
       {id:"grimdark", name:"Grimdark Future", detail:"Army Forge + New Recruit", available:true},
       {id:"grimdark-firefight", name:"Grimdark Future: Firefight", detail:"Army Forge + New Recruit", available:true},
       {id:"opr-star-quest", name:"Grimdark Future: Star Quest", detail:"Army Forge quest/campaign import", available:true, beta:true},
-      {id:"opr-warfleets", name:"Grimdark Future: Warfleets", detail:"Separate Army Forge fleet format · TBC", available:false},
+      {id:"opr-warfleets", name:"Grimdark Future: Warfleets", detail:"Army Forge · Share as Text", available:true, beta:true},
       {id:"aof", name:"Age of Fantasy", detail:"Army Forge + New Recruit", available:true},
       {id:"aof-skirmish", name:"Age of Fantasy: Skirmish", detail:"Army Forge + New Recruit", available:true},
       {id:"aof-regiments", name:"Age of Fantasy: Regiments", detail:"Army Forge + New Recruit", available:true},
@@ -553,7 +555,10 @@ const OPR_GAME_SYSTEM_KEYS = {
   "9":"opr-star-quest",
   "10":"opr-star-quest",
   "grimdark-future-star-quest":"opr-star-quest",
-  "grimdark-future-star-quest-ai":"opr-star-quest"
+  "grimdark-future-star-quest-ai":"opr-star-quest",
+  gfwf:"opr-warfleets",
+  "grimdark-future-warfleet":"opr-warfleets",
+  "grimdark-future-warfleets":"opr-warfleets"
 };
 
 function oprGameSystemKey(code = "") {
@@ -565,6 +570,7 @@ function isOprMode(gameSystem = state.gameSystem) {
     "grimdark",
     "grimdark-firefight",
     "opr-star-quest",
+    "opr-warfleets",
     "aof",
     "aof-skirmish",
     "aof-regiments",
@@ -578,6 +584,10 @@ function isOprFantasyMode(gameSystem = state.gameSystem) {
 
 function isOprQuestMode(gameSystem = state.gameSystem) {
   return gameSystem === "aof-quest" || gameSystem === "opr-star-quest";
+}
+
+function isWarfleetsMode(gameSystem = state.gameSystem) {
+  return gameSystem === "opr-warfleets";
 }
 
 function isOprSkirmishMode(gameSystem = state.gameSystem) {
@@ -823,7 +833,41 @@ function applyGameSystemUi() {
     els.newRecruitImportTitle.textContent = "Import exported list";
   }
   if (els.newRecruitImportCard) {
-    els.newRecruitImportCard.classList.toggle("hidden", isOprQuestMode());
+    els.newRecruitImportCard.classList.toggle("hidden", isOprQuestMode() || isWarfleetsMode());
+  }
+
+  if (els.oprImportCard) {
+    const label = els.oprImportCard.querySelector(".section-label");
+    const title = els.oprImportCard.querySelector("h2");
+    const copy = els.oprImportCard.querySelector("p");
+
+    if (label) label.textContent = "ARMY FORGE";
+    if (title) title.textContent = isWarfleetsMode() ? "Import Warfleets fleet" : "Import shared list";
+    if (copy) {
+      copy.innerHTML = isWarfleetsMode()
+        ? 'In Warfleets choose <strong>Share as Text</strong>, copy the full fleet block, then paste it below.'
+        : 'In Army Forge choose <strong>Share as Link</strong>, then paste that shared roster link below.';
+    }
+  }
+
+  if (els.oprShareInput) {
+    els.oprShareInput.placeholder = isWarfleetsMode()
+      ? "Paste the full GFWF Share as Text fleet here…"
+      : "Paste Army Forge share link…";
+    els.oprShareInput.setAttribute(
+      "aria-label",
+      isWarfleetsMode() ? "Warfleets Share as Text fleet" : "Army Forge shared list link"
+    );
+  }
+
+  if (els.oprImportButton) {
+    els.oprImportButton.textContent = isWarfleetsMode() ? "Import Warfleets fleet" : "Import OPR list";
+  }
+
+  if (els.oprImportStatus && !els.oprImportStatus.dataset.busy) {
+    els.oprImportStatus.textContent = isWarfleetsMode()
+      ? "Paste the complete ++ … [GFWF …pts] ++ fleet text."
+      : currentGameName() + " · Army Forge";
   }
 
   if (els.newRecruitImportCopy) {
@@ -845,9 +889,11 @@ function applyGameSystemUi() {
   const setupHero = els.welcome?.querySelector(".setup-hero .lede");
   if (setupHero) {
     setupHero.textContent = opr
-      ? isOprQuestMode()
-        ? "Import your " + currentGameName() + " heroes from an Army Forge shared campaign/list and use Tabletop Voice at the table."
-        : "Import your " + currentGameName() + " force from Army Forge or New Recruit, then use Tabletop Voice at the table."
+      ? isWarfleetsMode()
+        ? "Paste your Army Forge Warfleets fleet and use ship, weapon and system lookup at the table."
+        : isOprQuestMode()
+          ? "Import your " + currentGameName() + " heroes from an Army Forge shared campaign/list and use Tabletop Voice at the table."
+          : "Import your " + currentGameName() + " force from Army Forge or New Recruit, then use Tabletop Voice at the table."
       : aos
         ? "Import your Age of Sigmar army from New Recruit, then use Tabletop Voice for warscroll lookup at the table."
         : "Bring in your New Recruit lists, or load the wider dataset when you need broader 40K lookup at the table.";
@@ -927,7 +973,10 @@ const OPR_GAME_NAMES = {
   "age-of-fantasy-quest":"Age of Fantasy: Quest",
   "age-of-fantasy-quest-ai":"Age of Fantasy: Quest",
   "grimdark-future-star-quest":"Grimdark Future: Star Quest",
-  "grimdark-future-star-quest-ai":"Grimdark Future: Star Quest"
+  "grimdark-future-star-quest-ai":"Grimdark Future: Star Quest",
+  gfwf:"Grimdark Future: Warfleets",
+  "grimdark-future-warfleet":"Grimdark Future: Warfleets",
+  "grimdark-future-warfleets":"Grimdark Future: Warfleets"
 };
 
 function oprGameName(code = "") {
