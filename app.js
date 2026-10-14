@@ -486,7 +486,8 @@ const GAME_PROVIDERS = [
     id:"opr",
     name:"OnePageRules",
     systems:[
-      {id:"grimdark", name:"Grimdark Future", detail:"Army Forge + New Recruit · includes Firefight", available:true},
+      {id:"grimdark", name:"Grimdark Future", detail:"Army Forge + New Recruit", available:true},
+      {id:"grimdark-firefight", name:"Grimdark Future: Firefight", detail:"Supported through Grimdark Future mode", available:false, status:"INCLUDED"},
       {id:"opr-star-quest", name:"Grimdark Future: Star Quest", detail:"Planned", available:false},
       {id:"opr-warfleets", name:"Grimdark Future: Warfleets", detail:"Planned", available:false},
       {id:"aof", name:"Age of Fantasy", detail:"Planned", available:false},
@@ -539,9 +540,10 @@ function gameProviderForSystem(gameSystem = state.gameSystem) {
 
 function gameSystemCardHtml(system) {
   const selected = state.gameSystem === system.id;
-  const status = system.available
-    ? (system.beta ? "BETA" : "AVAILABLE")
-    : "TBC";
+  const status = system.status ||
+    (system.available
+      ? (system.beta ? "BETA" : "AVAILABLE")
+      : "TBC");
 
   if (!system.available) {
     return `
@@ -765,6 +767,11 @@ function applyGameSystemUi() {
   }
   if (els.importButton) {
     els.importButton.textContent = "Choose New Recruit file";
+  }
+  if (els.fileInput) {
+    els.fileInput.accept = fortyK
+      ? ".json,.ros,.rosz,.txt,application/json,text/plain,application/xml,text/xml,application/zip"
+      : ".json,.ros,.rosz,application/json,application/xml,text/xml,application/zip";
   }
 
   const setupHero = els.welcome?.querySelector(".setup-hero .lede");
