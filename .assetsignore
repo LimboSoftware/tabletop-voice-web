@@ -3,3 +3,5 @@
 README.md
 wrangler.jsonc
 read
+worker.js
+_headers
