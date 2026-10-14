@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
   <meta name="theme-color" content="#111318" />
-  <meta name="description" content="Tabletop Voice — voice-first roster reference for tabletop games." />
+  <meta name="description" content="Tabletop Voice — voice-first army and roster reference for tabletop games." />
   <meta name="referrer" content="no-referrer" />
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="icon" href="icon.svg" type="image/svg+xml" />
@@ -17,8 +17,8 @@
       <div class="first-run-card beta-notice-card">
         <p class="eyebrow">PLAYER-BUILT TABLETOP TOOL</p>
         <h2 id="firstRunTitle">Welcome to Tabletop Voice</h2>
-        <p class="first-run-intro">Tabletop Voice is an independent companion app. It does not ship with Warhammer 40,000 rules, datasheets, codex text or artwork. Game content is shown only after you choose to load it from your own roster files or supported community-maintained web data.</p>
-        <p class="first-run-note"><strong>Unofficial:</strong> Tabletop Voice is not affiliated with, endorsed by or sponsored by Games Workshop. Warhammer and related names and marks belong to their respective owners. Always use official publications for authoritative rules, and only import data you are permitted to use.</p>
+        <p class="first-run-intro">Tabletop Voice is an independent companion app. It does not bundle paid rulebooks, codex text or game artwork. Game data is shown only after you choose to load it from your own roster files or a supported game service.</p>
+        <p class="first-run-note"><strong>Unofficial:</strong> Tabletop Voice is an independent project and is not affiliated with or endorsed by Games Workshop, OnePageRules or other game publishers. Warhammer and related names and marks belong to their respective owners. Always use the publisher's current rules as the authoritative source.</p>
         <p class="first-run-note">This is a free public beta, so features, layouts and data handling may change while the app is being tested.</p>
         <p class="first-run-note"><a href="./privacy.html" target="_blank" rel="noopener noreferrer">Privacy &amp; data use</a></p>
         <button id="firstRunContinue" class="primary-button large" type="button">Continue to Setup</button>
@@ -88,6 +88,19 @@
             <button id="fullDataButton" class="ghost-button large setup-main-action" type="button">Import all armies</button>
           </section>
         </div>
+
+        <section class="tool-card opr-import-card">
+          <div class="opr-import-copy">
+            <span class="section-label">ONEPAGE RULES · ARMY FORGE</span>
+            <h2>Import an Army Forge list</h2>
+            <p>In Army Forge choose <strong>Share as Link</strong>, then paste that link here. Tabletop Voice will load the resolved units, selected weapons and rules for table-side lookup.</p>
+          </div>
+          <div class="opr-import-controls">
+            <input id="oprShareInput" type="url" inputmode="url" autocomplete="off" placeholder="https://army-forge.onepagerules.com/share?id=…" aria-label="Army Forge shared list link" />
+            <button id="oprImportButton" class="primary-button large" type="button">Import OPR list</button>
+          </div>
+          <small id="oprImportStatus" class="opr-import-status">Supports shared Army Forge lists from Grimdark Future, Firefight, Age of Fantasy and related OPR systems.</small>
+        </section>
 
         <section id="fullDataArmySection" class="tool-card full-data-army-section hidden">
           <div class="army-section-copy">
