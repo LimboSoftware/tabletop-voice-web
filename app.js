@@ -572,6 +572,25 @@ function oprWeaponKey(weapon = {}) {
   ].join("|"));
 }
 
+function oprUnitTotalCost(unit) {
+  let total = Number(unit?.totalCost ?? unit?.cost ?? 0) || 0;
+  if (unit?.totalCost != null) return total;
+
+  for (const selected of unit?.selectedUpgrades || []) {
+    const option = selected?.option;
+    if (!option) continue;
+
+    const matched = Array.isArray(option.costs)
+      ? option.costs.find(entry => String(entry?.unitId || "") === String(unit?.id || ""))
+      : null;
+
+    const add = Number(matched?.cost ?? option.cost ?? 0);
+    if (Number.isFinite(add)) total += add;
+  }
+
+  return total;
+}
+
 function mergeOprLoadouts(units) {
   const merged = new Map();
 
@@ -618,7 +637,8 @@ function collapseOprCombinedUnits(units = []) {
     output.push({
       ...root,
       size:group.reduce((sum, unit) => sum + Number(unit.size || 0), 0),
-      cost:group.reduce((sum, unit) => sum + Number(unit.cost || 0), 0),
+      cost:group.reduce((sum, unit) => sum + oprUnitTotalCost(unit), 0),
+      totalCost:group.reduce((sum, unit) => sum + oprUnitTotalCost(unit), 0),
       rules:dedupeBy(group.flatMap(unit => unit.rules || []), rule => normalize(oprRuleLabel(rule))),
       items:group.flatMap(unit => unit.items || []),
       selectedUpgrades:group.flatMap(unit => unit.selectedUpgrades || []),
@@ -682,7 +702,7 @@ function buildOprUnit(rawUnit, data, index) {
       {label:"Quality", value:Number(rawUnit?.quality) ? rawUnit.quality + "+" : "—"},
       {label:"Defence", value:Number(rawUnit?.defense) ? rawUnit.defense + "+" : "—"},
       {label:"Models", value:String(Number(rawUnit?.size || 1))},
-      {label:"Pts", value:String(Number(rawUnit?.cost || 0))}
+      {label:"Pts", value:String(oprUnitTotalCost(rawUnit))}
     ],
     rules:dedupeBy(rules, rule => normalize(rule.name + "|" + rule.text)),
     profiles:mergeOprLoadouts([rawUnit]).map(buildOprWeaponProfile),
@@ -2113,7 +2133,7 @@ async function ensureDetachmentStratagems() {
 
 function renderDetachmentSummary() {
   const requests = getImportedDetachmentRequests();
-  const importedLists = state.rosters.filter(roster => roster.source === "new-recruit" || roster.source === "opr");
+  const importedLists = state.rosters.filter(roster => roster.source === "new-recruit");
 
   if (!requests.length) {
     if (importedLists.some(roster => !Array.isArray(roster.detachments))) {
@@ -3014,7 +3034,7 @@ function hideApp() {
 }
 
 function renderDataSummary() {
-  const importedLists = state.rosters.filter(roster => roster.source === "new-recruit");
+  const importedLists = state.rosters.filter(roster => roster.source === "new-recruit" || roster.source === "opr");
   const hasFullData = state.rosters.some(roster => roster.source === "bsdata");
 
   els.fullDataArmySection?.classList.toggle("hidden", !hasFullData);
