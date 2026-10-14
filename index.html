@@ -16,8 +16,9 @@
       <div class="first-run-card beta-notice-card">
         <p class="eyebrow">FREE PUBLIC BETA</p>
         <h2 id="firstRunTitle">Welcome to Tabletop Voice</h2>
-        <p class="first-run-intro">This is a free public beta. Features, rules references, layouts and data handling may change while the app is being tested and improved.</p>
-        <p class="first-run-note">Always check the official rules when a ruling matters.</p>
+        <p class="first-run-intro">Tabletop Voice is an independent companion app. It does not ship with Warhammer 40,000 rules, datasheets, codex text or artwork. Game content is shown only after you choose to load it from your own roster files or supported community-maintained web data.</p>
+        <p class="first-run-note"><strong>Unofficial:</strong> Tabletop Voice is not affiliated with, endorsed by or sponsored by Games Workshop. Warhammer and related names and marks belong to their respective owners. Always use official publications for authoritative rules, and only import data you are permitted to use.</p>
+        <p class="first-run-note">This is a free public beta, so features, layouts and data handling may change while the app is being tested.</p>
         <button id="firstRunContinue" class="primary-button large" type="button">Continue to Setup</button>
       </div>
     </div>
@@ -136,8 +137,8 @@
                 <h2 id="detailName"></h2>
               </div>
               <div class="detail-actions">
+                <button id="linkedUnitButton" class="ghost-button compact hidden" type="button">Attached</button>
                 <button id="focusButton" class="ghost-button compact" type="button">Focus</button>
-                <button id="linkedUnitButton" class="ghost-button compact hidden" type="button">Linked</button>
                 <button id="pinButton" class="ghost-button compact" type="button">Pin</button>
               </div>
             </div>
@@ -301,7 +302,11 @@
         <div class="page-heading">
           <p class="eyebrow">REFERENCE</p>
           <h1>Core rules</h1>
-          <p>Search rules and abilities from the current reference data.</p>
+          <p>Core-rule text is not bundled with Tabletop Voice. Load the current community reference data when you want to use this page.</p>
+        </div>
+        <div class="core-rule-import-row">
+          <button id="coreRulesImportButton" class="ghost-button" type="button">Load core rules</button>
+          <small id="coreRulesImportStatus">No core-rule reference has been loaded yet.</small>
         </div>
         <label class="reference-search">
           <span>Search core rules</span>
@@ -363,17 +368,18 @@
       <section id="pageSetup" class="app-page hidden utility-page" data-page="guide">
         <div class="page-heading">
           <p class="eyebrow">GUIDE</p>
-          <h1>Game guide</h1>
-          <p>A simple pre-game checklist and quick route into the rest of the companion.</p>
+          <h1>Using Tabletop Voice</h1>
+          <p>A quick guide to loading data and getting around the app.</p>
         </div>
         <div class="setup-grid">
-          <button class="setup-step" type="button" data-page-target="setup"><span>1</span><strong>Load armies</strong><small>Import New Recruit lists or import all armies.</small></button>
-          <button class="setup-step" type="button" id="setupChooseArmies"><span>2</span><strong>Choose active armies</strong><small>Limit voice and text lookup to this game.</small></button>
-          <label class="setup-step checklist-step"><input type="checkbox" data-setup-check="mission"><span>3</span><strong>Mission ready</strong><small>Mission and objectives agreed.</small></label>
-          <label class="setup-step checklist-step"><input type="checkbox" data-setup-check="terrain"><span>4</span><strong>Battlefield ready</strong><small>Terrain and deployment set.</small></label>
-          <label class="setup-step checklist-step"><input type="checkbox" data-setup-check="deploy"><span>5</span><strong>Deployment complete</strong><small>Armies deployed and ready to begin.</small></label>
+          <button class="setup-step" type="button" data-page-target="setup"><span>1</span><strong>Load your lists</strong><small>Import New Recruit JSON, ROS, ROSZ or TXT files. You can also load the wider community dataset for broader lookup.</small></button>
+          <button class="setup-step" type="button" data-page-target="datasheets"><span>2</span><strong>Open Units</strong><small>Pick a list, tap a unit, or search by name. Hold the mic button to use voice lookup.</small></button>
+          <button class="setup-step" type="button" data-page-target="datasheets"><span>3</span><strong>Switch attached units</strong><small>When New Recruit links a bodyguard, Leader or Support unit, use the Attached button beside Focus and Pin to cycle between them.</small></button>
+          <button class="setup-step" type="button" data-page-target="strats"><span>4</span><strong>Use army references</strong><small>Strats and Army Rules follow the currently selected imported list, including its selected detachment where data is available.</small></button>
+          <button class="setup-step" type="button" data-page-target="rules"><span>5</span><strong>Load core rules</strong><small>Core rules are not built into the app. Open Core Rules and load the current community reference when you need it.</small></button>
+          <button class="setup-step" type="button" data-page-target="score"><span>6</span><strong>Score and roll</strong><small>Use Score during the game, and Dice for quick rolls, targets and rerolls.</small></button>
+          <button class="setup-step" type="button" data-page-target="share"><span>7</span><strong>Move or share lists</strong><small>Use Share Lists between two running copies of the app, or Phone QR Transfer to move roster files from a PC to your phone.</small></button>
         </div>
-        <button id="resetMatchButton" class="ghost-button reset-match-button" type="button">Reset match & guide</button>
       </section>
     </main>
 
