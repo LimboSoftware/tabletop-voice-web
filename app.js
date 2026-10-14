@@ -487,11 +487,11 @@ const GAME_PROVIDERS = [
     name:"OnePageRules",
     systems:[
       {id:"grimdark", name:"Grimdark Future", detail:"Army Forge + New Recruit", available:true},
-      {id:"grimdark-firefight", name:"Grimdark Future: Firefight", detail:"Supported through Grimdark Future mode", available:false, status:"INCLUDED"},
+      {id:"grimdark-firefight", name:"Grimdark Future: Firefight", detail:"Army Forge + New Recruit", available:true},
       {id:"opr-star-quest", name:"Grimdark Future: Star Quest", detail:"Planned", available:false},
       {id:"opr-warfleets", name:"Grimdark Future: Warfleets", detail:"Planned", available:false},
-      {id:"aof", name:"Age of Fantasy", detail:"Planned", available:false},
-      {id:"aof-skirmish", name:"Age of Fantasy: Skirmish", detail:"Planned", available:false},
+      {id:"aof", name:"Age of Fantasy", detail:"Army Forge + New Recruit", available:true},
+      {id:"aof-skirmish", name:"Age of Fantasy: Skirmish", detail:"Army Forge + New Recruit", available:true},
       {id:"aof-regiments", name:"Age of Fantasy: Regiments", detail:"Planned", available:false},
       {id:"aof-quest", name:"Age of Fantasy: Quest", detail:"Planned", available:false}
     ]
@@ -524,6 +524,30 @@ function gameSystemDisplayName(gameSystem) {
       gameSystem === "aos" ? "Warhammer Age of Sigmar" :
       gameSystem === "40k" ? "Warhammer 40,000" :
       "another game system");
+}
+
+const OPR_GAME_SYSTEM_KEYS = {
+  gf:"grimdark",
+  gff:"grimdark-firefight",
+  aof:"aof",
+  aofs:"aof-skirmish",
+  aofr:"aof-regiments"
+};
+
+function oprGameSystemKey(code = "") {
+  return OPR_GAME_SYSTEM_KEYS[String(code || "").toLowerCase()] || "";
+}
+
+function isOprMode(gameSystem = state.gameSystem) {
+  return ["grimdark","grimdark-firefight","aof","aof-skirmish"].includes(gameSystem);
+}
+
+function isOprFantasyMode(gameSystem = state.gameSystem) {
+  return gameSystem === "aof" || gameSystem === "aof-skirmish";
+}
+
+function isOprSkirmishMode(gameSystem = state.gameSystem) {
+  return gameSystem === "grimdark-firefight" || gameSystem === "aof-skirmish";
 }
 
 function isGrimdarkMode() {
@@ -627,8 +651,9 @@ function showEntryModalIfNeeded() {
 }
 
 function inferUnitGameSystem(unit) {
+  if (unit?.gameSystemKey && GAME_SYSTEMS[unit.gameSystemKey]) return unit.gameSystemKey;
   if (unit?.system === "aos") return "aos";
-  if (unit?.system === "opr") return "grimdark";
+  if (unit?.system === "opr") return oprGameSystemKey(unit?.gameSystem) || "grimdark";
   if (unit?.system === "40k") return "40k";
 
   const labels = new Set((unit?.stats || []).map(stat => normalize(stat.label)));
@@ -654,10 +679,7 @@ function inferRosterGameSystem(roster) {
   if (roster.gameSystemKey) return roster.gameSystemKey;
 
   if (roster.source === "opr") {
-    const code = normalize(roster.gameSystem || "");
-    return code === "gf" || code === "gff" || /grimdark/.test(normalize(roster.gameName || ""))
-      ? "grimdark"
-      : "opr-other";
+    return oprGameSystemKey(roster.gameSystem) || "opr-other";
   }
 
   if (roster.source === "bsdata") return "40k";
@@ -671,6 +693,9 @@ function inferRosterGameSystem(roster) {
   ].filter(Boolean).join(" "));
 
   if (metadata.includes("age of sigmar")) return "aos";
+  if (metadata.includes("age of fantasy skirmish")) return "aof-skirmish";
+  if (metadata.includes("age of fantasy")) return "aof";
+  if (metadata.includes("grimdark future firefight")) return "grimdark-firefight";
   if (metadata.includes("grimdark future")) return "grimdark";
 
   const counts = {aos:0, grimdark:0, "40k":0};
@@ -729,10 +754,12 @@ function setGameSystem(gameSystem, options = {}) {
 
 function applyGameSystemUi() {
   const grimdark = isGrimdarkMode();
+  const opr = isOprMode();
   const aos = isAosMode();
   const fortyK = state.gameSystem === "40k";
 
   document.body.classList.toggle("game-grimdark", grimdark);
+  document.body.classList.toggle("game-opr", opr);
   document.body.classList.toggle("game-aos", aos);
   document.body.classList.toggle("game-40k", fortyK);
 
@@ -744,8 +771,8 @@ function applyGameSystemUi() {
 
   // The all-armies/community reference loader is currently 40K-specific.
   if (els.fullDataImportCard) els.fullDataImportCard.classList.toggle("hidden", !fortyK);
-  // Army Forge support is currently for Grimdark Future / Firefight.
-  if (els.oprImportCard) els.oprImportCard.classList.toggle("hidden", !grimdark);
+  // Army Forge is the primary current-data source for supported OPR games.
+  if (els.oprImportCard) els.oprImportCard.classList.toggle("hidden", !opr);
 
   if (els.fullDataArmySection) {
     const hasFullData = fortyK && state.rosters.some(roster => roster.source === "bsdata");
@@ -759,8 +786,8 @@ function applyGameSystemUi() {
     els.newRecruitImportTitle.textContent = "Import exported list";
   }
   if (els.newRecruitImportCopy) {
-    els.newRecruitImportCopy.textContent = grimdark
-      ? "Export your Grimdark Future or Firefight roster from New Recruit, then choose the JSON, ROS or ROSZ file here."
+    els.newRecruitImportCopy.textContent = opr
+      ? "If you use New Recruit for " + currentGameName() + ", export the roster as JSON, ROS or ROSZ. Army Forge share links are also supported below."
       : aos
         ? "Export your Age of Sigmar 4th edition roster from New Recruit, then choose the JSON, ROS or ROSZ file here."
         : "Export your Warhammer 40,000 roster from New Recruit, then choose the JSON, ROS, ROSZ or TXT file here.";
@@ -776,8 +803,8 @@ function applyGameSystemUi() {
 
   const setupHero = els.welcome?.querySelector(".setup-hero .lede");
   if (setupHero) {
-    setupHero.textContent = grimdark
-      ? "Import your Grimdark Future army from New Recruit or Army Forge, then use Tabletop Voice at the table."
+    setupHero.textContent = opr
+      ? "Import your " + currentGameName() + " force from Army Forge or New Recruit, then use Tabletop Voice at the table."
       : aos
         ? "Import your Age of Sigmar army from New Recruit, then use Tabletop Voice for warscroll lookup at the table."
         : "Bring in your New Recruit lists, or load the wider dataset when you need broader 40K lookup at the table.";
@@ -1066,6 +1093,7 @@ function buildOprUnit(rawUnit, data, index) {
     type:"OPR Unit",
     system:"opr",
     gameSystem:String(data?.gameSystem || ""),
+    gameSystemKey:oprGameSystemKey(data?.gameSystem),
     categories:hero ? ["Hero"] : [],
     stats:[
       {label:"Quality", value:Number(rawUnit?.quality) ? rawUnit.quality + "+" : "—"},
@@ -1135,7 +1163,7 @@ function buildOprRoster(data, armyId) {
     name:String(data.name || factionNames[0] || "OnePageRules army"),
     faction:factionNames.join(" + ") || "OnePageRules",
     source:"opr",
-    gameSystemKey:"grimdark",
+    gameSystemKey:oprGameSystemKey(data.gameSystem) || "opr-other",
     importFormat:"army-forge-link",
     gameSystem:String(data.gameSystem || ""),
     gameName:oprGameName(data.gameSystem),
@@ -1179,8 +1207,18 @@ async function loadOprArmyForgeList() {
     }
 
     const gameCode = String(data.gameSystem || "").toLowerCase();
-    if (!["gf","gff"].includes(gameCode)) {
-      throw new Error("This game picker currently supports Grimdark Future and Firefight Army Forge lists.");
+    const importedGame = oprGameSystemKey(gameCode);
+    const supportedOprGames = ["grimdark","grimdark-firefight","aof","aof-skirmish"];
+
+    if (!supportedOprGames.includes(importedGame)) {
+      throw new Error("This Army Forge game is not supported yet.");
+    }
+
+    if (state.gameSystem && importedGame !== state.gameSystem) {
+      throw new Error(
+        "This is a " + gameSystemDisplayName(importedGame) +
+        " list. Switch game system in Settings before importing it."
+      );
     }
 
     const roster = buildOprRoster(data, armyId);
@@ -1549,6 +1587,10 @@ function buildRosterFromNewRecruitRoot(root, fileName, importFormat = "json") {
     ? extractAosRosterAbilities(root)
     : extractArmyRules(root);
 
+  uniqueUnits.forEach(unit => {
+    if (unit?.system === "opr") unit.gameSystemKey = gameSystemKey;
+  });
+
   return {
     id:crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random()),
     name:root.name || fileName.replace(/\.[^.]+$/, ""),
@@ -1595,6 +1637,9 @@ function detectNewRecruitGameSystem(root, units = []) {
   );
 
   if (systemName.includes("age of sigmar")) return "aos";
+  if (systemName.includes("age of fantasy skirmish")) return "aof-skirmish";
+  if (systemName.includes("age of fantasy")) return "aof";
+  if (systemName.includes("grimdark future firefight")) return "grimdark-firefight";
   if (systemName.includes("grimdark future")) return "grimdark";
   if (
     systemName.includes("warhammer 40 000") ||
@@ -1608,10 +1653,13 @@ function detectNewRecruitGameSystem(root, units = []) {
     if (counts[system] != null) counts[system]++;
   }
 
-  return Object.entries(counts)
-    .sort((a,b) => b[1] - a[1])[0]?.[1] > 0
-      ? Object.entries(counts).sort((a,b) => b[1] - a[1])[0][0]
-      : "40k";
+  const best = Object.entries(counts).sort((a,b) => b[1] - a[1])[0];
+  if (best?.[1] > 0) {
+    if (best[0] === "grimdark" && isOprMode()) return state.gameSystem;
+    return best[0];
+  }
+
+  return "40k";
 }
 
 function isAosAbilityProfile(profile) {
@@ -3558,8 +3606,8 @@ function setVoicePrompt(page = state.currentPage) {
   if (!els.voiceHint) return;
 
   const prompts = {
-    datasheets: isGrimdarkMode()
-      ? "Say a unit name, e.g. “Battle Brothers”"
+    datasheets: isOprMode()
+      ? "Say a unit name from your " + currentGameName() + " list"
       : isAosMode()
         ? "Say a unit name, e.g. “Annihilators”"
         : "Say a unit name, e.g. “Death Korps of Krieg”",
@@ -5045,7 +5093,7 @@ function adjustTurnScore(player, type, delta) {
 }
 
 function updateGameContextUi(unit = state.selected) {
-  const grimdark = isGrimdarkMode();
+  const opr = isOprMode();
   const aos = isAosMode();
   const non40k = state.gameSystem !== "40k";
 
@@ -5062,26 +5110,26 @@ function updateGameContextUi(unit = state.selected) {
 
   const armyRulesLabel = armyRulesButton?.querySelector("span:last-child");
   if (armyRulesLabel) {
-    armyRulesLabel.textContent = grimdark ? "Rules" : "Army Rules";
+    armyRulesLabel.textContent = opr ? "Rules" : "Army Rules";
   }
 
   const heading = els.pageArmyRules?.querySelector("h1");
   const copy = els.pageArmyRules?.querySelector(".page-heading > p:last-child");
   const eyebrow = els.pageArmyRules?.querySelector(".eyebrow");
 
-  if (heading) heading.textContent = grimdark ? "Rules" : "Army Rules";
+  if (heading) heading.textContent = opr ? "Rules" : "Army Rules";
 
   if (eyebrow) {
-    eyebrow.textContent = grimdark
-      ? "GRIMDARK REFERENCE"
+    eyebrow.textContent = opr
+      ? currentGameName().toUpperCase() + " REFERENCE"
       : aos
         ? "AGE OF SIGMAR REFERENCE"
         : "ARMY REFERENCE";
   }
 
   if (copy) {
-    copy.textContent = grimdark
-      ? "Special rules referenced by the active Grimdark Future list."
+    copy.textContent = opr
+      ? "Special rules" + (isOprFantasyMode() ? " and spells" : "") + " referenced by the active " + currentGameName() + " list."
       : aos
         ? "Battle traits, spells, prayers and other army-level abilities imported with the active Age of Sigmar list."
         : "Rules that apply to the selected imported list or whole army.";
@@ -6638,6 +6686,14 @@ function restore() {
 
     state.rosters = JSON.parse(localStorage.getItem("tv_rosters") || "[]");
     state.rosters.forEach(roster => {
+      if (roster.source === "opr") {
+        const migratedOprKey = oprGameSystemKey(roster.gameSystem);
+        if (migratedOprKey) roster.gameSystemKey = migratedOprKey;
+        (roster.units || []).forEach(unit => {
+          if (unit?.system === "opr" && migratedOprKey) unit.gameSystemKey = migratedOprKey;
+        });
+      }
+
       if (roster.source === "new-recruit" && Array.isArray(roster.units)) {
         roster.units.forEach(unit => {
           if (unit.system) return;
@@ -6646,7 +6702,29 @@ function restore() {
         });
       }
 
+      if (
+        roster.source === "new-recruit" &&
+        roster.gameSystemKey === "grimdark"
+      ) {
+        const metadata = normalize([
+          roster.gameSystemName,
+          roster.gameSystem,
+          roster.name,
+          roster.faction
+        ].filter(Boolean).join(" "));
+
+        if (metadata.includes("grimdark future firefight")) roster.gameSystemKey = "grimdark-firefight";
+        else if (metadata.includes("age of fantasy skirmish")) roster.gameSystemKey = "aof-skirmish";
+        else if (metadata.includes("age of fantasy")) roster.gameSystemKey = "aof";
+      }
+
       if (!roster.gameSystemKey) roster.gameSystemKey = inferRosterGameSystem(roster);
+
+      if (roster.source === "new-recruit" && isOprMode(roster.gameSystemKey)) {
+        (roster.units || []).forEach(unit => {
+          if (unit?.system === "opr") unit.gameSystemKey = roster.gameSystemKey;
+        });
+      }
 
       if (
         roster.source === "new-recruit" &&
