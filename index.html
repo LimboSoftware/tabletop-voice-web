@@ -78,7 +78,6 @@
             <p>Import multiple New Recruit JSON, ROS, ROSZ or TXT exports for the armies in your game.</p>
             <button id="importButton" class="primary-button large setup-main-action" type="button">Import New Recruit lists</button>
             <input id="fileInput" type="file" multiple accept=".json,.ros,.rosz,.txt,application/json,text/plain,application/xml,text/xml,application/zip" hidden />
-            <div id="dataRosterSummary" class="data-roster-summary">No New Recruit lists loaded yet.</div>
           </section>
 
           <section class="tool-card setup-import-card">
@@ -100,6 +99,11 @@
             <button id="oprImportButton" class="primary-button large" type="button">Import OPR list</button>
           </div>
           <small id="oprImportStatus" class="opr-import-status">Supports shared Army Forge lists from Grimdark Future, Firefight, Age of Fantasy and related OPR systems.</small>
+        </section>
+
+        <section class="setup-loaded-lists">
+          <span class="section-label">LOADED LISTS</span>
+          <div id="dataRosterSummary" class="data-roster-summary">No imported lists loaded yet.</div>
         </section>
 
         <section id="fullDataArmySection" class="tool-card full-data-army-section hidden">
