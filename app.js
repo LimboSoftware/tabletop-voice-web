@@ -4,6 +4,7 @@ const state = {
   selected: null,
   selectedRosterId: null,
   mode: localStorage.getItem("tv_mode") || "mobile",
+  gameSystem: localStorage.getItem("tv_game_system") || "",
   currentPage: "setup",
   listening: false,
   recognition: null,
@@ -82,6 +83,15 @@ const els = {
   pageRules: $("pageRules"),
   pageShare: $("pageShare"),
   pageUpdates: $("pageUpdates"),
+  pageSettings: $("pageSettings"),
+  gameSystemModal: $("gameSystemModal"),
+  settingsCurrentGame: $("settingsCurrentGame"),
+  newRecruitImportCard: $("newRecruitImportCard"),
+  newRecruitImportLabel: $("newRecruitImportLabel"),
+  newRecruitImportTitle: $("newRecruitImportTitle"),
+  newRecruitImportCopy: $("newRecruitImportCopy"),
+  fullDataImportCard: $("fullDataImportCard"),
+  oprImportCard: $("oprImportCard"),
   stratSourceTabs: $("stratSourceTabs"),
   stratPageContent: $("stratPageContent"),
   armyRuleSourceTabs: $("armyRuleSourceTabs"),
@@ -160,21 +170,23 @@ function boot() {
   applyMode();
   enforcePortraitOrientation();
   bindEvents();
-  showFirstRunIfNeeded();
   setupSpeech();
 
   try {
     restore();
+    applyGameSystemUi();
     renderAll();
     renderMatchTools();
     restoreSetupChecks();
     switchPage(state.currentPage, {silent:true});
     handleShareUrlOnBoot();
     handlePendingRosterTransferOnBoot();
+    showEntryModalIfNeeded();
   } catch (error) {
     console.error("Tabletop Voice startup render failed", error);
     toast("Some saved data could not be rendered. Controls are still available.");
     switchPage("setup", {silent:true});
+    showEntryModalIfNeeded();
   }
 
   if ("serviceWorker" in navigator) navigator.serviceWorker.register("./sw.js").catch(() => {});
@@ -195,6 +207,12 @@ function bindEvents() {
       event.preventDefault();
       loadOprArmyForgeList();
     }
+  });
+  document.querySelectorAll("[data-game-system-choice]").forEach(button => {
+    button.addEventListener("click", () => setGameSystem(button.dataset.gameSystemChoice, {fromChooser:true}));
+  });
+  document.querySelectorAll("[data-settings-game-system]").forEach(button => {
+    button.addEventListener("click", () => setGameSystem(button.dataset.settingsGameSystem));
   });
   els.clearRoster.addEventListener("click", clearRosters);
   els.searchInput.addEventListener("input", () => {
@@ -423,6 +441,164 @@ async function handlePendingRosterTransferOnBoot() {
     console.error("Automatic roster transfer import failed", error);
     toast("Transfer received, but automatic import failed. Use the downloaded backup from Roster Transfer.");
   }
+}
+
+const GAME_SYSTEMS = {
+  "40k": {
+    name:"Warhammer 40,000",
+    shortName:"40K"
+  },
+  grimdark: {
+    name:"Grimdark Future",
+    shortName:"Grimdark"
+  }
+};
+
+function currentGameName() {
+  return GAME_SYSTEMS[state.gameSystem]?.name || "Choose a game";
+}
+
+function isGrimdarkMode() {
+  return state.gameSystem === "grimdark";
+}
+
+function showEntryModalIfNeeded() {
+  const params = new URLSearchParams(location.search);
+  if (params.has("tvshare") || params.has("transfer")) {
+    showFirstRunIfNeeded();
+    return;
+  }
+
+  if (!state.gameSystem) {
+    els.firstRunModal?.classList.add("hidden");
+    els.gameSystemModal?.classList.remove("hidden");
+    return;
+  }
+
+  els.gameSystemModal?.classList.add("hidden");
+  showFirstRunIfNeeded();
+}
+
+function inferUnitGameSystem(unit) {
+  const labels = new Set((unit?.stats || []).map(stat => normalize(stat.label)));
+  if (labels.has("quality") && (labels.has("defense") || labels.has("defence"))) {
+    return "grimdark";
+  }
+  return "40k";
+}
+
+function inferRosterGameSystem(roster) {
+  if (!roster) return "";
+  if (roster.gameSystemKey) return roster.gameSystemKey;
+  if (roster.source === "opr") {
+    const code = normalize(roster.gameSystem || "");
+    return code === "gf" || code === "gff" || /grimdark/.test(normalize(roster.gameName || "")) ? "grimdark" : "opr-other";
+  }
+  if (roster.source === "bsdata") return "40k";
+
+  const metadata = normalize([
+    roster.faction,
+    roster.name,
+    roster.gameName,
+    roster.gameSystem
+  ].filter(Boolean).join(" "));
+
+  if (metadata.includes("grimdark future")) return "grimdark";
+
+  const units = roster.units || [];
+  const grimdarkUnits = units.filter(unit => inferUnitGameSystem(unit) === "grimdark").length;
+  if (units.length && grimdarkUnits >= Math.ceil(units.length / 2)) return "grimdark";
+
+  return "40k";
+}
+
+function rosterMatchesSelectedGame(roster) {
+  if (!state.gameSystem) return true;
+  return inferRosterGameSystem(roster) === state.gameSystem;
+}
+
+function ensureActiveRosterForGame() {
+  if (!state.gameSystem) return;
+  const current = state.rosters[state.activeRoster];
+  if (current && rosterMatchesSelectedGame(current)) return;
+
+  const index = state.rosters.findIndex(roster => rosterMatchesSelectedGame(roster));
+  state.activeRoster = index >= 0 ? index : 0;
+}
+
+function setGameSystem(gameSystem, options = {}) {
+  if (!GAME_SYSTEMS[gameSystem]) return;
+
+  state.gameSystem = gameSystem;
+  localStorage.setItem("tv_game_system", gameSystem);
+  state.selected = null;
+  state.selectedRosterId = null;
+  state.unitBrowserSourceId = "all";
+  localStorage.setItem("tv_unit_browser_source", "all");
+  ensureActiveRosterForGame();
+
+  els.gameSystemModal?.classList.add("hidden");
+  applyGameSystemUi();
+  renderAll();
+
+  if (state.currentPage === "strats" || state.currentPage === "score" || state.currentPage === "rules") {
+    switchPage("setup", {silent:true});
+  } else if (!options.fromChooser) {
+    switchPage("setup");
+  }
+
+  if (options.fromChooser) {
+    switchPage("setup", {silent:true});
+    showFirstRunIfNeeded();
+  } else {
+    toast("Switched to " + currentGameName());
+  }
+}
+
+function applyGameSystemUi() {
+  const grimdark = isGrimdarkMode();
+
+  document.body.classList.toggle("game-grimdark", grimdark);
+  document.body.classList.toggle("game-40k", state.gameSystem === "40k");
+
+  if (els.settingsCurrentGame) {
+    els.settingsCurrentGame.textContent = currentGameName();
+  }
+
+  document.querySelectorAll("[data-settings-game-system]").forEach(button => {
+    button.classList.toggle("selected", button.dataset.settingsGameSystem === state.gameSystem);
+  });
+
+  if (els.fullDataImportCard) els.fullDataImportCard.classList.toggle("hidden", grimdark);
+  if (els.oprImportCard) els.oprImportCard.classList.toggle("hidden", !grimdark);
+  if (els.fullDataArmySection) {
+    const hasFullData = state.rosters.some(roster => roster.source === "bsdata");
+    els.fullDataArmySection.classList.toggle("hidden", grimdark || !hasFullData);
+  }
+
+  if (els.newRecruitImportLabel) {
+    els.newRecruitImportLabel.textContent = grimdark ? "GRIMDARK FUTURE · NEW RECRUIT" : "WARHAMMER 40,000 · NEW RECRUIT";
+  }
+  if (els.newRecruitImportTitle) {
+    els.newRecruitImportTitle.textContent = grimdark ? "Import a Grimdark list" : "Import your 40K lists";
+  }
+  if (els.newRecruitImportCopy) {
+    els.newRecruitImportCopy.textContent = grimdark
+      ? "Import a Grimdark Future or Firefight list exported from New Recruit."
+      : "Import multiple New Recruit JSON, ROS, ROSZ or TXT exports for the armies in your game.";
+  }
+  if (els.importButton) {
+    els.importButton.textContent = grimdark ? "Import Grimdark New Recruit list" : "Import New Recruit lists";
+  }
+
+  const setupHero = els.welcome?.querySelector(".setup-hero .lede");
+  if (setupHero) {
+    setupHero.textContent = grimdark
+      ? "Import your Grimdark Future army from New Recruit or Army Forge, then use Tabletop Voice at the table."
+      : "Bring in your New Recruit lists, or load the wider dataset when you need broader 40K lookup at the table.";
+  }
+
+  updateGameContextUi();
 }
 
 function showFirstRunIfNeeded() {
@@ -2984,7 +3160,7 @@ function setVoicePrompt(page = state.currentPage) {
 }
 
 function switchPage(page, options = {}) {
-  const valid = ["setup","datasheets","strats","army-rules","score","dice","rules","share","updates","guide"];
+  const valid = ["setup","datasheets","strats","army-rules","score","dice","rules","share","updates","settings","guide"];
   if (!valid.includes(page)) page = "setup";
   if (page !== "share" && state.shareScanner) stopShareScanner();
 
@@ -2998,7 +3174,7 @@ function switchPage(page, options = {}) {
   document.querySelectorAll("[data-page-target]").forEach(button => {
     button.classList.toggle("active", button.dataset.pageTarget === page);
   });
-  els.navMoreButton?.classList.toggle("active", ["rules","share","updates","guide"].includes(page));
+  els.navMoreButton?.classList.toggle("active", ["rules","share","updates","settings","guide"].includes(page));
 
   els.navMoreMenu?.classList.add("hidden");
   els.navMoreButton?.setAttribute("aria-expanded", "false");
@@ -3008,6 +3184,7 @@ function switchPage(page, options = {}) {
   if (page === "rules") renderCoreRules(els.coreRuleSearch?.value || "");
   if (page === "share") renderSharePage();
   if (page === "setup") renderDataSummary();
+  if (page === "settings") applyGameSystemUi();
   if (page === "score") renderScoreboard();
   if (page === "dice") renderDiceState();
   if (page === "datasheets") {
