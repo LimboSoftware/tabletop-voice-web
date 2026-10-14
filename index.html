@@ -13,37 +13,16 @@
 </head>
 <body>
   <div class="app-shell">
-    <div id="gameSystemModal" class="game-system-modal hidden" role="dialog" aria-modal="true" aria-labelledby="gameSystemTitle">
+        <div id="gameSystemModal" class="game-system-modal hidden" role="dialog" aria-modal="true" aria-labelledby="gameSystemTitle">
       <div class="game-system-card">
         <p class="eyebrow">TABLETOP VOICE</p>
         <h1 id="gameSystemTitle">Choose your game</h1>
-        <p class="game-system-intro">Tabletop Voice adapts its imports, references and table tools to the game you're playing.</p>
-        <div class="game-system-grid">
-          <button class="game-system-option" type="button" data-game-system-choice="40k">
-            <span class="game-system-status live">AVAILABLE</span>
-            <strong>Warhammer 40,000</strong>
-            <small>New Recruit, 40K references, scoring and table tools</small>
-          </button>
-          <button class="game-system-option" type="button" data-game-system-choice="grimdark">
-            <span class="game-system-status live">AVAILABLE</span>
-            <strong>Grimdark Future</strong>
-            <small>New Recruit and OnePageRules Army Forge lists</small>
-          </button>
-          <div class="game-system-option disabled" aria-disabled="true">
-            <span class="game-system-status">TBC</span>
-            <strong>Trench Crusade</strong>
-            <small>Planned</small>
-          </div>
-          <div class="game-system-option disabled" aria-disabled="true">
-            <span class="game-system-status">TBC</span>
-            <strong>Necromunda</strong>
-            <small>Planned</small>
-          </div>
-        </div>
+        <p class="game-system-intro">Pick a publisher, then choose the game you're playing. Available systems are active now; the rest show where Tabletop Voice is heading.</p>
+        <div id="gameSystemCatalogue" class="game-catalogue" data-game-catalogue="chooser"></div>
       </div>
     </div>
 
-    <div id="firstRunModal" class="first-run-modal hidden" role="dialog" aria-modal="true" aria-labelledby="firstRunTitle">
+<div id="firstRunModal" class="first-run-modal hidden" role="dialog" aria-modal="true" aria-labelledby="firstRunTitle">
       <div class="first-run-card beta-notice-card">
         <p class="eyebrow">PLAYER-BUILT TABLETOP TOOL</p>
         <h2 id="firstRunTitle">Welcome to Tabletop Voice</h2>
@@ -440,7 +419,7 @@
         </section>
       </section>
 
-      <section id="pageSettings" class="app-page hidden utility-page settings-page" data-page="settings">
+            <section id="pageSettings" class="app-page hidden utility-page settings-page" data-page="settings">
         <div class="page-heading">
           <p class="eyebrow">SETTINGS</p>
           <h1>Game system</h1>
@@ -452,32 +431,11 @@
             <span class="section-label">CURRENT GAME</span>
             <strong id="settingsCurrentGame">Not selected</strong>
           </div>
-          <div class="game-system-grid settings-game-grid">
-            <button class="game-system-option" type="button" data-settings-game-system="40k">
-              <span class="game-system-status live">AVAILABLE</span>
-              <strong>Warhammer 40,000</strong>
-              <small>New Recruit, 40K references, scoring and table tools</small>
-            </button>
-            <button class="game-system-option" type="button" data-settings-game-system="grimdark">
-              <span class="game-system-status live">AVAILABLE</span>
-              <strong>Grimdark Future</strong>
-              <small>New Recruit and OnePageRules Army Forge lists</small>
-            </button>
-            <div class="game-system-option disabled" aria-disabled="true">
-              <span class="game-system-status">TBC</span>
-              <strong>Trench Crusade</strong>
-              <small>Planned</small>
-            </div>
-            <div class="game-system-option disabled" aria-disabled="true">
-              <span class="game-system-status">TBC</span>
-              <strong>Necromunda</strong>
-              <small>Planned</small>
-            </div>
-          </div>
+          <div id="settingsGameSystemCatalogue" class="game-catalogue settings-game-catalogue" data-game-catalogue="settings"></div>
         </section>
       </section>
 
-      <section id="pageSetup" class="app-page hidden utility-page" data-page="guide">
+<section id="pageSetup" class="app-page hidden utility-page" data-page="guide">
         <div class="page-heading">
           <p class="eyebrow">GUIDE</p>
           <h1>Using Tabletop Voice</h1>
