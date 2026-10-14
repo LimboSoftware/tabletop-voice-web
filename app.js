@@ -487,7 +487,7 @@ const GAME_PROVIDERS = [
     name:"OnePageRules",
     systems:[
       {id:"grimdark", name:"Grimdark Future", detail:"Army Forge + New Recruit · includes Firefight", available:true},
-      {id:"opr-starfleet", name:"Grimdark Future: Star Quest", detail:"Planned", available:false},
+      {id:"opr-star-quest", name:"Grimdark Future: Star Quest", detail:"Planned", available:false},
       {id:"opr-warfleets", name:"Grimdark Future: Warfleets", detail:"Planned", available:false},
       {id:"aof", name:"Age of Fantasy", detail:"Planned", available:false},
       {id:"aof-skirmish", name:"Age of Fantasy: Skirmish", detail:"Planned", available:false},
@@ -1261,6 +1261,12 @@ async function parseRosterUpload(file) {
   }
 
   if (ext === "txt") {
+    if (state.gameSystem && state.gameSystem !== "40k") {
+      throw new Error(
+        "TXT import is currently supported for Warhammer 40,000 only. " +
+        "For " + currentGameName() + ", export JSON, ROS or ROSZ from New Recruit."
+      );
+    }
     return parseTextRosterFile(await file.text(), file.name);
   }
 
