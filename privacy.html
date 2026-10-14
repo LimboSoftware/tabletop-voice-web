@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <meta name="theme-color" content="#111318" />
+  <meta name="description" content="Privacy, data use and third-party services for Tabletop Voice." />
+  <meta name="referrer" content="no-referrer" />
+  <link rel="icon" href="icon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="app.css" />
+  <title>Privacy & About — Tabletop Voice</title>
+</head>
+<body>
+  <main class="privacy-shell">
+    <header class="privacy-header">
+      <a class="brand privacy-brand" href="./" aria-label="Back to Tabletop Voice">
+        <span class="brand-mark">TV</span>
+        <span>
+          <strong>Tabletop Voice</strong>
+          <small>Privacy &amp; About</small>
+        </span>
+      </a>
+      <a class="ghost-button privacy-back" href="./">Back to app</a>
+    </header>
+
+    <article class="privacy-card">
+      <p class="eyebrow">PUBLIC BETA</p>
+      <h1>Privacy &amp; data use</h1>
+      <p class="privacy-lede">Tabletop Voice is designed as a browser-based companion. It does not require an account and LimboTech does not operate a central roster library for the app.</p>
+
+      <section>
+        <h2>Your imported data</h2>
+        <p>Roster files you import are parsed in your browser. Saved rosters, score state, preferences, voice aliases and loaded reference data are stored locally in browser storage on that device. Clearing site data or using the app's clear/reset controls can remove those local copies.</p>
+      </section>
+
+      <section>
+        <h2>Roster sharing</h2>
+        <p>Direct list sharing uses a temporary WebRTC connection between the participating browsers. PeerJS Cloud is used for connection signalling. A one-time random transfer key is placed in the QR/share link and is removed from the receiver's address bar and browser history as soon as the link is opened.</p>
+        <p>The separate Phone QR Transfer tool may temporarily stage a received roster in browser IndexedDB so the main Tabletop Voice app can import it. That staged transfer is deleted after a successful hand-off.</p>
+      </section>
+
+      <section>
+        <h2>Microphone and camera</h2>
+        <p>Microphone access is only requested when you use voice controls. Tabletop Voice does not record or store audio itself; speech recognition is provided by your browser/device and may be processed according to that browser or platform provider's own privacy terms.</p>
+        <p>Camera access is only requested when you choose to scan a QR code. QR scanning is performed in the browser for the purpose of reading the transfer link.</p>
+      </section>
+
+      <section>
+        <h2>Community game data</h2>
+        <p>Tabletop Voice does not ship with Warhammer 40,000 rules, codex text, datasheets or artwork. When you choose to load compatible roster or reference data, the app may read data from your imported files and supported community-maintained sources, including BSData and Game Datacards.</p>
+        <p>Those third-party projects are independent of LimboTech and Games Workshop, and their own terms and availability apply. Official publications remain the authoritative source for game rules.</p>
+      </section>
+
+      <section>
+        <h2>Third-party services</h2>
+        <p>The public beta currently uses GitHub-hosted community data sources, PeerJS Cloud for WebRTC signalling, and pinned browser libraries for roster decompression and QR-code features. These services may receive ordinary network information such as your IP address when your browser connects to them.</p>
+      </section>
+
+      <section>
+        <h2>Unofficial project</h2>
+        <p>Tabletop Voice is an independent, unofficial companion app and is not affiliated with, endorsed by or sponsored by Games Workshop. Warhammer and related names and marks belong to their respective owners.</p>
+      </section>
+
+      <section>
+        <h2>Beta status</h2>
+        <p>This is a free public beta. Features, integrations and data handling may change as the app is developed. If a rule or reference matters to a game decision, check the current official publication.</p>
+      </section>
+
+      <p class="privacy-updated">Last updated: 14 October 2026</p>
+    </article>
+  </main>
+</body>
+</html>
