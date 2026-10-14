@@ -104,10 +104,10 @@
 
         <div class="setup-import-grid">
           <section id="newRecruitImportCard" class="tool-card setup-import-card">
-            <span id="newRecruitImportLabel" class="section-label">NEW RECRUIT LISTS</span>
-            <h2 id="newRecruitImportTitle">Import your lists</h2>
-            <p id="newRecruitImportCopy">Import multiple New Recruit JSON, ROS, ROSZ or TXT exports for the armies in your game.</p>
-            <button id="importButton" class="primary-button large setup-main-action" type="button">Import New Recruit lists</button>
+            <span id="newRecruitImportLabel" class="section-label">NEW RECRUIT</span>
+            <h2 id="newRecruitImportTitle">Import exported list</h2>
+            <p id="newRecruitImportCopy">Export your roster from New Recruit, then choose the JSON, ROS, ROSZ or TXT file here.</p>
+            <button id="importButton" class="primary-button large setup-main-action" type="button">Choose New Recruit file</button>
             <input id="fileInput" type="file" multiple accept=".json,.ros,.rosz,.txt,application/json,text/plain,application/xml,text/xml,application/zip" hidden />
           </section>
 
@@ -117,20 +117,18 @@
             <p>Import the wider community-maintained 40K dataset, then choose which armies should be included in search.</p>
             <button id="fullDataButton" class="ghost-button large setup-main-action" type="button">Import all armies</button>
           </section>
-        </div>
 
-        <section id="oprImportCard" class="tool-card opr-import-card">
-          <div class="opr-import-copy">
-            <span class="section-label">ONEPAGE RULES · ARMY FORGE</span>
-            <h2>Import an Army Forge list</h2>
-            <p>In Army Forge choose <strong>Share as Link</strong>, then paste that link here. Tabletop Voice will load the resolved units, selected weapons and rules for table-side lookup.</p>
-          </div>
-          <div class="opr-import-controls">
-            <input id="oprShareInput" type="url" inputmode="url" autocomplete="off" placeholder="https://army-forge.onepagerules.com/share?id=…" aria-label="Army Forge shared list link" />
-            <button id="oprImportButton" class="primary-button large" type="button">Import OPR list</button>
-          </div>
-          <small id="oprImportStatus" class="opr-import-status">Supports Grimdark Future and Grimdark Future: Firefight shared Army Forge lists.</small>
-        </section>
+          <section id="oprImportCard" class="tool-card setup-import-card opr-import-card">
+            <span class="section-label">ARMY FORGE</span>
+            <h2>Import shared list</h2>
+            <p>In Army Forge choose <strong>Share as Link</strong>, then paste that shared roster link below.</p>
+            <div class="opr-import-controls">
+              <input id="oprShareInput" type="url" inputmode="url" autocomplete="off" placeholder="Paste Army Forge share link…" aria-label="Army Forge shared list link" />
+              <button id="oprImportButton" class="primary-button large setup-main-action" type="button">Import Army Forge list</button>
+            </div>
+            <small id="oprImportStatus" class="opr-import-status">Grimdark Future and Grimdark Future: Firefight</small>
+          </section>
+        </div>
 
         <section class="setup-loaded-lists">
           <span class="section-label">LOADED LISTS</span>
