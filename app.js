@@ -2780,8 +2780,17 @@ async function getUnitBrowserReferenceData(source) {
 
   if (source.kind === "new-recruit") {
     const roster = source.roster;
+    const rosterGame = inferRosterGameSystem(roster);
 
-    if (inferRosterGameSystem(roster) === "grimdark") {
+    if (rosterGame === "aos") {
+      return {
+        stratagems:[],
+        armyRules:(roster?.armyRules || []).filter(rule => rule?.name && rule?.text),
+        note:"Age of Sigmar 4th edition list imported from New Recruit."
+      };
+    }
+
+    if (rosterGame === "grimdark") {
       const armyRules = dedupeBy(
         [
           ...(roster?.referenceData?.rules || []),
@@ -2991,7 +3000,7 @@ function renderUnitBrowserReferences(source, data = null) {
   return `
     <div id="unitBrowserReferences" class="unit-browser-references">
       ${data.note ? `<div class="roster-refresh-note">${escapeHtml(data.note)}</div>` : ""}
-      ${(source.kind === "opr" || inferRosterGameSystem(source.roster) === "grimdark") ? "" : renderUnitBrowserReferenceSection("Stratagems", data.stratagems, "stratagem")}
+      ${(source.kind === "opr" || inferRosterGameSystem(source.roster) !== "40k") ? "" : renderUnitBrowserReferenceSection("Stratagems", data.stratagems, "stratagem")}
       ${renderUnitBrowserReferenceSection(
         (source.kind === "opr" || inferRosterGameSystem(source.roster) === "grimdark") ? "Rules" : "Army Rules",
         data.armyRules,
@@ -3986,7 +3995,12 @@ function getUnitBrowserGroup(unit) {
   if (categories.has("character") || categories.has("epic hero") || categories.has("hero") || categories.has("heroes")) return "Characters";
   if (categories.has("battleline")) return "Battleline";
   if (categories.has("dedicated transport")) return "Transports";
-  if (categories.has("vehicle") || hasPrefix("vehicles")) return "Vehicles";
+  if (
+    categories.has("vehicle") ||
+    hasPrefix("vehicles") ||
+    categories.has("war machine") ||
+    categories.has("warmachine")
+  ) return "Vehicles";
   if (categories.has("monster") || hasPrefix("monster")) return "Monsters";
   if (
     categories.has("mounted") ||
@@ -4413,9 +4427,9 @@ function toggleStatus(status) {
 }
 
 function updateUnitTopStatuses(unit = state.selected) {
-  const opr = unit?.system === "opr";
-  els.battleShockToggle?.classList.toggle("hidden", opr);
-  els.oncePerGameToggle?.classList.toggle("hidden", opr);
+  const non40k = state.gameSystem !== "40k" || (unit && unit.system !== "40k");
+  els.battleShockToggle?.classList.toggle("hidden", non40k);
+  els.oncePerGameToggle?.classList.toggle("hidden", non40k);
 
   const active = new Set(unit ? getStatuses(unit) : []);
   const battleShocked = active.has("Battle-shocked");
@@ -4746,7 +4760,7 @@ function sourceCpStorageKey(sourceId) {
 
 function getActiveCpSource() {
   const source = getActiveUnitBrowserSource();
-  if (isGrimdarkMode() || !source || source.id === "all" || source.kind === "opr") return null;
+  if (state.gameSystem !== "40k" || !source || source.id === "all" || source.kind === "opr") return null;
   return source;
 }
 
@@ -4888,31 +4902,45 @@ function adjustTurnScore(player, type, delta) {
 
 function updateGameContextUi(unit = state.selected) {
   const grimdark = isGrimdarkMode();
+  const aos = isAosMode();
+  const non40k = state.gameSystem !== "40k";
 
-  els.appNav?.classList.toggle("opr-context", grimdark);
+  els.appNav?.classList.toggle("opr-context", non40k);
 
   const stratButton = els.appNav?.querySelector('[data-page-target="strats"]');
   const scoreButton = els.appNav?.querySelector('[data-page-target="score"]');
   const armyRulesButton = els.appNav?.querySelector('[data-page-target="army-rules"]');
   const coreRulesButton = els.navMoreMenu?.querySelector('[data-page-target="rules"]');
 
-  stratButton?.classList.toggle("hidden", grimdark);
-  scoreButton?.classList.toggle("hidden", grimdark);
-  coreRulesButton?.classList.toggle("hidden", grimdark);
+  stratButton?.classList.toggle("hidden", non40k);
+  scoreButton?.classList.toggle("hidden", non40k);
+  coreRulesButton?.classList.toggle("hidden", non40k);
 
   const armyRulesLabel = armyRulesButton?.querySelector("span:last-child");
-  if (armyRulesLabel) armyRulesLabel.textContent = grimdark ? "Rules" : "Army Rules";
+  if (armyRulesLabel) {
+    armyRulesLabel.textContent = grimdark ? "Rules" : "Army Rules";
+  }
 
   const heading = els.pageArmyRules?.querySelector("h1");
   const copy = els.pageArmyRules?.querySelector(".page-heading > p:last-child");
   const eyebrow = els.pageArmyRules?.querySelector(".eyebrow");
 
   if (heading) heading.textContent = grimdark ? "Rules" : "Army Rules";
-  if (eyebrow) eyebrow.textContent = grimdark ? "GRIMDARK REFERENCE" : "ARMY REFERENCE";
+
+  if (eyebrow) {
+    eyebrow.textContent = grimdark
+      ? "GRIMDARK REFERENCE"
+      : aos
+        ? "AGE OF SIGMAR REFERENCE"
+        : "ARMY REFERENCE";
+  }
+
   if (copy) {
     copy.textContent = grimdark
       ? "Special rules referenced by the active Grimdark Future list."
-      : "Rules that apply to the selected imported list or whole army.";
+      : aos
+        ? "Battle traits, spells, prayers and other army-level abilities imported with the active Age of Sigmar list."
+        : "Rules that apply to the selected imported list or whole army.";
   }
 }
 
