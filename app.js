@@ -4048,9 +4048,11 @@ function setVoicePrompt(page = state.currentPage) {
   if (!els.voiceHint) return;
 
   const prompts = {
-    datasheets: isOprMode()
-      ? "Say a unit name from your " + currentGameName() + " list"
-      : isAosMode()
+    datasheets: isWarfleetsMode()
+      ? "Say a ship or squadron name from your Warfleets fleet"
+      : isOprMode()
+        ? "Say a unit name from your " + currentGameName() + " list"
+        : isAosMode()
         ? "Say a unit name, e.g. “Annihilators”"
         : "Say a unit name, e.g. “Death Korps of Krieg”",
     score: "T" + state.scoreTurn + ": say “Player 1 add 5 primary”",
@@ -4873,7 +4875,9 @@ function renderDetail(unit) {
       !normalize(profile.type || "").includes("melee")
     );
 
-    if (unit.system === "opr") {
+    if (unit.system === "warfleet") {
+      sections.push(renderWarfleetsWeaponSection(unit.profiles, "Weapons"));
+    } else if (unit.system === "opr") {
       if (rangedWeapons.length) sections.push(renderOprWeaponSection(rangedWeapons, "Ranged weapons"));
       if (meleeWeapons.length) sections.push(renderOprWeaponSection(meleeWeapons, "Melee weapons"));
       if (otherWeapons.length) sections.push(renderOprWeaponSection(otherWeapons, "Weapons"));
@@ -4896,7 +4900,7 @@ function renderDetail(unit) {
 
   if (unit.rules?.length) {
     sections.push(
-      unit.system === "opr"
+      (unit.system === "opr" || unit.system === "warfleet")
         ? renderOprAbilitySection(unit.rules)
         : unit.system === "aos"
           ? renderAosAbilitySection(unit.rules)
@@ -5214,6 +5218,57 @@ function renderAosAbilitySection(rules) {
         }).join("")}
       </div>
     </section>`;
+}
+
+
+function renderWarfleetsWeaponSection(profiles, title = "Weapons") {
+  const rows = (profiles || []).map(profile => {
+    const values = new Map(
+      (profile.values || []).map(item => [normalize(item.label), item.value ?? ""])
+    );
+
+    return {
+      name:profile.name || "Weapon",
+      facing:values.get("facing") || "—",
+      range:values.get("range") || "—",
+      attacks:values.get("a") || values.get("attacks") || "—",
+      strength:values.get("str") || values.get("strength") || "—",
+      special:values.get("special") || values.get("special rules") || "—"
+    };
+  });
+
+  const body = rows.map(row =>
+    '<tr class="weapon-row weapon-stat-row">' +
+      '<td class="weapon-name"><strong>' + escapeHtml(row.name) + '</strong></td>' +
+      '<td data-label="Facing" class="warfleet-facing">' + escapeHtml(row.facing) + '</td>' +
+      '<td data-label="Range" class="weapon-range-text">' + escapeHtml(row.range) + '</td>' +
+      '<td data-label="A" class="weapon-number">' + escapeHtml(row.attacks) + '</td>' +
+      '<td data-label="Str" class="weapon-number">' + escapeHtml(row.strength) + '</td>' +
+      '<td data-label="Special" class="opr-weapon-special">' + escapeHtml(row.special) + '</td>' +
+    '</tr>'
+  ).join("");
+
+  return (
+    '<section class="detail-section weapon-section warfleets-weapon-section">' +
+      '<div class="section-heading-row">' +
+        '<h3>' + escapeHtml(title) + '</h3>' +
+        '<span class="section-count">' + rows.length + '</span>' +
+      '</div>' +
+      '<div class="weapon-table-wrap">' +
+        '<table class="weapon-table compact-weapon-table warfleets-weapon-table">' +
+          '<thead><tr>' +
+            '<th class="weapon-name-column">Weapon</th>' +
+            '<th>Facing</th>' +
+            '<th>Range</th>' +
+            '<th>A</th>' +
+            '<th>Str</th>' +
+            '<th>Special</th>' +
+          '</tr></thead>' +
+          '<tbody>' + body + '</tbody>' +
+        '</table>' +
+      '</div>' +
+    '</section>'
+  );
 }
 
 function renderOprWeaponSection(profiles, title = "Weapons") {
@@ -5571,7 +5626,9 @@ function updateGameContextUi(unit = state.selected) {
 
   if (copy) {
     copy.textContent = opr
-      ? "Special rules" + (isOprFantasyMode() ? " and spells" : "") + " referenced by the active " + currentGameName() + (isOprQuestMode() ? " campaign." : " list.")
+      ? isWarfleetsMode()
+        ? "Ship rules and systems referenced by the active Warfleets fleet."
+        : "Special rules" + (isOprFantasyMode() ? " and spells" : "") + " referenced by the active " + currentGameName() + (isOprQuestMode() ? " campaign." : " list.")
       : aos
         ? "Battle traits, spells, prayers and other army-level abilities imported with the active Age of Sigmar list."
         : "Rules that apply to the selected imported list or whole army.";
