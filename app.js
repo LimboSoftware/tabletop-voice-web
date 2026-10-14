@@ -1411,12 +1411,14 @@ function extractReferenceData(root, sourceName = "Imported roster") {
       return;
     }
 
-    for (const rule of value.rules || []) {
+    // BSData catalogue/game-system JSON can expose these collections either
+    // directly (rules/profiles) or as sharedRules/sharedProfiles.
+    for (const rule of [...(value.rules || []), ...(value.sharedRules || [])]) {
       if (!rule || rule.hidden) continue;
       addRule(rule.name, rule.description, "Rule");
     }
 
-    for (const profile of value.profiles || []) {
+    for (const profile of [...(value.profiles || []), ...(value.sharedProfiles || [])]) {
       if (!profile || profile.hidden) continue;
       const type = String(profile.typeName || "");
       const text = (profile.characteristics || [])
@@ -2235,7 +2237,7 @@ function renderCoreRules(query = "") {
   if (els.coreRulesImportButton) {
     els.coreRulesImportButton.textContent = state.referenceData?.rules?.length
       ? "Refresh core rules"
-      : "Load core rules";
+      : "Import core rules";
   }
 
   if (els.coreRulesImportStatus) {
@@ -2262,7 +2264,7 @@ async function loadCoreRulesData() {
 
   const button = els.coreRulesImportButton;
   button.disabled = true;
-  button.textContent = "Loading core rules…";
+  button.textContent = "Importing core rules…";
   if (els.coreRulesImportStatus) {
     els.coreRulesImportStatus.textContent = "Loading current community reference data from BSData…";
   }
@@ -2283,7 +2285,7 @@ async function loadCoreRulesData() {
     state.referenceData = reference;
     localStorage.setItem(CORE_REFERENCE_STORAGE_KEY, JSON.stringify(reference));
     renderCoreRules(els.coreRuleSearch?.value || "");
-    toast("Core rules loaded");
+    toast("Core rules imported");
   } catch (error) {
     console.error("Could not load core rules", error);
     if (els.coreRulesImportStatus) {
@@ -2293,7 +2295,7 @@ async function loadCoreRulesData() {
     toast(error.message || "Could not load core rules");
   } finally {
     button.disabled = false;
-    button.textContent = state.referenceData?.rules?.length ? "Refresh core rules" : "Load core rules";
+    button.textContent = state.referenceData?.rules?.length ? "Refresh core rules" : "Import core rules";
   }
 }
 
