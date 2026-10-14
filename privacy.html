@@ -35,7 +35,7 @@
 
       <section>
         <h2>Roster sharing</h2>
-        <p>Direct list sharing uses a temporary WebRTC connection between the participating browsers. PeerJS Cloud is used for connection signalling. A one-time random transfer key is placed in the QR/share link and is removed from the receiver's address bar and browser history as soon as the link is opened.</p>
+        <p>Direct list sharing uses a temporary WebRTC connection between the participating browsers. PeerJS Cloud is used for connection signalling, and WebRTC may use public STUN infrastructure to establish the connection. A one-time random transfer key is placed in the QR/share link and is removed from the receiver's address bar and browser history as soon as the link is opened.</p>
         <p>The separate Phone QR Transfer tool may temporarily stage a received roster in browser IndexedDB so the main Tabletop Voice app can import it. That staged transfer is deleted after a successful hand-off.</p>
       </section>
 
@@ -53,7 +53,7 @@
 
       <section>
         <h2>Third-party services</h2>
-        <p>The public beta currently uses GitHub-hosted community data sources, PeerJS Cloud for WebRTC signalling, and pinned browser libraries for roster decompression and QR-code features. These services may receive ordinary network information such as your IP address when your browser connects to them.</p>
+        <p>The public beta currently uses GitHub-hosted community data sources, PeerJS Cloud for WebRTC signalling, public WebRTC STUN infrastructure, and pinned browser libraries for roster decompression and QR-code features. These services may receive ordinary network information such as your IP address when your browser connects to them.</p>
       </section>
 
       <section>
