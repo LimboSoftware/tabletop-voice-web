@@ -942,6 +942,7 @@ function buildOprRoster(data, armyId) {
     name:String(data.name || factionNames[0] || "OnePageRules army"),
     faction:factionNames.join(" + ") || "OnePageRules",
     source:"opr",
+    gameSystemKey:"grimdark",
     importFormat:"army-forge-link",
     gameSystem:String(data.gameSystem || ""),
     gameName:oprGameName(data.gameSystem),
@@ -982,6 +983,11 @@ async function loadOprArmyForgeList() {
 
     if (!response.ok) {
       throw new Error(data.error || "Could not load that Army Forge list.");
+    }
+
+    const gameCode = String(data.gameSystem || "").toLowerCase();
+    if (!["gf","gff"].includes(gameCode)) {
+      throw new Error("This game picker currently supports Grimdark Future and Firefight Army Forge lists.");
     }
 
     const roster = buildOprRoster(data, armyId);
@@ -1298,6 +1304,7 @@ function parseTextRosterFile(text, fileName) {
     name:rosterName || fileName.replace(/\.[^.]+$/, ""),
     faction,
     source:"new-recruit",
+    gameSystemKey:state.gameSystem === "grimdark" ? "grimdark" : "40k",
     importFormat:"txt",
     detachmentParserVersion:4,
     points:Number.isFinite(totalPoints) ? totalPoints : null,
@@ -1327,12 +1334,15 @@ function buildRosterFromNewRecruitRoot(root, fileName, importFormat = "json") {
   resolveRosterAttachments(uniqueUnits);
 
   const pts = (root.costs || []).find(c => String(c.name).toLowerCase() === "pts")?.value;
+  const grimdarkCount = uniqueUnits.filter(unit => unit.system === "opr").length;
+  const gameSystemKey = grimdarkCount >= Math.ceil(uniqueUnits.length / 2) ? "grimdark" : "40k";
 
   return {
     id:crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random()),
     name:root.name || fileName.replace(/\.[^.]+$/, ""),
     faction:(root.forces || [])[0]?.catalogueName || (root.forces || [])[0]?.name || "New Recruit list",
     source:"new-recruit",
+    gameSystemKey,
     importFormat,
     detachmentParserVersion:4,
     points:pts ?? null,
@@ -1817,11 +1827,14 @@ function parseNewRecruitSelection(selection) {
 
   const name = selection.name || primaryUnitProfile.name || "Unit";
   const categories = collectSelectionCategories(selection);
+  const statLabels = new Set(stats.map(stat => normalize(stat.label)));
+  const grimdarkProfile = statLabels.has("quality") && (statLabels.has("defense") || statLabels.has("defence"));
 
   return {
     id: selection.id || primaryUnitProfile.id || name,
     name,
     type: "Unit",
+    system:grimdarkProfile ? "opr" : "40k",
     categories,
     stats,
     rules: abilities,
@@ -1836,6 +1849,27 @@ function parseNewRecruitSelection(selection) {
       abilities.map(a => a.name)
     ].flat().join(" "))
   };
+}
+
+function isWeaponProfile(profile) {
+  if (!profile || typeof profile !== "object") return false;
+
+  const type = normalize(profile.typeName || "");
+  if ([
+    "ranged weapon",
+    "ranged weapons",
+    "melee weapon",
+    "melee weapons"
+  ].includes(type)) return true;
+
+  if (type === "weapon" || type.endsWith(" weapon")) {
+    const labels = new Set(
+      (profile.characteristics || []).map(item => normalize(item?.name || ""))
+    );
+    return labels.has("attacks") || labels.has("a") || labels.has("range");
+  }
+
+  return false;
 }
 
 function collectWeaponProfiles(node) {
@@ -1858,10 +1892,8 @@ function collectWeaponProfiles(node) {
 
     if (Array.isArray(value.profiles)) {
       value.profiles.forEach(profile => {
-        if (!profile || typeof profile !== "object") return;
-        if (profile.typeName === "Ranged Weapons" || profile.typeName === "Melee Weapons") {
-          found.push({profile, quantity: Math.max(1, quantity || 1)});
-        }
+        if (!isWeaponProfile(profile)) return;
+        found.push({profile, quantity: Math.max(1, quantity || 1)});
       });
     }
 
@@ -3947,7 +3979,16 @@ function renderDetail(unit) {
 
   if (unit.profiles?.length) {
     if (unit.system === "opr") {
-      sections.push(renderOprWeaponSection(unit.profiles, "Weapons"));
+      const rangedWeapons = unit.profiles.filter(profile => normalize(profile.type || "").includes("ranged"));
+      const meleeWeapons = unit.profiles.filter(profile => normalize(profile.type || "").includes("melee"));
+      const otherWeapons = unit.profiles.filter(profile =>
+        !normalize(profile.type || "").includes("ranged") &&
+        !normalize(profile.type || "").includes("melee")
+      );
+
+      if (rangedWeapons.length) sections.push(renderOprWeaponSection(rangedWeapons, "Ranged weapons"));
+      if (meleeWeapons.length) sections.push(renderOprWeaponSection(meleeWeapons, "Melee weapons"));
+      if (otherWeapons.length) sections.push(renderOprWeaponSection(otherWeapons, "Weapons"));
     } else {
       const rangedWeapons = unit.profiles.filter(profile => profile.type === "Ranged Weapons");
       const meleeWeapons = unit.profiles.filter(profile => profile.type === "Melee Weapons");
@@ -4182,12 +4223,17 @@ function renderOprWeaponSection(profiles, title = "Weapons") {
     const values = new Map(
       (profile.values || []).map(item => [normalize(item.label), item.value ?? ""])
     );
+    const rangeRaw = values.get("range");
+    const range = rangeRaw && /^\d+(?:\.\d+)?$/.test(String(rangeRaw).trim())
+      ? String(rangeRaw).trim() + '\"'
+      : (rangeRaw || (/melee/i.test(profile.type || "") ? "Melee" : "—"));
+
     return {
       name:profile.name || "Weapon",
       quantity:Number.isFinite(Number(profile.quantity)) ? Math.max(1, Number(profile.quantity)) : null,
-      range:values.get("range") || "—",
-      attacks:values.get("a") || "—",
-      special:values.get("special") || "—"
+      range,
+      attacks:values.get("a") || values.get("attacks") || "—",
+      special:values.get("special") || values.get("special rules") || values.get("keywords") || "—"
     };
   });
 
