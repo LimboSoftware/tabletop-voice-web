@@ -4342,34 +4342,42 @@ function renderDetail(unit) {
   const sections = [];
 
   if (unit.profiles?.length) {
-    if (unit.system === "opr") {
-      const rangedWeapons = unit.profiles.filter(profile => normalize(profile.type || "").includes("ranged"));
-      const meleeWeapons = unit.profiles.filter(profile => normalize(profile.type || "").includes("melee"));
-      const otherWeapons = unit.profiles.filter(profile =>
-        !normalize(profile.type || "").includes("ranged") &&
-        !normalize(profile.type || "").includes("melee")
-      );
+    const rangedWeapons = unit.profiles.filter(profile => normalize(profile.type || "").includes("ranged"));
+    const meleeWeapons = unit.profiles.filter(profile => normalize(profile.type || "").includes("melee"));
+    const otherWeapons = unit.profiles.filter(profile =>
+      !normalize(profile.type || "").includes("ranged") &&
+      !normalize(profile.type || "").includes("melee")
+    );
 
+    if (unit.system === "opr") {
       if (rangedWeapons.length) sections.push(renderOprWeaponSection(rangedWeapons, "Ranged weapons"));
       if (meleeWeapons.length) sections.push(renderOprWeaponSection(meleeWeapons, "Melee weapons"));
       if (otherWeapons.length) sections.push(renderOprWeaponSection(otherWeapons, "Weapons"));
+    } else if (unit.system === "aos") {
+      if (rangedWeapons.length) sections.push(renderAosWeaponSection(rangedWeapons, "Ranged weapons"));
+      if (meleeWeapons.length) sections.push(renderAosWeaponSection(meleeWeapons, "Melee weapons"));
+      if (otherWeapons.length) sections.push(renderAosWeaponSection(otherWeapons, "Weapons"));
     } else {
-      const rangedWeapons = unit.profiles.filter(profile => profile.type === "Ranged Weapons");
-      const meleeWeapons = unit.profiles.filter(profile => profile.type === "Melee Weapons");
-      const otherWeapons = unit.profiles.filter(profile =>
+      const fortyKRanged = unit.profiles.filter(profile => profile.type === "Ranged Weapons");
+      const fortyKMelee = unit.profiles.filter(profile => profile.type === "Melee Weapons");
+      const fortyKOther = unit.profiles.filter(profile =>
         profile.type !== "Ranged Weapons" && profile.type !== "Melee Weapons"
       );
 
-      if (rangedWeapons.length) sections.push(renderWeaponSection(rangedWeapons, "Ranged weapons"));
-      if (meleeWeapons.length) sections.push(renderWeaponSection(meleeWeapons, "Melee weapons"));
-      if (otherWeapons.length) sections.push(renderWeaponSection(otherWeapons, "Weapons"));
+      if (fortyKRanged.length) sections.push(renderWeaponSection(fortyKRanged, "Ranged weapons"));
+      if (fortyKMelee.length) sections.push(renderWeaponSection(fortyKMelee, "Melee weapons"));
+      if (fortyKOther.length) sections.push(renderWeaponSection(fortyKOther, "Weapons"));
     }
   }
 
   if (unit.rules?.length) {
-    sections.push(unit.system === "opr"
-      ? renderOprAbilitySection(unit.rules)
-      : renderAbilitySection(unit.rules));
+    sections.push(
+      unit.system === "opr"
+        ? renderOprAbilitySection(unit.rules)
+        : unit.system === "aos"
+          ? renderAosAbilitySection(unit.rules)
+          : renderAbilitySection(unit.rules)
+    );
   }
 
   if (sourceUnit.importFormat === "txt") {
@@ -4578,6 +4586,108 @@ function renderWeaponSection(profiles, title = "Weapons") {
               </tr>`).join("")}
           </tbody>
         </table>
+      </div>
+    </section>`;
+}
+
+function renderAosWeaponSection(profiles, title = "Weapons") {
+  const rows = (profiles || []).map(profile => {
+    const values = new Map(
+      (profile.values || []).map(item => [normalize(item.label), item.value ?? ""])
+    );
+
+    const ranged = normalize(profile.type || "").includes("ranged");
+    const range = ranged
+      ? (values.get("rng") || values.get("range") || "—")
+      : "Melee";
+
+    return {
+      name:profile.name || "Weapon",
+      quantity:Number.isFinite(Number(profile.quantity)) ? Math.max(1, Number(profile.quantity)) : null,
+      range,
+      attacks:values.get("atk") || values.get("attacks") || values.get("a") || "—",
+      hit:values.get("hit") || "—",
+      wound:values.get("wnd") || values.get("wound") || "—",
+      rend:values.get("rnd") || values.get("rend") || "—",
+      damage:values.get("dmg") || values.get("damage") || "—",
+      ability:values.get("ability") || "—"
+    };
+  });
+
+  return `
+    <section class="detail-section weapon-section aos-weapon-section">
+      <div class="section-heading-row">
+        <h3>${escapeHtml(title)}</h3>
+        <span class="section-count">${rows.length}</span>
+      </div>
+      <div class="weapon-table-wrap">
+        <table class="weapon-table aos-weapon-table">
+          <thead>
+            <tr>
+              <th class="weapon-name-column">Weapon</th>
+              <th>Range</th>
+              <th>Atk</th>
+              <th>Hit</th>
+              <th>Wnd</th>
+              <th>Rnd</th>
+              <th>Dmg</th>
+              <th>Ability</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows.map(row => `
+              <tr class="weapon-row weapon-stat-row">
+                <td class="weapon-name">
+                  <div class="weapon-title-line">
+                    ${row.quantity != null ? `<span class="weapon-quantity">${row.quantity}×</span>` : ""}
+                    <strong>${escapeHtml(row.name)}</strong>
+                  </div>
+                </td>
+                <td data-label="Range" class="weapon-range-text">${escapeHtml(row.range)}</td>
+                <td data-label="Atk" class="weapon-number">${escapeHtml(row.attacks)}</td>
+                <td data-label="Hit" class="weapon-number">${escapeHtml(row.hit)}</td>
+                <td data-label="Wnd" class="weapon-number">${escapeHtml(row.wound)}</td>
+                <td data-label="Rnd" class="weapon-number">${escapeHtml(row.rend)}</td>
+                <td data-label="Dmg" class="weapon-number">${escapeHtml(row.damage)}</td>
+                <td data-label="Ability" class="aos-weapon-ability">${escapeHtml(row.ability)}</td>
+              </tr>`).join("")}
+          </tbody>
+        </table>
+      </div>
+    </section>`;
+}
+
+function renderAosAbilitySection(rules) {
+  if (!rules?.length) return "";
+
+  return `
+    <section class="detail-section ability-section aos-ability-section">
+      <div class="section-heading-row">
+        <h3>Abilities</h3>
+        <span class="section-count">${rules.length}</span>
+      </div>
+      <div class="ability-list">
+        ${rules.map(rule => {
+          const fields = Array.isArray(rule.fields) ? rule.fields.filter(field => field?.value) : [];
+          return `
+            <article class="ability-card aos-ability-card">
+              <div class="aos-ability-heading">
+                <h4>${escapeHtml(cleanRuleText(rule.name || "Ability"))}</h4>
+                ${rule.category ? `<span>${escapeHtml(rule.category)}</span>` : ""}
+              </div>
+              ${fields.length
+                ? `<div class="aos-ability-fields">
+                    ${fields.map(field => `
+                      <div class="aos-ability-field">
+                        <strong>${escapeHtml(field.label)}</strong>
+                        <div class="ability-text">${formatRuleText(field.value)}</div>
+                      </div>`).join("")}
+                  </div>`
+                : rule.text
+                  ? `<div class="ability-text unique-rule-text">${formatRuleText(rule.text)}</div>`
+                  : ""}
+            </article>`;
+        }).join("")}
       </div>
     </section>`;
 }
