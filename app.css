@@ -1702,6 +1702,19 @@ body.focus-mode .detail-panel {
   color: #ff9eaa;
 }
 
+.core-rule-import-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 9px 12px;
+  margin: 14px 0 16px;
+}
+
+.core-rule-import-row small {
+  color: #8fa0b3;
+  line-height: 1.45;
+}
+
 .reference-search {
   display: block;
   max-width: 760px;
