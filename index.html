@@ -13,6 +13,36 @@
 </head>
 <body>
   <div class="app-shell">
+    <div id="gameSystemModal" class="game-system-modal hidden" role="dialog" aria-modal="true" aria-labelledby="gameSystemTitle">
+      <div class="game-system-card">
+        <p class="eyebrow">TABLETOP VOICE</p>
+        <h1 id="gameSystemTitle">Choose your game</h1>
+        <p class="game-system-intro">Tabletop Voice adapts its imports, references and table tools to the game you're playing.</p>
+        <div class="game-system-grid">
+          <button class="game-system-option" type="button" data-game-system-choice="40k">
+            <span class="game-system-status live">AVAILABLE</span>
+            <strong>Warhammer 40,000</strong>
+            <small>New Recruit, 40K references, scoring and table tools</small>
+          </button>
+          <button class="game-system-option" type="button" data-game-system-choice="grimdark">
+            <span class="game-system-status live">AVAILABLE</span>
+            <strong>Grimdark Future</strong>
+            <small>New Recruit and OnePageRules Army Forge lists</small>
+          </button>
+          <div class="game-system-option disabled" aria-disabled="true">
+            <span class="game-system-status">TBC</span>
+            <strong>Trench Crusade</strong>
+            <small>Planned</small>
+          </div>
+          <div class="game-system-option disabled" aria-disabled="true">
+            <span class="game-system-status">TBC</span>
+            <strong>Necromunda</strong>
+            <small>Planned</small>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div id="firstRunModal" class="first-run-modal hidden" role="dialog" aria-modal="true" aria-labelledby="firstRunTitle">
       <div class="first-run-card beta-notice-card">
         <p class="eyebrow">PLAYER-BUILT TABLETOP TOOL</p>
@@ -55,7 +85,8 @@
           <button type="button" data-page-target="share">⇄ Share Lists</button>
           <a class="nav-more-link" href="./roster-transfer/">▦ Phone QR Transfer</a>
           <button type="button" data-page-target="updates">✉ Get updates</button>
-          <button type="button" data-page-target="guide">⚙ Guide</button>
+          <button type="button" data-page-target="settings">⚙ Settings</button>
+          <button type="button" data-page-target="guide">▤ Guide</button>
           <a class="nav-more-link" href="./privacy.html" target="_blank" rel="noopener noreferrer">ⓘ Privacy &amp; About</a>
         </div>
       </div>
@@ -72,15 +103,15 @@
         </div>
 
         <div class="setup-import-grid">
-          <section class="tool-card setup-import-card">
-            <span class="section-label">NEW RECRUIT LISTS</span>
-            <h2>Import your lists</h2>
-            <p>Import multiple New Recruit JSON, ROS, ROSZ or TXT exports for the armies in your game.</p>
+          <section id="newRecruitImportCard" class="tool-card setup-import-card">
+            <span id="newRecruitImportLabel" class="section-label">NEW RECRUIT LISTS</span>
+            <h2 id="newRecruitImportTitle">Import your lists</h2>
+            <p id="newRecruitImportCopy">Import multiple New Recruit JSON, ROS, ROSZ or TXT exports for the armies in your game.</p>
             <button id="importButton" class="primary-button large setup-main-action" type="button">Import New Recruit lists</button>
             <input id="fileInput" type="file" multiple accept=".json,.ros,.rosz,.txt,application/json,text/plain,application/xml,text/xml,application/zip" hidden />
           </section>
 
-          <section class="tool-card setup-import-card">
+          <section id="fullDataImportCard" class="tool-card setup-import-card">
             <span class="section-label">ALL ARMIES</span>
             <h2>Full datasheet lookup</h2>
             <p>Import the wider community-maintained 40K dataset, then choose which armies should be included in search.</p>
@@ -88,7 +119,7 @@
           </section>
         </div>
 
-        <section class="tool-card opr-import-card">
+        <section id="oprImportCard" class="tool-card opr-import-card">
           <div class="opr-import-copy">
             <span class="section-label">ONEPAGE RULES · ARMY FORGE</span>
             <h2>Import an Army Forge list</h2>
@@ -98,7 +129,7 @@
             <input id="oprShareInput" type="url" inputmode="url" autocomplete="off" placeholder="https://army-forge.onepagerules.com/share?id=…" aria-label="Army Forge shared list link" />
             <button id="oprImportButton" class="primary-button large" type="button">Import OPR list</button>
           </div>
-          <small id="oprImportStatus" class="opr-import-status">Supports shared Army Forge lists from Grimdark Future, Firefight, Age of Fantasy and related OPR systems.</small>
+          <small id="oprImportStatus" class="opr-import-status">Supports Grimdark Future and Grimdark Future: Firefight shared Army Forge lists.</small>
         </section>
 
         <section class="setup-loaded-lists">
@@ -408,6 +439,43 @@
             loading="lazy"
             referrerpolicy="no-referrer"></iframe>
           <small class="updates-note">Signup and double opt-in are handled by Brevo. <a href="./privacy.html" target="_blank" rel="noopener noreferrer">Privacy &amp; data use</a></small>
+        </section>
+      </section>
+
+      <section id="pageSettings" class="app-page hidden utility-page settings-page" data-page="settings">
+        <div class="page-heading">
+          <p class="eyebrow">SETTINGS</p>
+          <h1>Game system</h1>
+          <p>Switching systems changes the imports, references and game-specific tools shown by Tabletop Voice. Your loaded lists stay stored on this device.</p>
+        </div>
+
+        <section class="tool-card settings-game-card">
+          <div class="settings-current-game">
+            <span class="section-label">CURRENT GAME</span>
+            <strong id="settingsCurrentGame">Not selected</strong>
+          </div>
+          <div class="game-system-grid settings-game-grid">
+            <button class="game-system-option" type="button" data-settings-game-system="40k">
+              <span class="game-system-status live">AVAILABLE</span>
+              <strong>Warhammer 40,000</strong>
+              <small>New Recruit, 40K references, scoring and table tools</small>
+            </button>
+            <button class="game-system-option" type="button" data-settings-game-system="grimdark">
+              <span class="game-system-status live">AVAILABLE</span>
+              <strong>Grimdark Future</strong>
+              <small>New Recruit and OnePageRules Army Forge lists</small>
+            </button>
+            <div class="game-system-option disabled" aria-disabled="true">
+              <span class="game-system-status">TBC</span>
+              <strong>Trench Crusade</strong>
+              <small>Planned</small>
+            </div>
+            <div class="game-system-option disabled" aria-disabled="true">
+              <span class="game-system-status">TBC</span>
+              <strong>Necromunda</strong>
+              <small>Planned</small>
+            </div>
+          </div>
         </section>
       </section>
 
