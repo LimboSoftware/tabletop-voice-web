@@ -721,6 +721,9 @@ function boot() {
   const {peerId, key} = getReceiveParams();
 
   if (peerId) {
+    // The peer id and one-time key only need to live in memory. Remove them
+    // from the visible URL and browser history before opening the connection.
+    history.replaceState(history.state || {}, "", location.pathname + location.hash);
     startReceiver(peerId, key);
     return;
   }
