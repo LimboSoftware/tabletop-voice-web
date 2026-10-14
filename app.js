@@ -191,7 +191,7 @@ function bindEvents() {
     renderDetail(null);
     renderResults(els.searchInput.value);
   });
-  els.modeToggle.addEventListener("click", toggleMode);
+  els.modeToggle?.addEventListener("click", toggleMode);
   els.focusButton?.addEventListener("click", toggleFocusMode);
   els.linkedUnitButton?.addEventListener("click", cycleLinkedUnit);
   els.backToRosterButton?.addEventListener("click", handleDatasheetBack);
@@ -4938,7 +4938,7 @@ function toggleMode() {
 
 function applyMode() {
   document.body.classList.toggle("table-mode", state.mode === "table");
-  els.modeToggle.textContent = state.mode === "table" ? "Mobile mode" : "Table mode";
+  if (els.modeToggle) els.modeToggle.textContent = state.mode === "table" ? "Mobile mode" : "Table mode";
 }
 
 function shareRandomSecret() {
