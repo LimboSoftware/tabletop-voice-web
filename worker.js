@@ -12,10 +12,32 @@ const OPR_ARMY_BOOKS_URL = "https://army-forge.onepagerules.com/api/army-books";
 
 const OPR_GAME_SYSTEM_IDS = {
   gf:2,
+  "2":2,
+  "grimdark-future":2,
   gff:3,
+  "3":3,
+  "grimdark-future-firefight":3,
   aof:4,
+  "4":4,
+  "age-of-fantasy":4,
   aofs:5,
-  aofr:6
+  "5":5,
+  "age-of-fantasy-skirmish":5,
+  aofr:6,
+  "6":6,
+  "age-of-fantasy-regiments":6,
+  aofq:7,
+  "7":7,
+  "age-of-fantasy-quest":7,
+  aofqai:8,
+  "8":8,
+  "age-of-fantasy-quest-ai":8,
+  gfsq:9,
+  "9":9,
+  "grimdark-future-star-quest":9,
+  gfsqai:10,
+  "10":10,
+  "grimdark-future-star-quest-ai":10
 };
 
 function jsonResponse(data, status = 200) {
@@ -76,7 +98,13 @@ async function loadOprArmy(id) {
     return jsonResponse({error:"Army Forge returned an incomplete list."}, 502);
   }
 
-  const gameSystem = String(army.gameSystem || "").toLowerCase();
+  const gameSystem = String(
+    army.gameSystem ||
+    army.gameSystemKey ||
+    army.gameSystemSlug ||
+    army.gameSystemId ||
+    ""
+  ).toLowerCase();
   const gameSystemId = OPR_GAME_SYSTEM_IDS[gameSystem];
 
   let commonRules = [];
