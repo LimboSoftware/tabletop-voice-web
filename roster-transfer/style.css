@@ -74,7 +74,9 @@ h1{margin:0;font-size:clamp(2rem,6vw,3.5rem);line-height:.98;letter-spacing:-.04
 .error-card{border:1px solid #6e3b46;border-radius:14px;background:rgba(255,131,144,.05);padding:16px}
 .error-card strong{color:#ffabb4}
 .error-card p{color:#c4a1a6;line-height:1.5}
-footer{padding:16px 4px 0;color:#617386;font-size:.68rem;text-align:center}
+footer{display:grid;justify-items:center;gap:6px;padding:16px 4px 0;color:#617386;font-size:.68rem;text-align:center}
+footer a{color:#8fa8bc;text-decoration:none}
+footer a:hover{text-decoration:underline}
 .toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);max-width:min(520px,calc(100vw - 24px));border:1px solid #334558;border-radius:12px;background:#131c26;color:#e8f0f6;padding:10px 13px;box-shadow:0 14px 50px rgba(0,0,0,.4);font-size:.8rem}
 @media(max-width:600px){
   .shell{padding:10px 9px 26px}
