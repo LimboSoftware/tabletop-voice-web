@@ -3106,6 +3106,7 @@ function removeImportedRoster(rosterId) {
 
 function renderAll() {
   showApp();
+  updateGameContextUi();
   renderActiveArmySelector();
   renderArmyPicker();
   renderDataSummary();
@@ -3727,6 +3728,8 @@ function renderUnitKeywordsSection(unit) {
 
 
 function renderDetail(unit) {
+  updateGameContextUi(unit);
+
   if (!unit) {
     els.emptyDetail?.classList.add("hidden");
     els.detailCard?.classList.add("hidden");
@@ -4308,6 +4311,43 @@ function adjustTurnScore(player, type, delta) {
   score.turns[turn][playerKey][type] = next;
   saveScoreState(score);
   renderScoreboard();
+}
+
+function updateGameContextUi(unit = state.selected) {
+  const source = getActiveUnitBrowserSource();
+  const sourceIsOpr =
+    source?.kind === "opr" ||
+    (source?.kind === "all" &&
+      source.entries?.length > 0 &&
+      source.entries.every(entry => entry.unit?.system === "opr"));
+
+  const opr = unit?.system === "opr" || (!unit && sourceIsOpr);
+
+  els.appNav?.classList.toggle("opr-context", opr);
+
+  const stratButton = els.appNav?.querySelector('[data-page-target="strats"]');
+  const scoreButton = els.appNav?.querySelector('[data-page-target="score"]');
+  const armyRulesButton = els.appNav?.querySelector('[data-page-target="army-rules"]');
+  const coreRulesButton = els.navMoreMenu?.querySelector('[data-page-target="rules"]');
+
+  stratButton?.classList.toggle("hidden", opr);
+  scoreButton?.classList.toggle("hidden", opr);
+  coreRulesButton?.classList.toggle("hidden", opr);
+
+  const armyRulesLabel = armyRulesButton?.querySelector("span:last-child");
+  if (armyRulesLabel) armyRulesLabel.textContent = opr ? "Rules" : "Army Rules";
+
+  const heading = els.pageArmyRules?.querySelector("h1");
+  const copy = els.pageArmyRules?.querySelector(".page-heading > p:last-child");
+  const eyebrow = els.pageArmyRules?.querySelector(".eyebrow");
+
+  if (heading) heading.textContent = opr ? "Rules" : "Army Rules";
+  if (eyebrow) eyebrow.textContent = opr ? "OPR REFERENCE" : "ARMY REFERENCE";
+  if (copy) {
+    copy.textContent = opr
+      ? "Special rules and spells referenced by the active Army Forge list."
+      : "Rules that apply to the selected imported list or whole army.";
+  }
 }
 
 function renderMatchTools() {
