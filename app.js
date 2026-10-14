@@ -4456,7 +4456,9 @@ function getUnitBrowserSources() {
   const sourceRank = source => (source.kind === "new-recruit" || source.kind === "opr") ? 0 : 1;
   for (const source of [...sources].sort((a,b) => sourceRank(a) - sourceRank(b))) {
     for (const entry of source.entries) {
-      const key = normalize(entry.unit.name);
+      const key = entry.unit.system === "warfleet"
+        ? source.id + "|" + entry.unit.id
+        : normalize(entry.unit.name);
       if (seen.has(key)) continue;
       seen.add(key);
       allEntries.push(entry);
@@ -4466,7 +4468,7 @@ function getUnitBrowserSources() {
   return [{
     id:"all",
     label:"All data",
-    subLabel:allEntries.length + " units",
+    subLabel:allEntries.length + (isWarfleetsMode() ? " ships/squadrons" : " units"),
     kind:"all",
     entries:allEntries
   }, ...sources];
@@ -4517,6 +4519,14 @@ function getUnitBrowserGroup(unit) {
   const categoryList = (unit.categories || []).map(category => normalize(category));
   const categories = new Set(categoryList);
   const hasPrefix = prefix => categoryList.some(category => category === prefix || category.startsWith(prefix + " "));
+
+  if (unit?.system === "warfleet") {
+    if (categories.has("squadron")) return "Squadrons";
+    if (categories.has("heavy")) return "Heavy Ships";
+    if (categories.has("medium")) return "Medium Ships";
+    if (categories.has("light")) return "Light Ships";
+    return "Ships";
+  }
 
   if (categories.has("character") || categories.has("epic hero") || categories.has("hero") || categories.has("heroes")) return "Characters";
   if (categories.has("battleline")) return "Battleline";
@@ -4901,7 +4911,7 @@ function renderDetail(unit) {
   if (unit.rules?.length) {
     sections.push(
       (unit.system === "opr" || unit.system === "warfleet")
-        ? renderOprAbilitySection(unit.rules)
+        ? renderOprAbilitySection(unit.rules, unit.system === "warfleet" ? "Rules & systems" : "Special rules")
         : unit.system === "aos"
           ? renderAosAbilitySection(unit.rules)
           : renderAbilitySection(unit.rules)
@@ -5325,13 +5335,13 @@ function renderOprWeaponSection(profiles, title = "Weapons") {
     </section>`;
 }
 
-function renderOprAbilitySection(rules) {
+function renderOprAbilitySection(rules, title = "Special rules") {
   if (!rules?.length) return "";
 
   return `
     <section class="detail-section ability-section">
       <div class="section-heading-row">
-        <h3>Special rules</h3>
+        <h3>${escapeHtml(title)}</h3>
         <span class="section-count">${rules.length}</span>
       </div>
       <div class="ability-list">
@@ -5604,6 +5614,18 @@ function updateGameContextUi(unit = state.selected) {
   stratButton?.classList.toggle("hidden", non40k);
   scoreButton?.classList.toggle("hidden", non40k);
   coreRulesButton?.classList.toggle("hidden", non40k);
+
+  const unitButton = els.appNav?.querySelector('[data-page-target="datasheets"]');
+  const unitLabel = unitButton?.querySelector("span:last-child");
+  if (unitLabel) unitLabel.textContent = isWarfleetsMode() ? "Fleet" : "Units";
+
+  const browserEyebrow = els.rosterBrowser?.querySelector(".roster-browser-heading .eyebrow");
+  const browserTitle = els.rosterBrowser?.querySelector(".roster-browser-heading h1");
+  if (browserEyebrow) browserEyebrow.textContent = isWarfleetsMode() ? "FLEET BROWSER" : "UNIT BROWSER";
+  if (browserTitle) browserTitle.textContent = isWarfleetsMode() ? "Choose a ship or squadron." : "Choose a unit.";
+  if (els.searchInput) {
+    els.searchInput.placeholder = isWarfleetsMode() ? "Type a ship or squadron name…" : "Type a unit name…";
+  }
 
   const armyRulesLabel = armyRulesButton?.querySelector("span:last-child");
   if (armyRulesLabel) {
@@ -6625,17 +6647,19 @@ function renderQuickLists() {
     return;
   }
 
-  const groupOrder = [
-    "Characters",
-    "Battleline",
-    "Infantry",
-    "Fast / Mounted",
-    "Vehicles",
-    "Monsters",
-    "Transports",
-    "Fortifications",
-    "Other units"
-  ];
+  const groupOrder = isWarfleetsMode()
+    ? ["Heavy Ships","Medium Ships","Light Ships","Ships","Squadrons"]
+    : [
+        "Characters",
+        "Battleline",
+        "Infantry",
+        "Fast / Mounted",
+        "Vehicles",
+        "Monsters",
+        "Transports",
+        "Fortifications",
+        "Other units"
+      ];
 
   const groups = new Map(groupOrder.map(name => [name, []]));
 
@@ -6686,7 +6710,9 @@ function renderQuickLists() {
   }
 
   els.quickLists.innerHTML = html.join("") ||
-    '<div class="empty-section">No units were found in this data source.</div>';
+    '<div class="empty-section">' +
+      (isWarfleetsMode() ? "No ships or squadrons were found in this fleet." : "No units were found in this data source.") +
+    '</div>';
 
   els.quickLists.querySelectorAll("[data-entry-index]").forEach(button => {
     button.addEventListener("click", () => {
