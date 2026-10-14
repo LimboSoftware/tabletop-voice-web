@@ -2475,6 +2475,22 @@ async function getUnitBrowserReferenceData(source) {
 
   if (source.kind === "new-recruit") {
     const roster = source.roster;
+
+    if (inferRosterGameSystem(roster) === "grimdark") {
+      const armyRules = dedupeBy(
+        [
+          ...(roster?.referenceData?.rules || []),
+          ...(roster?.units || []).flatMap(unit => unit.rules || [])
+        ].filter(rule => rule?.name && rule?.text),
+        rule => normalize(rule.name + "|" + rule.text)
+      );
+
+      return {
+        stratagems:[],
+        armyRules,
+        note:"Grimdark Future list imported from New Recruit."
+      };
+    }
     const localRules = (roster?.armyRules || []).filter(rule => rule?.name && rule?.text);
     const embeddedDetachmentRules = (roster?.detachmentRules || [])
       .filter(rule => rule?.name && rule?.text);
@@ -2670,8 +2686,12 @@ function renderUnitBrowserReferences(source, data = null) {
   return `
     <div id="unitBrowserReferences" class="unit-browser-references">
       ${data.note ? `<div class="roster-refresh-note">${escapeHtml(data.note)}</div>` : ""}
-      ${source.kind === "opr" ? "" : renderUnitBrowserReferenceSection("Stratagems", data.stratagems, "stratagem")}
-      ${renderUnitBrowserReferenceSection(source.kind === "opr" ? "Rules" : "Army Rules", data.armyRules, "rule")}
+      ${(source.kind === "opr" || inferRosterGameSystem(source.roster) === "grimdark") ? "" : renderUnitBrowserReferenceSection("Stratagems", data.stratagems, "stratagem")}
+      ${renderUnitBrowserReferenceSection(
+        (source.kind === "opr" || inferRosterGameSystem(source.roster) === "grimdark") ? "Rules" : "Army Rules",
+        data.armyRules,
+        "rule"
+      )}
     </div>`;
 }
 
@@ -3192,7 +3212,9 @@ function setVoicePrompt(page = state.currentPage) {
   if (!els.voiceHint) return;
 
   const prompts = {
-    datasheets: "Say a unit name, e.g. “Death Korps of Krieg”",
+    datasheets: isGrimdarkMode()
+      ? "Say a unit name, e.g. “Battle Brothers”"
+      : "Say a unit name, e.g. “Death Korps of Krieg”",
     score: "T" + state.scoreTurn + ": say “Player 1 add 5 primary”",
     dice: "Say “Roll 6 dice hitting on 3”",
     strats: "Say a stratagem name",
@@ -3650,13 +3672,15 @@ function setUnitBrowserSource(sourceId) {
 }
 
 function getUnitBrowserGroup(unit) {
-  const categories = new Set((unit.categories || []).map(category => normalize(category)));
+  const categoryList = (unit.categories || []).map(category => normalize(category));
+  const categories = new Set(categoryList);
+  const hasPrefix = prefix => categoryList.some(category => category === prefix || category.startsWith(prefix + " "));
 
-  if (categories.has("character") || categories.has("epic hero") || categories.has("hero")) return "Characters";
+  if (categories.has("character") || categories.has("epic hero") || categories.has("hero") || categories.has("heroes")) return "Characters";
   if (categories.has("battleline")) return "Battleline";
   if (categories.has("dedicated transport")) return "Transports";
-  if (categories.has("vehicle")) return "Vehicles";
-  if (categories.has("monster")) return "Monsters";
+  if (categories.has("vehicle") || hasPrefix("vehicles")) return "Vehicles";
+  if (categories.has("monster") || hasPrefix("monster")) return "Monsters";
   if (
     categories.has("mounted") ||
     categories.has("beast") ||
