@@ -4503,3 +4503,34 @@ body.focus-mode .detail-panel {
     padding-inline: 10px;
   }
 }
+
+
+/* Header support button */
+.buy-coffee-header {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.buy-coffee-header .bmc-btn {
+  min-width: 0 !important;
+  height: 42px !important;
+  padding: 0 14px !important;
+  border-radius: 10px !important;
+  box-shadow: none !important;
+}
+
+.buy-coffee-header .bmc-btn-text {
+  font-size: 19px !important;
+}
+
+@media (max-width: 600px) {
+  .buy-coffee-header .bmc-btn {
+    height: 38px !important;
+    padding: 0 10px !important;
+  }
+
+  .buy-coffee-header .bmc-btn-text {
+    font-size: 16px !important;
+  }
+}
