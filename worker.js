@@ -87,10 +87,19 @@ async function handleSubscribe(request, env) {
   } catch {}
 
   console.error("Brevo signup failed", brevoResponse.status, providerMessage);
+
+  const safeProviderMessage = providerMessage
+    .replace(/[\r\n]+/g, " ")
+    .replace(/api[- ]?key[^,.]*/ig, "API credential")
+    .trim()
+    .slice(0, 220);
+
   return json(
     {error:brevoResponse.status === 401 || brevoResponse.status === 403
-      ? "Email signup is temporarily unavailable."
-      : "Could not send the confirmation email. Please try again."},
+      ? "Brevo rejected the API request. Check the API key and Brevo IP-security settings."
+      : safeProviderMessage
+        ? "Brevo: " + safeProviderMessage
+        : "Could not send the confirmation email. Please try again."},
     502
   );
 }
