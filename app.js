@@ -1295,6 +1295,7 @@ function xmlForceToObject(element) {
     name:element.getAttribute("name") || "",
     catalogueName:element.getAttribute("catalogueName") || element.getAttribute("name") || "",
     selections:xmlContainerChildren(element, "selections", "selection").map(xmlSelectionToObject),
+    forces:xmlContainerChildren(element, "forces", "force").map(xmlForceToObject),
     rules:xmlContainerChildren(element, "rules", "rule").map(xmlRuleToObject),
     costs:xmlContainerChildren(element, "costs", "cost").map(xmlCostToObject),
     categories:xmlContainerChildren(element, "categories", "category").map(xmlCategoryToObject)
@@ -1443,7 +1444,7 @@ function parseTextRosterFile(text, fileName) {
     name:rosterName || fileName.replace(/\.[^.]+$/, ""),
     faction,
     source:"new-recruit",
-    gameSystemKey:state.gameSystem === "grimdark" ? "grimdark" : "40k",
+    gameSystemKey:["40k","aos","grimdark"].includes(state.gameSystem) ? state.gameSystem : "40k",
     importFormat:"txt",
     detachmentParserVersion:4,
     points:Number.isFinite(totalPoints) ? totalPoints : null,
@@ -1459,8 +1460,9 @@ function parseTextRosterFile(text, fileName) {
 
 function buildRosterFromNewRecruitRoot(root, fileName, importFormat = "json") {
   const units = [];
+  const allForces = collectRosterForces(root?.forces || []);
 
-  for (const force of root.forces || []) {
+  for (const force of allForces) {
     for (const selection of force.selections || []) {
       const unit = parseNewRecruitSelection(selection);
       if (unit) units.push(unit);
@@ -1469,30 +1471,151 @@ function buildRosterFromNewRecruitRoot(root, fileName, importFormat = "json") {
 
   if (!units.length) throw new Error("No units were found in this New Recruit list.");
 
-  const uniqueUnits = dedupeBy(units, u => u.id || u.name);
-  resolveRosterAttachments(uniqueUnits);
+  const uniqueUnits = dedupeBy(units, unit => unit.id || unit.name);
+  const gameSystemKey = detectNewRecruitGameSystem(root, uniqueUnits);
 
-  const pts = (root.costs || []).find(c => String(c.name).toLowerCase() === "pts")?.value;
-  const grimdarkCount = uniqueUnits.filter(unit => unit.system === "opr").length;
-  const gameSystemKey = grimdarkCount >= Math.ceil(uniqueUnits.length / 2) ? "grimdark" : "40k";
+  if (gameSystemKey === "40k") resolveRosterAttachments(uniqueUnits);
+
+  const pts = (root.costs || []).find(cost => String(cost.name).toLowerCase() === "pts")?.value;
+  const firstFactionForce =
+    allForces.find(force => String(force.catalogueName || "").trim()) ||
+    allForces[0];
+
+  const armyRules = gameSystemKey === "aos"
+    ? extractAosRosterAbilities(root)
+    : extractArmyRules(root);
 
   return {
     id:crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random()),
     name:root.name || fileName.replace(/\.[^.]+$/, ""),
-    faction:(root.forces || [])[0]?.catalogueName || (root.forces || [])[0]?.name || "New Recruit list",
+    faction:firstFactionForce?.catalogueName || firstFactionForce?.name || "New Recruit list",
     source:"new-recruit",
     gameSystemKey,
+    gameSystemName:String(root?.gameSystemName || ""),
     importFormat,
     detachmentParserVersion:4,
     points:pts ?? null,
-    detachments:extractSelectedDetachments(root),
-    selectedDetachmentStratagems:extractSelectedDetachmentStratagems(root),
-    detachmentRules:extractSelectedDetachmentRules(root),
-    armyRules:extractArmyRules(root),
+    detachments:gameSystemKey === "40k" ? extractSelectedDetachments(root) : [],
+    selectedDetachmentStratagems:gameSystemKey === "40k" ? extractSelectedDetachmentStratagems(root) : [],
+    detachmentRules:gameSystemKey === "40k" ? extractSelectedDetachmentRules(root) : [],
+    armyRules,
     units:uniqueUnits,
-    referenceData:extractReferenceData(root, fileName),
+    referenceData:gameSystemKey === "40k"
+      ? extractReferenceData(root, fileName)
+      : {rules:[], stratagems:[]},
     importedAt:Date.now()
   };
+}
+
+function collectRosterForces(forces = []) {
+  const output = [];
+
+  function walk(list) {
+    for (const force of list || []) {
+      if (!force || typeof force !== "object") continue;
+      output.push(force);
+      if (Array.isArray(force.forces) && force.forces.length) walk(force.forces);
+    }
+  }
+
+  walk(forces);
+  return output;
+}
+
+function detectNewRecruitGameSystem(root, units = []) {
+  const systemName = normalize(
+    root?.gameSystemName ||
+    root?.gameSystem ||
+    root?.gameSystemId ||
+    ""
+  );
+
+  if (systemName.includes("age of sigmar")) return "aos";
+  if (systemName.includes("grimdark future")) return "grimdark";
+  if (
+    systemName.includes("warhammer 40 000") ||
+    systemName.includes("warhammer 40000") ||
+    systemName === "40k"
+  ) return "40k";
+
+  const counts = {aos:0, grimdark:0, "40k":0};
+  for (const unit of units) {
+    const system = inferUnitGameSystem(unit);
+    if (counts[system] != null) counts[system]++;
+  }
+
+  return Object.entries(counts)
+    .sort((a,b) => b[1] - a[1])[0]?.[1] > 0
+      ? Object.entries(counts).sort((a,b) => b[1] - a[1])[0][0]
+      : "40k";
+}
+
+function isAosAbilityProfile(profile) {
+  return /^ability\s*\(/i.test(String(profile?.typeName || ""));
+}
+
+function aosAbilityProfileToRule(profile) {
+  const values = new Map(
+    (profile?.characteristics || []).map(item => [
+      normalize(item?.name || ""),
+      cleanRuleText(characteristicValue(item))
+    ])
+  );
+
+  const ordered = [
+    ["timing","Timing"],
+    ["casting value","Casting Value"],
+    ["chanting value","Chanting Value"],
+    ["cost","Cost"],
+    ["declare","Declare"],
+    ["effect","Effect"],
+    ["keywords","Keywords"],
+    ["used by","Used By"]
+  ];
+
+  const fields = ordered
+    .map(([key,label]) => ({label, value:String(values.get(key) || "").trim()}))
+    .filter(field => field.value);
+
+  const typeMatch = String(profile?.typeName || "").match(/Ability\s*\(([^)]+)\)/i);
+
+  return {
+    name:cleanRuleText(profile?.name || "Ability"),
+    category:typeMatch?.[1] || "Ability",
+    fields,
+    text:fields.map(field => field.label + ": " + field.value).join("\n")
+  };
+}
+
+function extractAosRosterAbilities(root) {
+  const collected = [];
+
+  function walkSelection(selection) {
+    if (!selection || typeof selection !== "object") return;
+
+    const isUnit =
+      String(selection.type || "").toLowerCase() === "unit" ||
+      (selection.profiles || []).some(profile => profile?.typeName === "Unit");
+
+    if (isUnit) return;
+
+    for (const profile of selection.profiles || []) {
+      if (!isAosAbilityProfile(profile) || profile.hidden) continue;
+      const rule = aosAbilityProfileToRule(profile);
+      if (rule.name && rule.text) collected.push(rule);
+    }
+
+    for (const child of selection.selections || []) walkSelection(child);
+  }
+
+  for (const force of collectRosterForces(root?.forces || [])) {
+    for (const selection of force.selections || []) walkSelection(selection);
+  }
+
+  return dedupeBy(
+    collected,
+    rule => normalize(rule.category + "|" + rule.name + "|" + rule.text)
+  );
 }
 
 function splitCompositeDetachmentName(name = "") {
@@ -1619,7 +1742,7 @@ function extractSelectedDetachmentStratagems(root) {
     walk(node);
   }
 
-  for (const force of root?.forces || []) {
+  for (const force of collectRosterForces(root?.forces || [])) {
     function walk(value) {
       if (!value || typeof value !== "object") return;
       if (Array.isArray(value)) {
@@ -1650,7 +1773,7 @@ function extractSelectedDetachmentStratagems(root) {
 function extractSelectedDetachments(root) {
   const found = [];
 
-  for (const force of root?.forces || []) {
+  for (const force of collectRosterForces(root?.forces || [])) {
     const faction = force.catalogueName || force.name || "";
 
     function walk(value) {
@@ -1742,7 +1865,7 @@ function extractSelectedDetachmentRules(root) {
     walk(node);
   }
 
-  for (const force of root?.forces || []) {
+  for (const force of collectRosterForces(root?.forces || [])) {
     const sourceLabel = force.catalogueName || force.name || "";
 
     function walk(value) {
@@ -1775,7 +1898,7 @@ function extractSelectedDetachmentRules(root) {
 function extractArmyRules(root) {
   const rules = [];
 
-  for (const force of root?.forces || []) {
+  for (const force of collectRosterForces(root?.forces || [])) {
     for (const rule of force.rules || []) {
       const name = cleanRuleText(rule?.name || "").trim();
       const text = cleanRuleText(rule?.description || "").trim();
@@ -1932,12 +2055,29 @@ function resolveRosterAttachments(units = []) {
 
 function parseNewRecruitSelection(selection) {
   const allProfiles = collectProfiles(selection);
-  const unitProfiles = allProfiles.filter(p => p?.typeName === "Unit");
+  const unitProfiles = allProfiles.filter(profile => profile?.typeName === "Unit");
   if (!unitProfiles.length) return null;
 
   const primaryUnitProfile =
-    unitProfiles.find(p => normalize(p.name) === normalize(selection.name)) ||
+    unitProfiles.find(profile => normalize(profile.name) === normalize(selection.name)) ||
     unitProfiles[0];
+
+  const stats = (primaryUnitProfile.characteristics || []).map(characteristic => ({
+    label:characteristic.name || "",
+    value:characteristicValue(characteristic)
+  })).filter(item => item.label && item.value !== "");
+
+  const statLabels = new Set(stats.map(stat => normalize(stat.label)));
+  const grimdarkProfile =
+    statLabels.has("quality") &&
+    (statLabels.has("defense") || statLabels.has("defence"));
+  const aosProfile =
+    statLabels.has("move") &&
+    statLabels.has("health") &&
+    statLabels.has("save") &&
+    statLabels.has("control");
+
+  const system = aosProfile ? "aos" : grimdarkProfile ? "opr" : "40k";
 
   const weapons = mergeWeaponProfiles(
     collectWeaponProfiles(selection).map(({profile, quantity}) => ({
@@ -1946,47 +2086,50 @@ function parseNewRecruitSelection(selection) {
     }))
   );
 
-  const abilityProfiles = allProfiles
-    .filter(p => p?.typeName === "Abilities")
-    .map(p => ({
-      name: p.name || "Ability",
-      text: characteristicValue((p.characteristics || [])[0])
+  const standardAbilityProfiles = allProfiles
+    .filter(profile => profile?.typeName === "Abilities")
+    .map(profile => ({
+      name:profile.name || "Ability",
+      text:characteristicValue((profile.characteristics || [])[0])
     }));
 
+  const aosAbilityProfiles = system === "aos"
+    ? allProfiles
+        .filter(profile => isAosAbilityProfile(profile) && !profile.hidden)
+        .map(aosAbilityProfileToRule)
+    : [];
+
   const rules = collectRules(selection);
-  const abilities = dedupeBy([...abilityProfiles, ...rules], r => normalize(r.name + "|" + r.text));
+  const abilities = dedupeBy(
+    [...standardAbilityProfiles, ...aosAbilityProfiles, ...rules],
+    rule => normalize((rule.category || "") + "|" + rule.name + "|" + rule.text)
+  );
 
-  const stats = (primaryUnitProfile.characteristics || []).map(c => ({
-    label: c.name || "",
-    value: characteristicValue(c)
-  })).filter(x => x.label && x.value !== "");
-
-  const pts = (selection.costs || []).find(c => String(c.name).toLowerCase() === "pts")?.value;
+  const pts = (selection.costs || []).find(cost => String(cost.name).toLowerCase() === "pts")?.value;
   if (pts != null) stats.push({label:"Pts", value:String(pts)});
 
   const name = selection.name || primaryUnitProfile.name || "Unit";
   const categories = collectSelectionCategories(selection);
-  const statLabels = new Set(stats.map(stat => normalize(stat.label)));
-  const grimdarkProfile = statLabels.has("quality") && (statLabels.has("defense") || statLabels.has("defence"));
 
   return {
-    id: selection.id || primaryUnitProfile.id || name,
+    id:selection.id || primaryUnitProfile.id || name,
     name,
-    type: "Unit",
-    system:grimdarkProfile ? "opr" : "40k",
+    type:"Unit",
+    system,
     categories,
     stats,
-    rules: abilities,
-    profiles: weapons,
+    rules:abilities,
+    profiles:weapons,
     selectionIds:collectSelectionIds(selection),
     incomingAssociations:normalizeUnitAssociations(selection.incomingAssociations || []),
     outgoingAssociations:normalizeUnitAssociations(selection.associations || []),
-    searchText: normalize([
+    searchText:normalize([
       name,
       primaryUnitProfile.name,
-      weapons.map(w => w.name),
-      abilities.map(a => a.name)
-    ].flat().join(" "))
+      weapons.map(weapon => weapon.name),
+      abilities.map(ability => ability.name),
+      categories
+    ].flat(3).join(" "))
   };
 }
 
