@@ -1373,7 +1373,7 @@ function parseWarfleetsModelLine(line, index) {
   if (!cleaned || /^\+\+/.test(cleaned)) return null;
 
   const match = cleaned.match(
-    /^(.+?)(?:\s*\[([^\]]+)\])?\s*\|\s*Mov\s*([0-9.]+)"?\s+Cru\s*([0-9.]+)"?\s+Eva\s*(\d+)\s+Tou\s*(\d+)\s*\|\s*(\d+)\s*pts?\s*(?:\|\s*(.*))?$/i
+    /^(.+?)(?:\s*\[([^\]]+)\])?\s*\|\s*Mov\s*([0-9.]+)"?\s+Cru\s*([0-9.]+)"?\s+Eva\s*(\d+\+?)\s+Tou\s*(\d+\+?)\s*\|\s*(\d+)\s*pts?\s*(?:\|\s*(.*))?$/i
   );
   if (!match) return null;
 
