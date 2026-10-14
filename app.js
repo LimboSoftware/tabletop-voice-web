@@ -1298,8 +1298,307 @@ function buildOprRoster(data, armyId) {
   };
 }
 
+
+function splitWarfleetsList(value = "") {
+  return String(value || "")
+    .split(",")
+    .map(item => item.trim())
+    .filter(Boolean);
+}
+
+function parseWarfleetsWeaponBlock(block = "") {
+  const profiles = [];
+  const text = String(block || "").trim();
+  if (!text) return profiles;
+
+  const weaponPattern = /\[([A-Z])\]\s*([^()]+?)\s*\(\s*Ran\s*([^/),]+?)\s*\/\s*Att\s*(\d+)\s*\/\s*Str\s*(-?\d+)(?:\s*,\s*([^)]+))?\s*\)/gi;
+  let match;
+
+  while ((match = weaponPattern.exec(text))) {
+    profiles.push({
+      name:match[2].trim(),
+      type:"Warfleets Weapon",
+      system:"warfleet",
+      quantity:1,
+      values:[
+        {label:"Facing", value:match[1].toUpperCase()},
+        {label:"Range", value:match[3].trim()},
+        {label:"A", value:match[4]},
+        {label:"Str", value:match[5]},
+        {label:"Special", value:String(match[6] || "").trim() || "—"}
+      ]
+    });
+  }
+
+  return profiles;
+}
+
+function parseWarfleetsTurret(text = "") {
+  const match = String(text || "").match(
+    /(?:\[T\]\s*)?Turret\s*\(\s*Ran\s*([^/),]+?)\s*\/\s*Att\s*(\d+)\s*\/\s*Str\s*(-?\d+)(?:\s*,\s*([^)]+))?\s*\)/i
+  );
+  if (!match) return null;
+
+  return {
+    name:"Turret",
+    type:"Warfleets Weapon",
+    system:"warfleet",
+    quantity:1,
+    values:[
+      {label:"Facing", value:"T"},
+      {label:"Range", value:match[1].trim()},
+      {label:"A", value:match[2]},
+      {label:"Str", value:match[3]},
+      {label:"Special", value:String(match[4] || "").trim() || "—"}
+    ]
+  };
+}
+
+function warfleetsRuleEntries(names = [], category = "Special rule") {
+  return dedupeBy(
+    (names || [])
+      .map(name => String(name || "").trim())
+      .filter(Boolean)
+      .map(name => ({name, text:"", category})),
+    rule => normalize(rule.name)
+  );
+}
+
+function parseWarfleetsModelLine(line, index) {
+  const cleaned = String(line || "")
+    .replace(/[“”]/g, '"')
+    .replace(/\u00a0/g, " ")
+    .trim();
+
+  if (!cleaned || /^\+\+/.test(cleaned)) return null;
+
+  const match = cleaned.match(
+    /^(.+?)(?:\s*\[([^\]]+)\])?\s*\|\s*Mov\s*([0-9.]+)"?\s+Cru\s*([0-9.]+)"?\s+Eva\s*(\d+)\s+Tou\s*(\d+)\s*\|\s*(\d+)\s*pts?\s*(?:\|\s*(.*))?$/i
+  );
+  if (!match) return null;
+
+  const name = match[1].trim();
+  const classText = String(match[2] || "").trim();
+  const remainder = String(match[8] || "").trim();
+
+  const weaponsMatch = remainder.match(/\bWeapons\s*:/i);
+  const systemsMatch = remainder.match(/\bSystems\s*:/i);
+  const turretMatch = remainder.match(/(?:\[T\]\s*)?Turret\s*\(/i);
+  const weaponsIndex = weaponsMatch?.index ?? -1;
+  const systemsIndex = systemsMatch?.index ?? -1;
+
+  let prefixEnd = remainder.length;
+  for (const candidate of [turretMatch?.index, weaponsIndex, systemsIndex]) {
+    if (Number.isInteger(candidate) && candidate >= 0) prefixEnd = Math.min(prefixEnd, candidate);
+  }
+
+  const prefixRules = splitWarfleetsList(
+    remainder.slice(0, prefixEnd).replace(/[,\s]+$/, "")
+  );
+
+  let weaponBlock = "";
+  if (weaponsIndex >= 0) {
+    const start = weaponsIndex + weaponsMatch[0].length;
+    const end = systemsIndex > weaponsIndex ? systemsIndex : remainder.length;
+    weaponBlock = remainder.slice(start, end).trim();
+  }
+
+  let systems = [];
+  if (systemsIndex >= 0) {
+    const start = systemsIndex + systemsMatch[0].length;
+    systems = splitWarfleetsList(remainder.slice(start));
+  }
+
+  const turret = parseWarfleetsTurret(remainder);
+  const profiles = [
+    ...(turret ? [turret] : []),
+    ...parseWarfleetsWeaponBlock(weaponBlock)
+  ];
+
+  const classParts = classText.split(/\s+/).filter(Boolean);
+  const slotValue = classParts.length && /^\d+$/.test(classParts.at(-1))
+    ? classParts.pop()
+    : "";
+  const hullClass = classParts.join(" ");
+  const squadron = /squadron/i.test(name) || /squadron/i.test(classText);
+
+  const rules = [
+    ...warfleetsRuleEntries(prefixRules, "Special rule"),
+    ...warfleetsRuleEntries(systems, "System")
+  ];
+
+  return {
+    id:"gfwf-" + index + "-" + normalize(name).replace(/\s+/g, "-"),
+    name,
+    type:squadron ? "Warfleets Squadron" : "Warfleets Ship",
+    system:"warfleet",
+    gameSystem:"gfwf",
+    gameSystemKey:"opr-warfleets",
+    categories:[
+      squadron ? "Squadron" : "Ship",
+      hullClass || classText
+    ].filter(Boolean),
+    stats:[
+      {label:"Move", value:match[3] + '"'},
+      {label:"Cruise", value:match[4] + '"'},
+      {label:"Evasion", value:match[5]},
+      {label:"Toughness", value:match[6]},
+      ...(slotValue ? [{label:"Upgrades", value:slotValue}] : []),
+      {label:"Pts", value:match[7]}
+    ],
+    rules,
+    profiles,
+    warfleets:{
+      hullClass:hullClass || classText,
+      upgradeSlots:slotValue ? Number(slotValue) : null,
+      systems,
+      specialRules:prefixRules
+    },
+    searchText:normalize([
+      name,
+      hullClass,
+      prefixRules,
+      systems,
+      profiles.map(profile => [
+        profile.name,
+        (profile.values || []).map(value => value.value)
+      ])
+    ].flat(4).join(" "))
+  };
+}
+
+function parseWarfleetsShareText(text) {
+  const normalizedText = String(text || "")
+    .replace(/\r/g, "")
+    .replace(/[“”]/g, '"')
+    .replace(/\u00a0/g, " ")
+    .trim();
+
+  if (!/\[\s*GFWF\b/i.test(normalizedText)) {
+    throw new Error("This does not look like a Warfleets Share as Text export.");
+  }
+
+  const lines = normalizedText
+    .split("\n")
+    .map(line => line.trim())
+    .filter(Boolean);
+
+  const headerLine = lines.find(line => /\[\s*GFWF\b/i.test(line)) || "";
+  const pointsMatch = headerLine.match(/\[\s*GFWF\s+(\d+)\s*pts?\s*\]/i);
+  const points = pointsMatch ? Number(pointsMatch[1]) : null;
+
+  const headerBody = headerLine
+    .replace(/^\+\+\s*/, "")
+    .replace(/\s*\[\s*GFWF\b.*$/i, "")
+    .replace(/\s*\+\+\s*$/, "")
+    .trim();
+
+  const withoutVersion = headerBody.replace(/\s*\(v?[\d.]+\)\s*$/i, "").trim();
+  const divider = withoutVersion.lastIndexOf(" - ");
+  const listName = divider >= 0 ? withoutVersion.slice(0, divider).trim() : withoutVersion;
+  const faction = divider >= 0
+    ? withoutVersion.slice(divider + 3).trim()
+    : "Grimdark Future: Warfleets";
+
+  const modelLines = lines.filter(line => line !== headerLine);
+  const units = modelLines
+    .map((line, index) => parseWarfleetsModelLine(line, index))
+    .filter(Boolean);
+
+  if (!units.length) {
+    throw new Error(
+      "The GFWF header was found, but no ships or squadrons could be read. Copy the complete Army Forge Share as Text output."
+    );
+  }
+
+  const totalFromModels = units.reduce((sum, unit) => {
+    const stat = (unit.stats || []).find(item => normalize(item.label) === "pts");
+    return sum + (Number(stat?.value) || 0);
+  }, 0);
+
+  const armyRules = dedupeBy(
+    units.flatMap(unit => unit.rules || []),
+    rule => normalize((rule.category || "") + "|" + rule.name)
+  );
+
+  return {
+    id:crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random()),
+    externalId:null,
+    name:listName || "Warfleets fleet",
+    faction:faction || "Grimdark Future: Warfleets",
+    source:"opr",
+    gameSystemKey:"opr-warfleets",
+    importFormat:"army-forge-text",
+    gameSystem:"gfwf",
+    gameName:"Grimdark Future: Warfleets",
+    points:Number.isFinite(points) ? points : totalFromModels,
+    units,
+    armyRules,
+    referenceData:{rules:[], stratagems:[]},
+    importedAt:Date.now()
+  };
+}
+
+
 async function loadOprArmyForgeList() {
-  const armyId = extractOprArmyId(els.oprShareInput?.value || "");
+  const rawInput = String(els.oprShareInput?.value || "").trim();
+  const warfleetsText = /\[\s*GFWF\b/i.test(rawInput);
+
+  if (isWarfleetsMode() || warfleetsText) {
+    try {
+      const roster = parseWarfleetsShareText(rawInput);
+
+      if (state.gameSystem && state.gameSystem !== "opr-warfleets") {
+        throw new Error(
+          "This is a Grimdark Future: Warfleets fleet. Switch game system in Settings before importing it."
+        );
+      }
+
+      const existingIndex = state.rosters.findIndex(existing =>
+        existing.source === "opr" &&
+        existing.gameSystemKey === "opr-warfleets" &&
+        normalize(existing.name) === normalize(roster.name) &&
+        normalize(existing.faction) === normalize(roster.faction)
+      );
+
+      if (existingIndex >= 0) {
+        state.rosters.splice(existingIndex, 1, roster);
+        state.activeRoster = existingIndex;
+      } else {
+        state.rosters.push(roster);
+        state.activeRoster = state.rosters.length - 1;
+      }
+
+      state.unitBrowserSourceId = "roster:" + roster.id;
+      localStorage.setItem("tv_unit_browser_source", state.unitBrowserSourceId);
+      state.selected = null;
+      state.selectedRosterId = null;
+
+      persist();
+      renderAll();
+      switchPage("datasheets", {silent:true});
+
+      if (els.oprShareInput) els.oprShareInput.value = "";
+      if (els.oprImportStatus) {
+        els.oprImportStatus.dataset.busy = "";
+        els.oprImportStatus.textContent =
+          "Imported " + roster.units.length + " ships/squadrons" +
+          (roster.points != null ? " · " + roster.points + " pts" : "");
+      }
+      toast("Imported " + roster.name);
+      return;
+    } catch (error) {
+      console.error("Warfleets import failed", error);
+      if (els.oprImportStatus) {
+        els.oprImportStatus.dataset.busy = "";
+        els.oprImportStatus.textContent = error.message || "Could not import this Warfleets fleet.";
+      }
+      toast(error.message || "Could not import Warfleets fleet.");
+      return;
+    }
+  }
+
+  const armyId = extractOprArmyId(rawInput);
   if (!armyId) {
     if (els.oprImportStatus) {
       els.oprImportStatus.textContent = "Paste an Army Forge Share as Link URL first.";
@@ -1314,6 +1613,7 @@ async function loadOprArmyForgeList() {
     button.textContent = "Importing…";
   }
   if (els.oprImportStatus) {
+    els.oprImportStatus.dataset.busy = "1";
     els.oprImportStatus.textContent = "Loading the shared list from Army Forge…";
   }
 
@@ -1382,6 +1682,7 @@ async function loadOprArmyForgeList() {
 
     if (els.oprShareInput) els.oprShareInput.value = "";
     if (els.oprImportStatus) {
+      els.oprImportStatus.dataset.busy = "";
       els.oprImportStatus.textContent =
         "Imported " + roster.units.length + " units · " + roster.gameName +
         (roster.points != null ? " · " + roster.points + " pts" : "");
@@ -1390,6 +1691,7 @@ async function loadOprArmyForgeList() {
   } catch (error) {
     console.error("OPR import failed", error);
     if (els.oprImportStatus) {
+      els.oprImportStatus.dataset.busy = "";
       els.oprImportStatus.textContent = error.message || "Could not import this Army Forge list.";
     }
     toast(error.message || "Could not import OPR list.");
