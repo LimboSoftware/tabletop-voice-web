@@ -1,4 +1,4 @@
-const CACHE = "tabletop-voice-beta-v27";
+const CACHE = "tabletop-voice-beta-v28";
 const ASSETS = [
   "./",
   "./index.html",
