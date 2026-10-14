@@ -414,8 +414,7 @@ async function handlePendingRosterTransferOnBoot() {
 
       if (state.gameSystem && importedGame !== state.gameSystem) {
         throw new Error(
-          "This looks like a " +
-          (importedGame === "grimdark" ? "Grimdark Future" : "Warhammer 40,000") +
+          "This looks like a " + gameSystemDisplayName(importedGame) +
           " list. Switch game system in Settings before importing it."
         );
       }
@@ -516,6 +515,14 @@ const GAME_SYSTEMS = Object.fromEntries(
 
 function currentGameName() {
   return GAME_SYSTEMS[state.gameSystem]?.name || "Choose a game";
+}
+
+function gameSystemDisplayName(gameSystem) {
+  return GAME_SYSTEMS[gameSystem]?.name ||
+    (gameSystem === "grimdark" ? "Grimdark Future" :
+      gameSystem === "aos" ? "Warhammer Age of Sigmar" :
+      gameSystem === "40k" ? "Warhammer 40,000" :
+      "another game system");
 }
 
 function isGrimdarkMode() {
@@ -791,6 +798,14 @@ async function handleFiles(event) {
   for (const file of files) {
     try {
       const roster = await parseRosterUpload(file);
+      const importedGame = inferRosterGameSystem(roster);
+
+      if (state.gameSystem && importedGame !== state.gameSystem) {
+        throw new Error(
+          "This looks like a " + gameSystemDisplayName(importedGame) +
+          " list. Switch game system in Settings before importing it."
+        );
+      }
 
       const existingIndex = state.rosters.findIndex(existing =>
         existing.source === "new-recruit" &&
@@ -1209,8 +1224,12 @@ function rosterSourceSummary(roster) {
     return "OnePageRules · " + (roster.gameName || oprGameName(roster.gameSystem)) + " · Army Forge";
   }
 
-  return (roster?.sharedFromOpponent ? "Opponent share" : "New Recruit") +
-    " · " + String(roster?.importFormat || "json").toUpperCase();
+  const game = inferRosterGameSystem(roster);
+  const prefix = roster?.sharedFromOpponent ? "Opponent share · " : "";
+  return prefix +
+    gameSystemDisplayName(game) +
+    " · New Recruit · " +
+    String(roster?.importFormat || "json").toUpperCase();
 }
 
 function fileExtension(name = "") {
@@ -3887,7 +3906,9 @@ function getUnitBrowserSources() {
       subLabel:(roster.points != null ? roster.points + " pts · " : "") +
         (roster.source === "opr"
           ? (roster.gameName || oprGameName(roster.gameSystem)) + " · Army Forge"
-          : (roster.sharedFromOpponent ? "Opponent · New Recruit" : "New Recruit")),
+          : (roster.sharedFromOpponent ? "Opponent · " : "") +
+            gameSystemDisplayName(inferRosterGameSystem(roster)) +
+            " · New Recruit"),
       kind,
       roster,
       faction:roster.faction || "",
@@ -6604,12 +6625,21 @@ function restore() {
 
     state.rosters = JSON.parse(localStorage.getItem("tv_rosters") || "[]");
     state.rosters.forEach(roster => {
-      if (!roster.gameSystemKey) roster.gameSystemKey = inferRosterGameSystem(roster);
-
       if (roster.source === "new-recruit" && Array.isArray(roster.units)) {
         roster.units.forEach(unit => {
-          if (!unit.system) unit.system = inferUnitGameSystem(unit) === "grimdark" ? "opr" : "40k";
+          if (unit.system) return;
+          const detected = inferUnitGameSystem(unit);
+          unit.system = detected === "grimdark" ? "opr" : detected;
         });
+      }
+
+      if (!roster.gameSystemKey) roster.gameSystemKey = inferRosterGameSystem(roster);
+
+      if (
+        roster.source === "new-recruit" &&
+        roster.gameSystemKey === "40k" &&
+        Array.isArray(roster.units)
+      ) {
         resolveRosterAttachments(roster.units);
       }
     });
