@@ -5469,3 +5469,19 @@ button.game-system-option:hover {
     font-size: .84rem;
   }
 }
+
+
+/* === System-specific setup widths === */
+body.game-aos .setup-import-grid {
+  grid-template-columns: minmax(0, 830px);
+}
+
+body.game-aos .setup-import-card {
+  width: 100%;
+}
+
+@media (max-width: 760px) {
+  body.game-aos .setup-import-grid {
+    grid-template-columns: 1fr;
+  }
+}
