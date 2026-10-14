@@ -78,6 +78,12 @@ const els = {
   pageArmyRules: $("pageArmyRules"),
   pageRules: $("pageRules"),
   pageShare: $("pageShare"),
+  pageUpdates: $("pageUpdates"),
+  updatesForm: $("updatesForm"),
+  updatesEmail: $("updatesEmail"),
+  updatesCompany: $("updatesCompany"),
+  updatesSubmit: $("updatesSubmit"),
+  updatesStatus: $("updatesStatus"),
   stratSourceTabs: $("stratSourceTabs"),
   stratPageContent: $("stratPageContent"),
   armyRuleSourceTabs: $("armyRuleSourceTabs"),
@@ -165,6 +171,7 @@ function boot() {
     renderMatchTools();
     restoreSetupChecks();
     switchPage(state.currentPage, {silent:true});
+    handleSubscriptionConfirmationOnBoot();
     handleShareUrlOnBoot();
     handlePendingRosterTransferOnBoot();
   } catch (error) {
@@ -225,6 +232,7 @@ function bindEvents() {
   document.querySelectorAll("[data-score-turn]").forEach(button => {
     button.addEventListener("click", () => setScoreTurn(Number(button.dataset.scoreTurn)));
   });
+  els.updatesForm?.addEventListener("submit", subscribeToUpdates);
   els.scoreResetButton?.addEventListener("click", resetScores);
   document.querySelectorAll("[data-dice-count]").forEach(button => {
     button.addEventListener("click", () => rollDice(
@@ -2579,7 +2587,7 @@ function setVoicePrompt(page = state.currentPage) {
 }
 
 function switchPage(page, options = {}) {
-  const valid = ["setup","datasheets","strats","army-rules","score","dice","rules","share","guide"];
+  const valid = ["setup","datasheets","strats","army-rules","score","dice","rules","share","updates","guide"];
   if (!valid.includes(page)) page = "setup";
   if (page !== "share" && state.shareScanner) stopShareScanner();
 
@@ -2593,7 +2601,7 @@ function switchPage(page, options = {}) {
   document.querySelectorAll("[data-page-target]").forEach(button => {
     button.classList.toggle("active", button.dataset.pageTarget === page);
   });
-  els.navMoreButton?.classList.toggle("active", ["rules","share","guide"].includes(page));
+  els.navMoreButton?.classList.toggle("active", ["rules","share","updates","guide"].includes(page));
 
   els.navMoreMenu?.classList.add("hidden");
   els.navMoreButton?.setAttribute("aria-expanded", "false");
@@ -5344,6 +5352,71 @@ function handleShareUrlOnBoot() {
 
   switchPage("share", {silent:true});
   connectOpponentShare(peerId, key);
+}
+
+async function subscribeToUpdates(event) {
+  event.preventDefault();
+  if (!els.updatesEmail || !els.updatesSubmit) return;
+
+  const email = String(els.updatesEmail.value || "").trim();
+  const company = String(els.updatesCompany?.value || "").trim();
+
+  if (!email || !els.updatesEmail.checkValidity()) {
+    els.updatesEmail.reportValidity();
+    return;
+  }
+
+  els.updatesSubmit.disabled = true;
+  els.updatesSubmit.textContent = "Sending…";
+  if (els.updatesStatus) {
+    els.updatesStatus.className = "updates-status";
+    els.updatesStatus.textContent = "Requesting your confirmation email…";
+  }
+
+  try {
+    const response = await fetch("./api/subscribe", {
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({email, company})
+    });
+
+    let result = {};
+    try { result = await response.json(); } catch {}
+
+    if (!response.ok) {
+      throw new Error(result.error || "Could not start the signup.");
+    }
+
+    if (els.updatesStatus) {
+      els.updatesStatus.className = "updates-status good";
+      els.updatesStatus.textContent =
+        "Check your inbox ✓ Brevo has sent a confirmation email. You will only be added after you confirm.";
+    }
+    els.updatesEmail.value = "";
+  } catch (error) {
+    console.error("Updates signup failed", error);
+    if (els.updatesStatus) {
+      els.updatesStatus.className = "updates-status bad";
+      els.updatesStatus.textContent = error.message || "Could not start the signup. Please try again.";
+    }
+  } finally {
+    els.updatesSubmit.disabled = false;
+    els.updatesSubmit.textContent = "Sign me up";
+  }
+}
+
+function handleSubscriptionConfirmationOnBoot() {
+  const url = new URL(location.href);
+  if (url.searchParams.get("subscribed") !== "1") return;
+
+  url.searchParams.delete("subscribed");
+  history.replaceState(history.state || {}, "", url.pathname + url.search + url.hash);
+  switchPage("updates", {silent:true});
+
+  if (els.updatesStatus) {
+    els.updatesStatus.className = "updates-status good";
+    els.updatesStatus.textContent = "You're confirmed ✓ You'll now receive occasional Tabletop Voice updates.";
+  }
 }
 
 function persist() {
