@@ -88,6 +88,28 @@ async function handleSubscribe(request, env) {
 
   console.error("Brevo signup failed", brevoResponse.status, providerMessage);
 
+  let templateDiagnostic = "";
+  if (/active DOI template does not exist/i.test(providerMessage)) {
+    try {
+      const templateResponse = await fetch("https://api.brevo.com/v3/smtp/templates/1", {
+        headers:{
+          "Accept":"application/json",
+          "api-key":env.BREVO_API_KEY
+        }
+      });
+      if (templateResponse.ok) {
+        const template = await templateResponse.json();
+        templateDiagnostic =
+          " Template #1 check: DOI=" + (template?.doiTemplate === true ? "yes" : "no") +
+          ", active=" + (template?.isActive === true ? "yes" : "no") + ".";
+      } else {
+        templateDiagnostic = " Template #1 could not be inspected.";
+      }
+    } catch {
+      templateDiagnostic = " Template #1 could not be inspected.";
+    }
+  }
+
   const safeProviderMessage = providerMessage
     .replace(/[\r\n]+/g, " ")
     .replace(/api[- ]?key[^,.]*/ig, "API credential")
@@ -98,7 +120,7 @@ async function handleSubscribe(request, env) {
     {error:brevoResponse.status === 401 || brevoResponse.status === 403
       ? "Brevo rejected the API request. Check the API key and Brevo IP-security settings."
       : safeProviderMessage
-        ? "Brevo: " + safeProviderMessage
+        ? "Brevo: " + safeProviderMessage + templateDiagnostic
         : "Could not send the confirmation email. Please try again."},
     502
   );
