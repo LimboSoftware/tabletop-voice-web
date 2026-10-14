@@ -5274,3 +5274,198 @@ button.game-system-option:hover {
     margin-top: 16px;
   }
 }
+
+
+/* === Provider catalogue === */
+.game-system-card {
+  max-height: calc(100dvh - 40px);
+  overflow-y: auto;
+}
+
+.game-catalogue {
+  margin-top: 22px;
+}
+
+.game-provider-tabs {
+  display: flex;
+  gap: 0;
+  overflow-x: auto;
+  border-bottom: 1px solid #35414c;
+  scrollbar-width: thin;
+}
+
+.game-provider-tab {
+  flex: 0 0 auto;
+  min-height: 44px;
+  padding: 0 17px;
+  border: 0;
+  border-right: 1px solid #26313a;
+  border-radius: 0;
+  background: #0d1319;
+  color: #83919d;
+  font: inherit;
+  font-size: .72rem;
+  font-weight: 850;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.game-provider-tab:hover {
+  background: #151e26;
+  color: #dce7ec;
+}
+
+.game-provider-tab.active {
+  box-shadow: inset 0 -3px 0 var(--accent-strong);
+  background: #17232c;
+  color: #dff8ff;
+}
+
+.game-provider-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px;
+  margin-top: 17px;
+}
+
+.game-provider-heading small {
+  color: #72818d;
+  font-size: .68rem;
+}
+
+.settings-game-card {
+  max-width: 1120px;
+}
+
+.settings-game-catalogue {
+  margin-top: 14px;
+}
+
+.settings-game-catalogue .game-system-grid {
+  grid-template-columns: repeat(3, minmax(0,1fr));
+}
+
+/* === Age of Sigmar warscroll presentation === */
+.aos-weapon-table {
+  min-width: 940px;
+}
+
+.aos-weapon-ability {
+  min-width: 180px;
+  text-align: left !important;
+  color: #c4d1d8 !important;
+  line-height: 1.35;
+}
+
+.aos-ability-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.aos-ability-heading h4 {
+  margin: 0;
+}
+
+.aos-ability-heading > span {
+  flex: 0 0 auto;
+  padding: 3px 7px;
+  border: 1px solid #3b5360;
+  border-radius: 2px;
+  color: #8fd3e3;
+  font-size: .61rem;
+  font-weight: 850;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.aos-ability-fields {
+  display: grid;
+  gap: 0;
+  border-top: 1px solid #27323c;
+}
+
+.aos-ability-field {
+  display: grid;
+  grid-template-columns: 135px minmax(0,1fr);
+  gap: 14px;
+  padding: 10px 0;
+  border-bottom: 1px solid #27323c;
+}
+
+.aos-ability-field:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.aos-ability-field > strong {
+  color: #81929f;
+  font-size: .68rem;
+  letter-spacing: .055em;
+  text-transform: uppercase;
+}
+
+.aos-ability-field .ability-text {
+  max-width: none;
+  font-size: .9rem;
+  line-height: 1.5;
+}
+
+@media (max-width: 760px) {
+  .game-system-modal {
+    align-items: stretch;
+  }
+
+  .game-system-card {
+    max-height: calc(100dvh - 16px);
+  }
+
+  .game-provider-tabs {
+    margin-inline: -14px;
+    padding-inline: 14px;
+  }
+
+  .game-provider-tab {
+    min-height: 42px;
+    padding-inline: 13px;
+    font-size: .65rem;
+  }
+
+  .game-provider-heading {
+    margin-top: 14px;
+  }
+
+  .settings-game-catalogue .game-system-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .aos-weapon-table {
+    min-width: 0;
+  }
+
+  .aos-weapon-table .aos-weapon-ability {
+    grid-column: 1 / -1;
+    min-width: 0;
+    padding-top: 9px !important;
+    border-top: 1px solid #25303f !important;
+    font-size: .75rem !important;
+    line-height: 1.35 !important;
+  }
+
+  .aos-ability-heading {
+    gap: 8px;
+  }
+
+  .aos-ability-field {
+    grid-template-columns: 1fr;
+    gap: 5px;
+  }
+
+  .aos-ability-field .ability-text {
+    font-size: .84rem;
+  }
+}
