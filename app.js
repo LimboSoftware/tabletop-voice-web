@@ -127,6 +127,8 @@ const els = {
   stratResults: $("stratResults"),
   coreRuleSearch: $("coreRuleSearch"),
   coreRuleResults: $("coreRuleResults"),
+  coreRulesImportButton: $("coreRulesImportButton"),
+  coreRulesImportStatus: $("coreRulesImportStatus"),
   setupChooseArmies: $("setupChooseArmies"),
   resetMatchButton: $("resetMatchButton"),
   toast: $("toast"),
@@ -239,6 +241,7 @@ function bindEvents() {
   els.toggleDiceOrderButton?.addEventListener("click", toggleDiceOrder);
   els.stratSearch?.addEventListener("input", () => renderStratagems(els.stratSearch.value));
   els.coreRuleSearch?.addEventListener("input", () => renderCoreRules(els.coreRuleSearch.value));
+  els.coreRulesImportButton?.addEventListener("click", loadCoreRulesData);
   els.createAppShareButton?.addEventListener("click", createAppShareQr);
   els.removeShareRosterButton?.addEventListener("click", removeSelectedShareRoster);
   els.scanOpponentQrButton?.addEventListener("click", startOpponentQrScanner);
@@ -414,12 +417,12 @@ async function handlePendingRosterTransferOnBoot() {
 function showFirstRunIfNeeded() {
   if (!els.firstRunModal) return;
   if (new URLSearchParams(location.search).has("tvshare")) return;
-  const seen = localStorage.getItem("tv_beta_notice_seen_v1") === "1";
+  const seen = localStorage.getItem("tv_beta_notice_seen_v2") === "1";
   if (!seen) els.firstRunModal.classList.remove("hidden");
 }
 
 function dismissFirstRun() {
-  localStorage.setItem("tv_beta_notice_seen_v1", "1");
+  localStorage.setItem("tv_beta_notice_seen_v2", "1");
   els.firstRunModal?.classList.add("hidden");
 }
 
@@ -1375,34 +1378,6 @@ function profileToDisplay(profile) {
   };
 }
 
-const CORE_STRATAGEM_QUICKREF = [
-  {name:"Command Re-Roll", category:"Core stratagem", text:"Any phase, just after making an eligible roll for a friendly unit or model: re-roll that roll."},
-  {name:"Epic Challenge", category:"Core stratagem", text:"Fight phase, after a friendly Character is selected to fight: one Character model's melee weapons gain Precision for the phase."},
-  {name:"Insane Bravery", category:"Core stratagem", text:"Command phase, before a Battle-shock roll: that roll automatically succeeds. Once per battle."},
-  {name:"Explosives", category:"Core stratagem", text:"Your Shooting phase: an eligible Explosives/Grenades unit can attempt to inflict mortal wounds on a nearby visible enemy."},
-  {name:"Crushing Impact", category:"Core stratagem", text:"Your Charge phase after a Monster/Vehicle charges: roll against an engaged enemy to inflict mortal wounds, with some risk to your own unit."},
-  {name:"Rapid Ingress", category:"Core stratagem", text:"End of the opponent's Movement phase: an eligible unit in Strategic Reserves can make an ingress move."},
-  {name:"Fire Overwatch", category:"Core stratagem", text:"End of the opponent's Movement phase: an eligible unit can shoot using the Snap Shooting rules."},
-  {name:"Smokescreen", category:"Core stratagem", text:"Start of the opponent's Shooting phase: a friendly Smoke unit can help itself or obscured units gain the benefit of cover."},
-  {name:"Heroic Intervention", category:"Core stratagem", text:"End of the opponent's Charge phase: an eligible friendly unit can make a restricted charge."},
-  {name:"Counteroffensive", category:"Core stratagem", text:"Opponent's Fight phase, after an enemy resolves attacks: an eligible friendly unit gains Fights First and must fight next."}
-];
-
-const CORE_RULE_QUICKREF = [
-  {name:"Hit Roll", category:"Making attacks", text:"Roll one D6 per attack. An unmodified 1 fails; an unmodified 6 is a Critical Hit; otherwise compare the roll with the weapon's BS or WS."},
-  {name:"Wound Roll", category:"Making attacks", text:"Compare Strength to Toughness: 2+ at double or more, 3+ if greater, 4+ if equal, 5+ if lower, 6+ at half or less."},
-  {name:"Saving Throw", category:"Making attacks", text:"The defending player makes a save for each successful wound, modified by the attacking weapon's AP as applicable."},
-  {name:"Battle-shock", category:"Command phase", text:"Battle-shocked units have reduced battlefield effectiveness, including losing normal Objective Control and restrictions on stratagems/actions."},
-  {name:"Command Phase", category:"Battle round", text:"Start the turn, gain Command Points as applicable, resolve Battle-shock and Command abilities, then continue to Movement."},
-  {name:"Movement Phase", category:"Battle round", text:"Move eligible units, resolve Reinforcements or ingress effects, then finish the phase."},
-  {name:"Shooting Phase", category:"Battle round", text:"Select eligible units to shoot, choose targets and resolve attacks."},
-  {name:"Charge Phase", category:"Battle round", text:"Eligible units can declare charges, make charge rolls and complete charge moves."},
-  {name:"Fight Phase", category:"Battle round", text:"Eligible units fight in the appropriate order, resolving melee attacks and related moves."},
-  {name:"Strategic Reserves", category:"Reserves", text:"Units placed in Strategic Reserves can arrive later subject to the battle round and positioning restrictions that apply."},
-  {name:"Deep Strike", category:"Core ability", text:"A unit with Deep Strike can be set up in Reserves and later arrive using the distance restrictions in the rule."},
-  {name:"Cover", category:"Terrain", text:"The Benefit of Cover improves a model's protection against eligible ranged attacks according to the core terrain rules."}
-];
-
 function extractReferenceData(root, sourceName = "Imported roster") {
   const rules = [];
   const stratagems = [];
@@ -2125,10 +2100,10 @@ async function refreshUnitBrowserReferences(sourceId) {
 }
 
 function getCombinedReferenceData() {
-  const rules = [...CORE_RULE_QUICKREF];
-  const stratagems = [...CORE_STRATAGEM_QUICKREF];
-  const seenRules = new Set(rules.map(item => normalize(item.name + "|" + item.text)));
-  const seenStrats = new Set(stratagems.map(item => normalize(item.name + "|" + item.text)));
+  const rules = [];
+  const stratagems = [];
+  const seenRules = new Set();
+  const seenStrats = new Set();
 
   const sources = [
     {data:state.referenceData, coreOnly:false},
@@ -2256,6 +2231,23 @@ function renderArmyRulesPage() {
 
 function renderCoreRules(query = "") {
   const data = getCombinedReferenceData();
+
+  if (els.coreRulesImportButton) {
+    els.coreRulesImportButton.textContent = state.referenceData?.rules?.length
+      ? "Refresh core rules"
+      : "Load core rules";
+  }
+
+  if (els.coreRulesImportStatus) {
+    if (state.referenceData?.rules?.length) {
+      els.coreRulesImportStatus.textContent =
+        state.referenceData.rules.length + " reference entries loaded from the community dataset.";
+    } else {
+      els.coreRulesImportStatus.textContent =
+        "No core-rule reference has been loaded yet. Imported roster files may still supply some keyword rules.";
+    }
+  }
+
   renderReferenceCards(data.rules, els.coreRuleResults, query);
 }
 
@@ -2263,6 +2255,47 @@ const BSDATA_REPO = "BSData/wh40k-11e";
 const BSDATA_BRANCH = "main";
 const BSDATA_API = "https://api.github.com/repos/" + BSDATA_REPO + "/contents?ref=" + BSDATA_BRANCH;
 const BSDATA_RAW = "https://raw.githubusercontent.com/" + BSDATA_REPO + "/refs/heads/" + BSDATA_BRANCH + "/";
+const CORE_REFERENCE_STORAGE_KEY = "tv_core_reference_v1";
+
+async function loadCoreRulesData() {
+  if (!els.coreRulesImportButton) return;
+
+  const button = els.coreRulesImportButton;
+  button.disabled = true;
+  button.textContent = "Loading core rules…";
+  if (els.coreRulesImportStatus) {
+    els.coreRulesImportStatus.textContent = "Loading current community reference data from BSData…";
+  }
+
+  try {
+    const fileName = "Warhammer 40,000.json";
+    const url = BSDATA_RAW + encodeURIComponent(fileName).replace(/%2F/g, "/");
+    const response = await fetch(url);
+    if (!response.ok) throw new Error("Could not download the core reference file.");
+
+    const data = await response.json();
+    const reference = buildReferenceData([{name:fileName, data}]);
+
+    if (!reference.rules.length) {
+      throw new Error("The reference file loaded, but no core rules could be read from it.");
+    }
+
+    state.referenceData = reference;
+    localStorage.setItem(CORE_REFERENCE_STORAGE_KEY, JSON.stringify(reference));
+    renderCoreRules(els.coreRuleSearch?.value || "");
+    toast("Core rules loaded");
+  } catch (error) {
+    console.error("Could not load core rules", error);
+    if (els.coreRulesImportStatus) {
+      els.coreRulesImportStatus.textContent =
+        "Core rules were not loaded. You can retry later; no rules text is bundled with the app.";
+    }
+    toast(error.message || "Could not load core rules");
+  } finally {
+    button.disabled = false;
+    button.textContent = state.referenceData?.rules?.length ? "Refresh core rules" : "Load core rules";
+  }
+}
 
 async function loadFull40kData() {
   if (state.fullDataLoading) return;
@@ -2302,6 +2335,9 @@ async function loadFull40kData() {
 
     await Promise.all(Array.from({length:concurrency}, worker));
     state.referenceData = buildReferenceData(documents);
+    try {
+      localStorage.setItem(CORE_REFERENCE_STORAGE_KEY, JSON.stringify(state.referenceData));
+    } catch {}
     const roster = buildFull40kRoster(documents);
     roster.referenceData = state.referenceData;
 
@@ -3128,7 +3164,7 @@ function updateLinkedUnitButton(unit = state.selected) {
   const linked = getLinkedUnits(unit);
   if (linked.length < 2) {
     els.linkedUnitButton.classList.add("hidden");
-    els.linkedUnitButton.textContent = "Linked";
+    els.linkedUnitButton.textContent = "Attached";
     els.linkedUnitButton.removeAttribute("title");
     return;
   }
@@ -3137,8 +3173,8 @@ function updateLinkedUnitButton(unit = state.selected) {
   const next = linked[(currentIndex + 1) % linked.length];
 
   els.linkedUnitButton.classList.remove("hidden");
-  els.linkedUnitButton.textContent = "Linked " + (currentIndex + 1) + "/" + linked.length;
-  els.linkedUnitButton.title = "Next linked datasheet: " + next.name;
+  els.linkedUnitButton.textContent = "Attached " + (currentIndex + 1) + "/" + linked.length;
+  els.linkedUnitButton.title = "Next model/unit in this attached group: " + next.name;
 }
 
 function cycleLinkedUnit() {
@@ -5317,6 +5353,11 @@ function persist() {
 
 function restore() {
   try {
+    state.referenceData = JSON.parse(localStorage.getItem(CORE_REFERENCE_STORAGE_KEY) || '{"rules":[],"stratagems":[]}');
+    if (!state.referenceData || !Array.isArray(state.referenceData.rules)) {
+      state.referenceData = {rules:[], stratagems:[]};
+    }
+
     state.rosters = JSON.parse(localStorage.getItem("tv_rosters") || "[]");
     state.rosters.forEach(roster => {
       if (roster.source === "new-recruit" && Array.isArray(roster.units)) {
@@ -5330,7 +5371,7 @@ function restore() {
 }
 
 function clearRosters() {
-  if (!confirm("Remove all loaded New Recruit lists and all-armies data from this device?")) return;
+  if (!confirm("Remove all loaded roster, army and core-rule reference data from this device?")) return;
   state.rosters = [];
   state.activeRoster = 0;
   state.selected = null;
@@ -5341,6 +5382,7 @@ function clearRosters() {
   localStorage.removeItem("tv_activeRoster");
   localStorage.removeItem("tv_active_search_rosters");
   localStorage.removeItem("tv_active_search_scopes");
+  localStorage.removeItem(CORE_REFERENCE_STORAGE_KEY);
   if (els.searchInput) els.searchInput.value = "";
   els.datasheetResultsShell?.classList.add("hidden");
   renderAll();
