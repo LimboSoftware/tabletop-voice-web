@@ -399,6 +399,15 @@ async function handlePendingRosterTransferOnBoot() {
       });
 
       const roster = await parseRosterUpload(file);
+      const importedGame = inferRosterGameSystem(roster);
+
+      if (state.gameSystem && importedGame !== state.gameSystem) {
+        throw new Error(
+          "This looks like a " +
+          (importedGame === "grimdark" ? "Grimdark Future" : "Warhammer 40,000") +
+          " list. Switch game system in Settings before importing it."
+        );
+      }
 
       const existingIndex = state.rosters.findIndex(existing =>
         existing.source === "new-recruit" &&
@@ -2089,7 +2098,7 @@ function getImportedDetachmentRequests() {
   const requests = [];
 
   for (const roster of state.rosters) {
-    if (roster.source !== "new-recruit") continue;
+    if (roster.source !== "new-recruit" || inferRosterGameSystem(roster) !== "40k") continue;
 
     for (const detachment of roster.detachments || []) {
       requests.push({
@@ -2341,7 +2350,9 @@ async function ensureDetachmentStratagems() {
 
 function renderDetachmentSummary() {
   const requests = getImportedDetachmentRequests();
-  const importedLists = state.rosters.filter(roster => roster.source === "new-recruit");
+  const importedLists = state.rosters.filter(roster =>
+    roster.source === "new-recruit" && inferRosterGameSystem(roster) === "40k"
+  );
 
   if (!requests.length) {
     if (importedLists.some(roster => !Array.isArray(roster.detachments))) {
@@ -3194,6 +3205,7 @@ function setVoicePrompt(page = state.currentPage) {
 function switchPage(page, options = {}) {
   const valid = ["setup","datasheets","strats","army-rules","score","dice","rules","share","updates","settings","guide"];
   if (!valid.includes(page)) page = "setup";
+  if (isGrimdarkMode() && ["strats","score","rules"].includes(page)) page = "setup";
   if (page !== "share" && state.shareScanner) stopShareScanner();
 
   state.currentPage = page;
@@ -3243,8 +3255,11 @@ function hideApp() {
 }
 
 function renderDataSummary() {
-  const importedLists = state.rosters.filter(roster => roster.source === "new-recruit" || roster.source === "opr");
-  const hasFullData = state.rosters.some(roster => roster.source === "bsdata");
+  const importedLists = state.rosters.filter(roster =>
+    (roster.source === "new-recruit" || roster.source === "opr") &&
+    rosterMatchesSelectedGame(roster)
+  );
+  const hasFullData = state.gameSystem === "40k" && state.rosters.some(roster => roster.source === "bsdata");
 
   els.fullDataArmySection?.classList.toggle("hidden", !hasFullData);
 
@@ -3343,6 +3358,7 @@ function renderAll() {
 
 function getAvailableSearchScopes() {
   const scopes = [];
+  if (state.gameSystem && state.gameSystem !== "40k") return scopes;
 
   state.rosters.forEach((roster, rosterIndex) => {
     if (roster.source !== "bsdata") return;
@@ -3416,7 +3432,7 @@ function getSearchCollections() {
   const collections = [];
 
   state.rosters.forEach((roster, rosterIndex) => {
-    if (roster.source === "new-recruit" || roster.source === "opr") {
+    if ((roster.source === "new-recruit" || roster.source === "opr") && rosterMatchesSelectedGame(roster)) {
       collections.push({
         id:"roster:" + roster.id,
         label:roster.name,
@@ -3516,7 +3532,10 @@ function renderActiveArmySelector() {
 function getImportedRosterEntries() {
   return state.rosters
     .map((roster, index) => ({roster, index}))
-    .filter(item => item.roster.source === "new-recruit" || item.roster.source === "opr");
+    .filter(item =>
+      (item.roster.source === "new-recruit" || item.roster.source === "opr") &&
+      rosterMatchesSelectedGame(item.roster)
+    );
 }
 
 function getUnitBrowserSources() {
@@ -4396,7 +4415,7 @@ function sourceCpStorageKey(sourceId) {
 
 function getActiveCpSource() {
   const source = getActiveUnitBrowserSource();
-  if (!source || source.id === "all" || source.kind === "opr") return null;
+  if (isGrimdarkMode() || !source || source.id === "all" || source.kind === "opr") return null;
   return source;
 }
 
@@ -4537,38 +4556,31 @@ function adjustTurnScore(player, type, delta) {
 }
 
 function updateGameContextUi(unit = state.selected) {
-  const source = getActiveUnitBrowserSource();
-  const sourceIsOpr =
-    source?.kind === "opr" ||
-    (source?.kind === "all" &&
-      source.entries?.length > 0 &&
-      source.entries.every(entry => entry.unit?.system === "opr"));
+  const grimdark = isGrimdarkMode();
 
-  const opr = unit?.system === "opr" || (!unit && sourceIsOpr);
-
-  els.appNav?.classList.toggle("opr-context", opr);
+  els.appNav?.classList.toggle("opr-context", grimdark);
 
   const stratButton = els.appNav?.querySelector('[data-page-target="strats"]');
   const scoreButton = els.appNav?.querySelector('[data-page-target="score"]');
   const armyRulesButton = els.appNav?.querySelector('[data-page-target="army-rules"]');
   const coreRulesButton = els.navMoreMenu?.querySelector('[data-page-target="rules"]');
 
-  stratButton?.classList.toggle("hidden", opr);
-  scoreButton?.classList.toggle("hidden", opr);
-  coreRulesButton?.classList.toggle("hidden", opr);
+  stratButton?.classList.toggle("hidden", grimdark);
+  scoreButton?.classList.toggle("hidden", grimdark);
+  coreRulesButton?.classList.toggle("hidden", grimdark);
 
   const armyRulesLabel = armyRulesButton?.querySelector("span:last-child");
-  if (armyRulesLabel) armyRulesLabel.textContent = opr ? "Rules" : "Army Rules";
+  if (armyRulesLabel) armyRulesLabel.textContent = grimdark ? "Rules" : "Army Rules";
 
   const heading = els.pageArmyRules?.querySelector("h1");
   const copy = els.pageArmyRules?.querySelector(".page-heading > p:last-child");
   const eyebrow = els.pageArmyRules?.querySelector(".eyebrow");
 
-  if (heading) heading.textContent = opr ? "Rules" : "Army Rules";
-  if (eyebrow) eyebrow.textContent = opr ? "OPR REFERENCE" : "ARMY REFERENCE";
+  if (heading) heading.textContent = grimdark ? "Rules" : "Army Rules";
+  if (eyebrow) eyebrow.textContent = grimdark ? "GRIMDARK REFERENCE" : "ARMY REFERENCE";
   if (copy) {
-    copy.textContent = opr
-      ? "Special rules and spells referenced by the active Army Forge list."
+    copy.textContent = grimdark
+      ? "Special rules referenced by the active Grimdark Future list."
       : "Rules that apply to the selected imported list or whole army.";
   }
 }
@@ -5721,7 +5733,10 @@ async function stopShareScanner() {
 }
 
 function renderSharePage() {
-  const rosters = state.rosters.filter(roster => roster.source === "new-recruit" || roster.source === "opr");
+  const rosters = state.rosters.filter(roster =>
+    (roster.source === "new-recruit" || roster.source === "opr") &&
+    rosterMatchesSelectedGame(roster)
+  );
   if (!els.shareRosterSelect || !els.createAppShareButton) return;
 
   els.shareRosterSelect.innerHTML = rosters.length
@@ -5770,7 +5785,9 @@ function removeSelectedShareRoster() {
 function getRosterForAppShare() {
   const rosterId = els.shareRosterSelect?.value;
   return state.rosters.find(roster =>
-    (roster.source === "new-recruit" || roster.source === "opr") && roster.id === rosterId
+    (roster.source === "new-recruit" || roster.source === "opr") &&
+    rosterMatchesSelectedGame(roster) &&
+    roster.id === rosterId
   ) || null;
 }
 
@@ -6118,11 +6135,17 @@ function restore() {
 
     state.rosters = JSON.parse(localStorage.getItem("tv_rosters") || "[]");
     state.rosters.forEach(roster => {
+      if (!roster.gameSystemKey) roster.gameSystemKey = inferRosterGameSystem(roster);
+
       if (roster.source === "new-recruit" && Array.isArray(roster.units)) {
+        roster.units.forEach(unit => {
+          if (!unit.system) unit.system = inferUnitGameSystem(unit) === "grimdark" ? "opr" : "40k";
+        });
         resolveRosterAttachments(roster.units);
       }
     });
     state.activeRoster = Math.min(Number(localStorage.getItem("tv_activeRoster") || 0), Math.max(0, state.rosters.length - 1));
+    ensureActiveRosterForGame();
   } catch {
     state.rosters = [];
   }
