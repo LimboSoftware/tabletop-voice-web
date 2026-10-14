@@ -388,20 +388,18 @@
           <p>Get occasional emails about new features, beta updates and future releases.</p>
         </div>
 
-        <section class="tool-card updates-card">
-          <form id="updatesForm" class="updates-form">
-            <label for="updatesEmail">Email address</label>
-            <div class="updates-input-row">
-              <input id="updatesEmail" name="email" type="email" inputmode="email" autocomplete="email" maxlength="254" placeholder="you@example.com" required />
-              <button id="updatesSubmit" class="primary-button" type="submit">Sign me up</button>
-            </div>
-            <div class="updates-honeypot" aria-hidden="true">
-              <label for="updatesCompany">Company</label>
-              <input id="updatesCompany" name="company" type="text" tabindex="-1" autocomplete="off" />
-            </div>
-            <p id="updatesStatus" class="updates-status" role="status" aria-live="polite"></p>
-          </form>
-          <small class="updates-note">We use double opt-in, so Brevo will email you a confirmation link first. No spam, and you can unsubscribe at any time. <a href="./privacy.html" target="_blank" rel="noopener noreferrer">Privacy &amp; data use</a></small>
+        <section class="tool-card updates-card brevo-embed-card">
+          <iframe
+            class="brevo-signup-frame"
+            title="Sign up for Tabletop Voice updates"
+            width="540"
+            height="305"
+            src="https://e92be93e.sibforms.com/v2/serve/MUIFAB4HQmIZpJ94hy7ZJQ3aW2AlvdvXrTzD5v-N3R0PLsL1RMML_-LV2MX8oCZBDtIfRLOq4OrSiyNCHIZEh5Ajw-nzg21Zk_fpTstwCT4eEuX4A4vDUSLRTPajGLhTlfFPngR2Uav6fdxUbPUZq2AyiNQ8OCZ456S5aHZlKEfuSikH6w5_mdFq9fTOv6n-2UfW7klrA6K5lQB1Yw=="
+            frameborder="0"
+            scrolling="auto"
+            loading="lazy"
+            referrerpolicy="no-referrer"></iframe>
+          <small class="updates-note">Signup and double opt-in are handled by Brevo. <a href="./privacy.html" target="_blank" rel="noopener noreferrer">Privacy &amp; data use</a></small>
         </section>
       </section>
 
