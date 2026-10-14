@@ -85,6 +85,8 @@ const els = {
   pageUpdates: $("pageUpdates"),
   pageSettings: $("pageSettings"),
   gameSystemModal: $("gameSystemModal"),
+  gameSystemCatalogue: $("gameSystemCatalogue"),
+  settingsGameSystemCatalogue: $("settingsGameSystemCatalogue"),
   settingsCurrentGame: $("settingsCurrentGame"),
   newRecruitImportCard: $("newRecruitImportCard"),
   newRecruitImportLabel: $("newRecruitImportLabel"),
@@ -169,6 +171,7 @@ async function enforcePortraitOrientation() {
 function boot() {
   applyMode();
   enforcePortraitOrientation();
+  renderGameSystemCatalogues();
   bindEvents();
   setupSpeech();
 
@@ -208,11 +211,19 @@ function bindEvents() {
       loadOprArmyForgeList();
     }
   });
-  document.querySelectorAll("[data-game-system-choice]").forEach(button => {
-    button.addEventListener("click", () => setGameSystem(button.dataset.gameSystemChoice, {fromChooser:true}));
-  });
-  document.querySelectorAll("[data-settings-game-system]").forEach(button => {
-    button.addEventListener("click", () => setGameSystem(button.dataset.settingsGameSystem));
+  document.addEventListener("click", event => {
+    const providerTab = event.target.closest("[data-game-provider-tab]");
+    if (providerTab) {
+      const catalogue = providerTab.closest(".game-catalogue");
+      if (catalogue) setGameCatalogueProvider(catalogue, providerTab.dataset.gameProviderTab);
+      return;
+    }
+
+    const gameChoice = event.target.closest("[data-game-system-choice]");
+    if (gameChoice && !gameChoice.disabled) {
+      const fromChooser = Boolean(gameChoice.closest("#gameSystemModal"));
+      setGameSystem(gameChoice.dataset.gameSystemChoice, {fromChooser});
+    }
   });
   els.clearRoster.addEventListener("click", clearRosters);
   els.searchInput.addEventListener("input", () => {
@@ -452,16 +463,56 @@ async function handlePendingRosterTransferOnBoot() {
   }
 }
 
-const GAME_SYSTEMS = {
-  "40k": {
-    name:"Warhammer 40,000",
-    shortName:"40K"
+const GAME_PROVIDERS = [
+  {
+    id:"gw",
+    name:"Games Workshop",
+    systems:[
+      {id:"40k", name:"Warhammer 40,000", detail:"New Recruit, 40K references, scoring and table tools", available:true},
+      {id:"aos", name:"Warhammer Age of Sigmar", detail:"AoS 4th · New Recruit roster support", available:true, beta:true},
+      {id:"heresy", name:"Warhammer: The Horus Heresy", detail:"Planned", available:false},
+      {id:"old-world", name:"Warhammer: The Old World", detail:"Planned", available:false},
+      {id:"kill-team", name:"Kill Team", detail:"Planned", available:false},
+      {id:"necromunda", name:"Necromunda", detail:"Planned", available:false},
+      {id:"warcry", name:"Warcry", detail:"Planned", available:false},
+      {id:"underworlds", name:"Warhammer Underworlds", detail:"Planned", available:false},
+      {id:"legions-imperialis", name:"Legions Imperialis", detail:"Planned", available:false},
+      {id:"adeptus-titanicus", name:"Adeptus Titanicus", detail:"Planned", available:false},
+      {id:"blood-bowl", name:"Blood Bowl", detail:"Planned", available:false},
+      {id:"middle-earth", name:"Middle-earth Strategy Battle Game", detail:"Planned", available:false},
+      {id:"warhammer-quest", name:"Warhammer Quest", detail:"Planned", available:false}
+    ]
   },
-  grimdark: {
-    name:"Grimdark Future",
-    shortName:"Grimdark"
+  {
+    id:"opr",
+    name:"OnePageRules",
+    systems:[
+      {id:"grimdark", name:"Grimdark Future", detail:"Army Forge + New Recruit · includes Firefight", available:true},
+      {id:"opr-starfleet", name:"Grimdark Future: Star Quest", detail:"Planned", available:false},
+      {id:"opr-warfleets", name:"Grimdark Future: Warfleets", detail:"Planned", available:false},
+      {id:"aof", name:"Age of Fantasy", detail:"Planned", available:false},
+      {id:"aof-skirmish", name:"Age of Fantasy: Skirmish", detail:"Planned", available:false},
+      {id:"aof-regiments", name:"Age of Fantasy: Regiments", detail:"Planned", available:false},
+      {id:"aof-quest", name:"Age of Fantasy: Quest", detail:"Planned", available:false}
+    ]
+  },
+  {
+    id:"other",
+    name:"Other",
+    systems:[
+      {id:"trench-crusade", name:"Trench Crusade", detail:"Planned", available:false}
+    ]
   }
-};
+];
+
+const GAME_SYSTEMS = Object.fromEntries(
+  GAME_PROVIDERS.flatMap(provider =>
+    provider.systems.map(system => [
+      system.id,
+      {...system, provider:provider.id, providerName:provider.name}
+    ])
+  )
+);
 
 function currentGameName() {
   return GAME_SYSTEMS[state.gameSystem]?.name || "Choose a game";
@@ -469,6 +520,84 @@ function currentGameName() {
 
 function isGrimdarkMode() {
   return state.gameSystem === "grimdark";
+}
+
+function isAosMode() {
+  return state.gameSystem === "aos";
+}
+
+function gameProviderForSystem(gameSystem = state.gameSystem) {
+  return GAME_SYSTEMS[gameSystem]?.provider || "gw";
+}
+
+function gameSystemCardHtml(system) {
+  const selected = state.gameSystem === system.id;
+  const status = system.available
+    ? (system.beta ? "BETA" : "AVAILABLE")
+    : "TBC";
+
+  if (!system.available) {
+    return `
+      <div class="game-system-option disabled" aria-disabled="true">
+        <span class="game-system-status">${status}</span>
+        <strong>${escapeHtml(system.name)}</strong>
+        <small>${escapeHtml(system.detail || "Planned")}</small>
+      </div>`;
+  }
+
+  return `
+    <button
+      class="game-system-option${selected ? " selected" : ""}"
+      type="button"
+      data-game-system-choice="${escapeHtml(system.id)}"
+      aria-pressed="${selected ? "true" : "false"}">
+      <span class="game-system-status live">${status}</span>
+      <strong>${escapeHtml(system.name)}</strong>
+      <small>${escapeHtml(system.detail || "")}</small>
+    </button>`;
+}
+
+function renderGameSystemCatalogue(container, preferredProvider = null) {
+  if (!container) return;
+
+  const requested =
+    preferredProvider ||
+    container.dataset.activeProvider ||
+    gameProviderForSystem();
+
+  const provider = GAME_PROVIDERS.find(item => item.id === requested) || GAME_PROVIDERS[0];
+  container.dataset.activeProvider = provider.id;
+
+  container.innerHTML = `
+    <div class="game-provider-tabs" role="tablist" aria-label="Game publishers">
+      ${GAME_PROVIDERS.map(item => `
+        <button
+          type="button"
+          role="tab"
+          class="game-provider-tab${item.id === provider.id ? " active" : ""}"
+          data-game-provider-tab="${escapeHtml(item.id)}"
+          aria-selected="${item.id === provider.id ? "true" : "false"}">
+          ${escapeHtml(item.name)}
+        </button>`).join("")}
+    </div>
+    <div class="game-provider-heading">
+      <span class="section-label">${escapeHtml(provider.name)}</span>
+      <small>${provider.systems.filter(system => system.available).length} available now</small>
+    </div>
+    <div class="game-system-grid">
+      ${provider.systems.map(gameSystemCardHtml).join("")}
+    </div>`;
+}
+
+function renderGameSystemCatalogues(preferredProvider = null) {
+  renderGameSystemCatalogue(els.gameSystemCatalogue, preferredProvider);
+  renderGameSystemCatalogue(els.settingsGameSystemCatalogue, preferredProvider);
+}
+
+function setGameCatalogueProvider(container, providerId) {
+  if (!GAME_PROVIDERS.some(provider => provider.id === providerId)) return;
+  container.dataset.activeProvider = providerId;
+  renderGameSystemCatalogue(container, providerId);
 }
 
 function showEntryModalIfNeeded() {
@@ -536,7 +665,7 @@ function ensureActiveRosterForGame() {
 }
 
 function setGameSystem(gameSystem, options = {}) {
-  if (!GAME_SYSTEMS[gameSystem]) return;
+  if (!GAME_SYSTEMS[gameSystem]?.available) return;
 
   state.gameSystem = gameSystem;
   localStorage.setItem("tv_game_system", gameSystem);
@@ -547,6 +676,7 @@ function setGameSystem(gameSystem, options = {}) {
   ensureActiveRosterForGame();
 
   els.gameSystemModal?.classList.add("hidden");
+  renderGameSystemCatalogues(gameProviderForSystem(gameSystem));
   applyGameSystemUi();
   renderAll();
 
@@ -566,17 +696,17 @@ function setGameSystem(gameSystem, options = {}) {
 
 function applyGameSystemUi() {
   const grimdark = isGrimdarkMode();
+  const aos = isAosMode();
 
   document.body.classList.toggle("game-grimdark", grimdark);
+  document.body.classList.toggle("game-aos", aos);
   document.body.classList.toggle("game-40k", state.gameSystem === "40k");
 
   if (els.settingsCurrentGame) {
     els.settingsCurrentGame.textContent = currentGameName();
   }
 
-  document.querySelectorAll("[data-settings-game-system]").forEach(button => {
-    button.classList.toggle("selected", button.dataset.settingsGameSystem === state.gameSystem);
-  });
+  renderGameSystemCatalogues(gameProviderForSystem());
 
   if (els.fullDataImportCard) els.fullDataImportCard.classList.toggle("hidden", grimdark);
   if (els.oprImportCard) els.oprImportCard.classList.toggle("hidden", !grimdark);
