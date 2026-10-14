@@ -5329,10 +5329,16 @@ async function startOpponentQrScanner() {
 }
 
 function handleShareUrlOnBoot() {
-  const params = new URLSearchParams(location.search);
-  const peerId = params.get("tvshare");
-  const key = params.get("key");
+  const url = new URL(location.href);
+  const peerId = url.searchParams.get("tvshare");
+  const key = url.searchParams.get("key");
   if (!peerId || !key) return;
+
+  // Remove one-time connection details from the address bar/history before
+  // making any network connection. The values remain only in memory.
+  url.searchParams.delete("tvshare");
+  url.searchParams.delete("key");
+  history.replaceState(history.state || {}, "", url.pathname + url.search + url.hash);
 
   switchPage("share", {silent:true});
   connectOpponentShare(peerId, key);
