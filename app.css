@@ -5119,3 +5119,21 @@ body {
     border-top: 1px solid #25303f !important;
   }
 }
+
+
+.setup-loaded-lists {
+  margin-top: 12px;
+  padding: 12px 0 2px;
+  border-top: 1px solid #26313b;
+}
+
+.setup-loaded-lists .data-roster-summary {
+  margin-top: 8px;
+  margin-bottom: 0;
+}
+
+@media (min-width: 761px) {
+  .app-nav.opr-context {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+}
