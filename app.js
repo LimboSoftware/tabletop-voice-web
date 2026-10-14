@@ -586,18 +586,18 @@ function applyGameSystemUi() {
   }
 
   if (els.newRecruitImportLabel) {
-    els.newRecruitImportLabel.textContent = grimdark ? "GRIMDARK FUTURE · NEW RECRUIT" : "WARHAMMER 40,000 · NEW RECRUIT";
+    els.newRecruitImportLabel.textContent = "NEW RECRUIT";
   }
   if (els.newRecruitImportTitle) {
-    els.newRecruitImportTitle.textContent = grimdark ? "Import a Grimdark list" : "Import your 40K lists";
+    els.newRecruitImportTitle.textContent = "Import exported list";
   }
   if (els.newRecruitImportCopy) {
     els.newRecruitImportCopy.textContent = grimdark
-      ? "Import a Grimdark Future or Firefight list exported from New Recruit."
-      : "Import multiple New Recruit JSON, ROS, ROSZ or TXT exports for the armies in your game.";
+      ? "Export your Grimdark Future or Firefight roster from New Recruit, then choose the JSON, ROS, ROSZ or TXT file here."
+      : "Export your Warhammer 40,000 roster from New Recruit, then choose the JSON, ROS, ROSZ or TXT file here.";
   }
   if (els.importButton) {
-    els.importButton.textContent = grimdark ? "Import Grimdark New Recruit list" : "Import New Recruit lists";
+    els.importButton.textContent = "Choose New Recruit file";
   }
 
   const setupHero = els.welcome?.querySelector(".setup-hero .lede");
