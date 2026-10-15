@@ -90,6 +90,21 @@
             <input id="fileInput" type="file" multiple accept=".json,.ros,.rosz,.txt,application/json,text/plain,application/xml,text/xml,application/zip" hidden />
           </section>
 
+          <section id="liCommunityImportCard" class="tool-card setup-import-card li-community-import-card hidden">
+            <span class="section-label">LEGION BUILDER / LEGION COMPANION</span>
+            <h2>Import community list</h2>
+            <p>Legion Builder: copy the list view. Legion Companion: use its text or JSON export. Paste it here, or choose an exported file.</p>
+            <div class="li-community-import-controls">
+              <textarea id="liCommunityInput" rows="7" autocomplete="off" spellcheck="false" placeholder="Paste Legion Builder list text or Legion Companion text / JSON…" aria-label="Legions Imperialis community list"></textarea>
+              <div class="li-community-import-actions">
+                <button id="liCommunityImportButton" class="primary-button large setup-main-action" type="button">Import pasted list</button>
+                <button id="liCommunityFileButton" class="ghost-button large setup-main-action" type="button">Choose JSON / TXT</button>
+              </div>
+              <input id="liCommunityFileInput" type="file" accept=".json,.txt,application/json,text/plain" hidden />
+            </div>
+            <small id="liCommunityImportStatus" class="opr-import-status">Supports Legion Builder list text/JSON and Legion Companion text/JSON exports.</small>
+          </section>
+
           <section id="fullDataImportCard" class="tool-card setup-import-card">
             <span class="section-label">ALL ARMIES</span>
             <h2>Full datasheet lookup</h2>
