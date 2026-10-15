@@ -2809,7 +2809,520 @@ async function handleLiCommunityFile(event) {
 }
 
 
+
+function cleanGyrinxText(value = "") {
+  return String(value || "")
+    .replace(/\u00a0/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function cleanGyrinxWeaponName(value = "") {
+  return cleanGyrinxText(value)
+    .replace(/^[+\-–—]\s*/, "")
+    .replace(/\s+—\s+\d+\s*(?:cr|¢)\b.*$/i, "")
+    .replace(/\s+\(\+?\d+\s*(?:cr|¢)\)\s*$/i, "")
+    .replace(/\s+\d+\s*(?:cr|¢)\s*$/i, "")
+    .trim();
+}
+
+function splitGyrinxNames(value = "") {
+  return cleanGyrinxText(value)
+    .split(/\s*,\s*/)
+    .map(item => item.trim())
+    .filter(item =>
+      item &&
+      !/^choose\b/i.test(item) &&
+      !/^add\b/i.test(item)
+    );
+}
+
+function parseGyrinxFighterStats(cardRoot) {
+  const allowed = new Set([
+    "m","ws","bs","s","t","w","i","a","ld","cl","wil","int"
+  ]);
+  const stats = [];
+  let typeLine = "";
+  let xp = "";
+
+  for (const table of cardRoot.querySelectorAll("table")) {
+    const firstHeading = cleanGyrinxText(table.querySelector("th")?.textContent);
+    if (normalize(firstHeading) === "weapons") continue;
+
+    const rows = [...table.querySelectorAll("tr")];
+    for (let index = 0; index < rows.length - 1; index++) {
+      const headingCells = [...rows[index].querySelectorAll("th")];
+      if (!headingCells.length) continue;
+
+      const valueCells = [...rows[index + 1].querySelectorAll("td")];
+      if (!valueCells.length) continue;
+
+      const headings = headingCells.map(cell => cleanGyrinxText(cell.textContent));
+      const values = valueCells.map(cell => cleanGyrinxText(cell.textContent));
+      if (!headings.some(label => allowed.has(normalize(label)))) continue;
+
+      for (let cellIndex = 0; cellIndex < Math.min(headings.length, values.length); cellIndex++) {
+        const label = headings[cellIndex];
+        const value = values[cellIndex];
+        const key = normalize(label);
+        if (!label || !value) continue;
+
+        if (allowed.has(key)) {
+          if (!stats.some(stat => normalize(stat.label) === key)) {
+            stats.push({label, value});
+          }
+        } else if (key === "type") {
+          typeLine = value;
+        } else if (key === "xp") {
+          xp = value;
+        }
+      }
+
+      index++;
+    }
+  }
+
+  return {stats, typeLine, xp};
+}
+
+function parseGyrinxWeapons(cardRoot) {
+  const profiles = [];
+  const gear = [];
+
+  const weaponTable = [...cardRoot.querySelectorAll("table")].find(table =>
+    normalize(cleanGyrinxText(table.querySelector("th")?.textContent)) === "weapons"
+  );
+  if (!weaponTable) return {profiles, gear};
+
+  const headingCells = [...weaponTable.querySelectorAll("thead th")];
+  const columns = headingCells.slice(1).map(cell => cleanGyrinxText(cell.textContent));
+  let pendingWeapon = "";
+  let lastProfile = null;
+
+  for (const row of weaponTable.querySelectorAll("tbody tr")) {
+    const cells = [...row.querySelectorAll("td")];
+    if (!cells.length) continue;
+
+    const firstText = cleanGyrinxText(cells[0].textContent);
+    const allText = cleanGyrinxText(row.textContent);
+
+    if (cells.length === 1 || cells[0].colSpan > 1) {
+      if (!allText) continue;
+
+      if (/^\+/.test(allText)) {
+        gear.push(cleanGyrinxWeaponName(allText));
+        continue;
+      }
+
+      if (lastProfile && !firstText) {
+        const trait = cleanGyrinxText(cells.at(-1)?.textContent);
+        if (trait) {
+          const existing = lastProfile.values.find(value => normalize(value.label) === "traits");
+          if (existing) existing.value = [existing.value, trait].filter(Boolean).join(", ");
+          else lastProfile.values.push({label:"Traits", value:trait});
+        }
+        continue;
+      }
+
+      pendingWeapon = cleanGyrinxWeaponName(allText);
+      continue;
+    }
+
+    if (!firstText) {
+      const trait = cleanGyrinxText(cells.at(-1)?.textContent);
+      if (trait && lastProfile) {
+        const existing = lastProfile.values.find(value => normalize(value.label) === "traits");
+        if (existing) existing.value = [existing.value, trait].filter(Boolean).join(", ");
+        else lastProfile.values.push({label:"Traits", value:trait});
+      }
+      continue;
+    }
+
+    if (/^\+/.test(firstText)) {
+      gear.push(cleanGyrinxWeaponName(firstText));
+      continue;
+    }
+
+    const rawProfileName = cleanGyrinxWeaponName(firstText);
+    const namedSubProfile = /^[\-–—]/.test(firstText.trim());
+    const displayName = namedSubProfile && pendingWeapon
+      ? pendingWeapon + " — " + rawProfileName
+      : rawProfileName;
+
+    const values = [];
+    for (let index = 0; index < columns.length; index++) {
+      const value = cleanGyrinxText(cells[index + 1]?.textContent);
+      values.push({
+        label:columns[index],
+        value:value || "—"
+      });
+    }
+
+    const hasStats = values.some(value => value.value !== "—");
+    if (!hasStats) {
+      pendingWeapon = rawProfileName;
+      continue;
+    }
+
+    lastProfile = {
+      name:displayName || pendingWeapon || "Weapon",
+      type:"Necromunda Weapon",
+      system:"necromunda",
+      quantity:1,
+      values
+    };
+    profiles.push(lastProfile);
+
+    if (!namedSubProfile) pendingWeapon = rawProfileName;
+  }
+
+  return {
+    profiles:dedupeBy(
+      profiles,
+      profile => normalize(profile.name + "|" + JSON.stringify(profile.values || []))
+    ),
+    gear:dedupeBy(gear.filter(Boolean), value => normalize(value))
+  };
+}
+
+function parseGyrinxDetailRows(cardRoot) {
+  const rules = [];
+  const gear = [];
+  const counters = [];
+
+  const detailLists = [...cardRoot.querySelectorAll("dl")];
+  for (const list of detailLists) {
+    const terms = [...list.querySelectorAll(":scope > dt")];
+    for (const term of terms) {
+      let description = term.nextElementSibling;
+      while (description && description.tagName !== "DD") {
+        description = description.nextElementSibling;
+      }
+      if (!description) continue;
+
+      const label = cleanGyrinxText(term.textContent);
+      const value = cleanGyrinxText(description.textContent);
+      if (!label || !value) continue;
+
+      const key = normalize(label);
+      if (["skills","rules","powers"].includes(key)) {
+        const category = key === "skills"
+          ? "Skill"
+          : key === "powers"
+            ? "Power"
+            : "Rule";
+        for (const name of splitGyrinxNames(value)) {
+          rules.push({name, text:"", category});
+        }
+        continue;
+      }
+
+      if (
+        key === "gear" ||
+        key.includes("equipment") ||
+        key.includes("wargear") ||
+        key.includes("armour") ||
+        key.includes("gear")
+      ) {
+        gear.push(...splitGyrinxNames(value));
+        continue;
+      }
+
+      if (!/^(type|xp)$/i.test(label)) {
+        counters.push({label, value});
+      }
+    }
+  }
+
+  return {
+    rules:dedupeBy(rules, rule => normalize(rule.category + "|" + rule.name)),
+    gear:dedupeBy(gear, value => normalize(value)),
+    counters:dedupeBy(counters, counter => normalize(counter.label + "|" + counter.value))
+  };
+}
+
+function gyrinxFighterCategories(profileName = "", typeLine = "", status = "") {
+  const text = normalize([profileName, typeLine, status].filter(Boolean).join(" "));
+  const categories = [];
+
+  const tests = [
+    ["leader","Leader"],
+    ["champion","Champion"],
+    ["juve","Juve"],
+    ["prospect","Prospect"],
+    ["ganger","Ganger"],
+    ["hanger on","Hanger-on"],
+    ["hanger-on","Hanger-on"],
+    ["brute","Brute"],
+    ["vehicle","Vehicle"],
+    ["exotic beast","Pet"],
+    ["pet","Pet"]
+  ];
+
+  for (const [needle, category] of tests) {
+    if (text.includes(normalize(needle))) categories.push(category);
+  }
+
+  return dedupeBy(categories.length ? categories : ["Fighter"], value => normalize(value));
+}
+
+function parseGyrinxN26Fighter(header, index) {
+  const cardRoot = header.parentElement;
+  if (!cardRoot) return null;
+
+  const id = String(header.id || "").replace(/^model-/, "") || String(index);
+  const name = cleanGyrinxText(
+    header.querySelector('[id^="n26-model-name-"]')?.textContent
+  );
+  if (!name) return null;
+
+  const profileName = cleanGyrinxText(
+    header.querySelector('[id^="n26-model-profile-name-"]')?.textContent
+  );
+
+  const headerText = cleanGyrinxText(header.textContent);
+  const ratingMatch = headerText.match(/(\d+)\s*(?:cr|¢)\b/i);
+  const statusCandidates = [
+    "In Recovery","Ransomed","Captured","Dead","Destroyed","Active"
+  ];
+  const status = statusCandidates.find(candidate =>
+    normalize(headerText).includes(normalize(candidate))
+  ) || "";
+
+  const statData = parseGyrinxFighterStats(cardRoot);
+  const weaponData = parseGyrinxWeapons(cardRoot);
+  const details = parseGyrinxDetailRows(cardRoot);
+
+  const rules = [
+    ...details.rules,
+    ...details.gear.map(item => ({name:item, text:"", category:"Gear"})),
+    ...weaponData.gear.map(item => ({name:item, text:"", category:"Weapon accessory"}))
+  ];
+
+  if (status && normalize(status) !== "active") {
+    rules.unshift({name:status, text:"", category:"Status"});
+  }
+
+  const stats = [...statData.stats];
+  if (ratingMatch) stats.push({label:"Rating", value:ratingMatch[1] + "cr"});
+
+  const categories = gyrinxFighterCategories(
+    profileName,
+    statData.typeLine,
+    status
+  );
+
+  return {
+    id:"gyrinx-" + id,
+    externalId:id,
+    name,
+    type:statData.typeLine || profileName || "Fighter",
+    system:"necromunda",
+    gameSystemKey:"necromunda",
+    categories,
+    stats,
+    rules:dedupeBy(
+      rules,
+      rule => normalize(rule.category + "|" + rule.name + "|" + rule.text)
+    ),
+    profiles:weaponData.profiles,
+    necromunda:{
+      profileName,
+      typeLine:statData.typeLine,
+      rating:ratingMatch ? Number(ratingMatch[1]) : null,
+      xp:statData.xp,
+      status,
+      counters:details.counters,
+      gear:dedupeBy(
+        [...details.gear, ...weaponData.gear],
+        value => normalize(value)
+      )
+    },
+    searchText:normalize([
+      name,
+      profileName,
+      statData.typeLine,
+      status,
+      categories,
+      statData.stats.map(stat => [stat.label, stat.value]),
+      weaponData.profiles.map(profile => profile.name),
+      rules.map(rule => rule.name),
+      details.counters.map(counter => [counter.label, counter.value])
+    ].flat(4).join(" "))
+  };
+}
+
+function parseGyrinxGangRules(sheet, cardRoots) {
+  const rules = [];
+
+  for (const term of sheet.querySelectorAll("dt")) {
+    if (cardRoots.some(root => root.contains(term))) continue;
+    if (normalize(cleanGyrinxText(term.textContent)) !== "rules") continue;
+
+    let description = term.nextElementSibling;
+    while (description && description.tagName !== "DD") {
+      description = description.nextElementSibling;
+    }
+    if (!description) continue;
+
+    for (const name of splitGyrinxNames(description.textContent)) {
+      rules.push({name, text:"", category:"Gang Rule"});
+    }
+  }
+
+  return dedupeBy(rules, rule => normalize(rule.name));
+}
+
+function parseGyrinxN26GangHtml(html, sourceUrl = "") {
+  const doc = new DOMParser().parseFromString(String(html || ""), "text/html");
+  const sheet = doc.querySelector("#n26-gang-sheet");
+  if (!sheet) {
+    throw new Error("This Gyrinx page did not contain a readable N26 gang.");
+  }
+
+  const headers = [...sheet.querySelectorAll('[id^="model-"]')];
+  const units = headers
+    .map((header, index) => parseGyrinxN26Fighter(header, index))
+    .filter(Boolean);
+
+  if (!units.length) {
+    throw new Error("The Gyrinx gang was found, but no fighter cards could be read.");
+  }
+
+  const cardRoots = headers.map(header => header.parentElement).filter(Boolean);
+  const pageText = cleanGyrinxText(sheet.textContent);
+  const name = cleanGyrinxText(sheet.querySelector("h1")?.textContent) ||
+    cleanGyrinxText(doc.title).replace(/\s*[|–—-]\s*Gyrinx.*$/i, "") ||
+    "Necromunda gang";
+
+  const ratingMatch = pageText.match(/\bRating\s+(\d+)\b/i);
+  const creditsMatch = pageText.match(/\bCredits\s+(\d+)\b/i);
+  const wealthMatch = pageText.match(/\bWealth\s+(\d+)\b/i);
+
+  const profileWords = units
+    .map(unit => unit.necromunda?.profileName || "")
+    .join(" ");
+  const gangNames = [
+    "Goliath","Escher","Orlock","Van Saar","Cawdor","Delaque",
+    "Palanite Enforcers","Corpse Grinder Cult","Genestealer Cult",
+    "Chaos Cult","Venators","Outcasts","Ash Waste Nomads"
+  ];
+  const gangType = gangNames.find(type =>
+    normalize(profileWords).includes(normalize(type))
+  ) || "Necromunda";
+
+  return {
+    id:crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random()),
+    name,
+    faction:gangType,
+    source:"gyrinx",
+    gameSystemKey:"necromunda",
+    importFormat:"gyrinx-share",
+    points:null,
+    units,
+    armyRules:parseGyrinxGangRules(sheet, cardRoots),
+    referenceData:{rules:[], stratagems:[]},
+    importedAt:Date.now(),
+    necromunda:{
+      rating:ratingMatch ? Number(ratingMatch[1]) : null,
+      credits:creditsMatch ? Number(creditsMatch[1]) : null,
+      wealth:wealthMatch ? Number(wealthMatch[1]) : null,
+      sourceUrl
+    }
+  };
+}
+
+async function loadGyrinxGang() {
+  const value = String(els.necromundaShareInput?.value || "").trim();
+  if (!value) {
+    if (els.necromundaImportStatus) {
+      els.necromundaImportStatus.textContent = "Paste a public Gyrinx N26 gang link first.";
+    }
+    toast("Paste a Gyrinx gang link.");
+    return;
+  }
+
+  if (!isNecromundaMode()) {
+    toast("Switch to Necromunda before importing this gang.");
+    return;
+  }
+
+  const button = els.necromundaImportButton;
+  if (button) {
+    button.disabled = true;
+    button.textContent = "Importing…";
+  }
+  if (els.necromundaImportStatus) {
+    els.necromundaImportStatus.dataset.busy = "1";
+    els.necromundaImportStatus.textContent = "Loading the public gang from Gyrinx…";
+  }
+
+  try {
+    const response = await fetch("./api/gyrinx-gang?url=" + encodeURIComponent(value));
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(payload.error || "Could not import this Gyrinx gang.");
+    }
+
+    const roster = parseGyrinxN26GangHtml(payload.html, payload.url || value);
+    const existingIndex = state.rosters.findIndex(existing =>
+      existing.source === "gyrinx" &&
+      (
+        (existing.necromunda?.sourceUrl && existing.necromunda.sourceUrl === roster.necromunda.sourceUrl) ||
+        (
+          normalize(existing.name) === normalize(roster.name) &&
+          normalize(existing.faction) === normalize(roster.faction)
+        )
+      )
+    );
+
+    if (existingIndex >= 0) {
+      state.rosters.splice(existingIndex, 1, roster);
+      state.activeRoster = existingIndex;
+    } else {
+      state.rosters.push(roster);
+      state.activeRoster = state.rosters.length - 1;
+    }
+
+    state.unitBrowserSourceId = "roster:" + roster.id;
+    localStorage.setItem("tv_unit_browser_source", state.unitBrowserSourceId);
+    state.selected = null;
+    state.selectedRosterId = null;
+
+    persist();
+    renderAll();
+    switchPage("datasheets", {silent:true});
+
+    if (els.necromundaShareInput) els.necromundaShareInput.value = "";
+    if (els.necromundaImportStatus) {
+      els.necromundaImportStatus.dataset.busy = "";
+      els.necromundaImportStatus.textContent =
+        "Imported " + roster.units.length + " fighters" +
+        (roster.necromunda.rating != null ? " · Rating " + roster.necromunda.rating : "");
+    }
+    toast("Imported " + roster.name);
+  } catch (error) {
+    console.error("Gyrinx import failed", error);
+    if (els.necromundaImportStatus) {
+      els.necromundaImportStatus.dataset.busy = "";
+      els.necromundaImportStatus.textContent =
+        error.message || "Could not import this Gyrinx gang.";
+    }
+    toast(error.message || "Could not import this Gyrinx gang.");
+  } finally {
+    if (button) {
+      button.disabled = false;
+      button.textContent = "Import Gyrinx gang";
+    }
+  }
+}
+
+
 function rosterSourceSummary(roster) {
+  if (roster?.source === "gyrinx") {
+    return "Necromunda · Gyrinx · N26";
+  }
+
   if (roster?.source === "opr") {
     return "OnePageRules · " + (roster.gameName || oprGameName(roster.gameSystem)) + " · Army Forge";
   }
