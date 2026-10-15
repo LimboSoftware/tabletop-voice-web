@@ -4004,7 +4004,7 @@ function dndParseSpells(root, scores, proficiencyBonus) {
     const requiresAttackRoll = Boolean(definition.requiresAttackRoll || spell.requiresAttackRoll || definition.attackType);
     const requiresSavingThrow = Boolean(definition.requiresSavingThrow || spell.requiresSavingThrow || definition.saveDcAbilityId);
     const saveAbility = DND_ABILITY_IDS[dndNumber(definition.saveDcAbilityId ?? spell.saveDcAbilityId, 0)] || "";
-    const damage = dndDiceExpression(definition.damageEffect || spell.damageEffect || definition.modifiers || definition.description);
+    const damage = dndDiceExpression(definition.damageEffect || spell.damageEffect || definition.modifiers);
 
     const components = (definition.components || [])
       .map(value => ({1:"V",2:"S",3:"M"})[Number(value)])
@@ -4036,20 +4036,126 @@ function dndParseSpells(root, scores, proficiencyBonus) {
   }).filter(spell => spell.name);
 }
 
+function dndSpellSlotTableRow(spellRules, classLevel) {
+  const table = spellRules?.levelSpellSlots;
+  if (!Array.isArray(table) || !table.length || classLevel < 1) return [];
+
+  // Current D&D Beyond captures use 20 rows (levels 1-20); some older
+  // payloads/importers expose a leading level-0 row. Support both shapes.
+  const zeroRow = Array.isArray(table[0]) && table[0].every(value => Number(value || 0) === 0);
+  const index = table.length >= 21 && zeroRow
+    ? classLevel
+    : classLevel - 1;
+
+  const row = table[index];
+  return Array.isArray(row) ? row.map(value => Math.max(0, Number(value || 0))) : [];
+}
+
+function dndClassSpellRules(classEntry) {
+  if (!dndIsRecord(classEntry)) return null;
+  return classEntry.definition?.spellRules ||
+    classEntry.subclassDefinition?.spellRules ||
+    null;
+}
+
+function dndClassCanCast(classEntry) {
+  if (!dndIsRecord(classEntry)) return false;
+  return Boolean(
+    classEntry.definition?.canCastSpells ||
+    classEntry.subclassDefinition?.canCastSpells
+  );
+}
+
 function dndSpellSlots(root) {
   const merged = new Map();
-  for (const slot of [...(root?.spellSlots || []), ...(root?.pactMagic || [])]) {
+  const classes = (root?.classes || []).filter(dndIsRecord);
+  const castingClasses = classes.filter(dndClassCanCast);
+  const pactNames = new Set(["warlock","blood hunter"]);
+  const pactCasters = castingClasses.filter(entry =>
+    pactNames.has(normalize(entry.definition?.name || entry.name || ""))
+  );
+  const standardCasters = castingClasses.filter(entry => !pactCasters.includes(entry));
+
+  const addMaxRow = (row, pool = "spell") => {
+    for (let index = 0; index < row.length; index++) {
+      const max = Math.max(0, Number(row[index] || 0));
+      if (!max) continue;
+      const level = index + 1;
+      const existing = merged.get(level) || {level,max:0,used:0,pools:[]};
+      existing.max += max;
+      if (!existing.pools.includes(pool)) existing.pools.push(pool);
+      merged.set(level, existing);
+    }
+  };
+
+  if (standardCasters.length === 1) {
+    const cls = standardCasters[0];
+    addMaxRow(
+      dndSpellSlotTableRow(dndClassSpellRules(cls), Math.max(1, Number(cls.level || 1))),
+      "spell"
+    );
+  } else if (standardCasters.length > 1) {
+    // D&D Beyond supplies each class's multiclass divisor alongside its slot table.
+    // Convert each class to an effective caster level, then use one of those same
+    // DDB-supplied tables as the pooled progression. This avoids a hardcoded slot table.
+    const effectiveLevel = standardCasters.reduce((total, cls) => {
+      const rules = dndClassSpellRules(cls);
+      const divisor = Math.max(1, dndNumber(rules?.multiClassSpellSlotDivisor, 1) || 1);
+      return total + Math.floor(Math.max(0, Number(cls.level || 0)) / divisor);
+    }, 0);
+
+    const candidates = standardCasters
+      .map(cls => {
+        const rules = dndClassSpellRules(cls);
+        const divisor = Math.max(1, dndNumber(rules?.multiClassSpellSlotDivisor, 1) || 1);
+        const proxyLevel = Math.max(1, effectiveLevel * divisor);
+        return {
+          rules,
+          divisor,
+          proxyLevel,
+          row:proxyLevel <= 20 ? dndSpellSlotTableRow(rules, proxyLevel) : []
+        };
+      })
+      .filter(item => item.row.some(value => Number(value || 0) > 0))
+      .sort((a,b) => a.divisor - b.divisor);
+
+    if (candidates[0]) addMaxRow(candidates[0].row, "spell");
+  }
+
+  for (const cls of pactCasters) {
+    const row = dndSpellSlotTableRow(
+      dndClassSpellRules(cls),
+      Math.max(1, Number(cls.level || 1))
+    );
+    addMaxRow(row, "pact");
+  }
+
+  // Keep current usage from the character payload. The available field has
+  // been observed as zero on live casters, so it is fallback-only for maxima.
+  for (const slot of root?.spellSlots || []) {
     if (!dndIsRecord(slot)) continue;
     const level = dndNumber(slot.level, 0) || 0;
     if (level < 1) continue;
-    const max = Math.max(0, dndNumber(slot.available, 0) || 0);
-    const used = Math.max(0, dndNumber(slot.used, 0) || 0);
-    const existing = merged.get(level) || {level,max:0,used:0};
-    existing.max += max;
-    existing.used += used;
+    const existing = merged.get(level) || {level,max:0,used:0,pools:["spell"]};
+    existing.used += Math.max(0, dndNumber(slot.used, 0) || 0);
+    if (!existing.max) existing.max = Math.max(0, dndNumber(slot.available, 0) || 0);
     merged.set(level, existing);
   }
-  return [...merged.values()].sort((a,b) => a.level - b.level);
+
+  for (const slot of root?.pactMagic || []) {
+    if (!dndIsRecord(slot)) continue;
+    const level = dndNumber(slot.level, 0) || 0;
+    if (level < 1) continue;
+    const existing = merged.get(level) || {level,max:0,used:0,pools:["pact"]};
+    existing.used += Math.max(0, dndNumber(slot.used, 0) || 0);
+    if (!existing.max) existing.max = Math.max(0, dndNumber(slot.available, 0) || 0);
+    if (!existing.pools.includes("pact")) existing.pools.push("pact");
+    merged.set(level, existing);
+  }
+
+  return [...merged.values()]
+    .filter(slot => slot.max > 0)
+    .sort((a,b) => a.level - b.level);
 }
 
 function dndInventory(root) {
