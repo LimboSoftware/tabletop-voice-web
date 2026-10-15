@@ -191,6 +191,7 @@ function boot() {
 
   try {
     restore();
+    applyGameSystemRoute();
     applyGameSystemUi();
     renderAll();
     renderMatchTools();
@@ -206,7 +207,7 @@ function boot() {
     showEntryModalIfNeeded();
   }
 
-  if ("serviceWorker" in navigator) navigator.serviceWorker.register("./sw.js").catch(() => {});
+  if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
 }
 
 function bindEvents() {
@@ -554,6 +555,79 @@ const GAME_SYSTEMS = Object.fromEntries(
 
 const GAME_SYSTEM_PICKER_SEEN_KEY = "tv_game_system_picker_seen_v1";
 
+const GAME_SYSTEM_ROUTES = {
+  "40k":"/40k",
+  aos:"/aos",
+  heresy:"/horus-heresy",
+  "kill-team":"/kill-team",
+  necromunda:"/necromunda",
+  "legions-imperialis":"/legions-imperialis",
+  grimdark:"/grimdark-future",
+  "grimdark-firefight":"/grimdark-firefight",
+  "opr-star-quest":"/grimdark-star-quest",
+  "opr-warfleets":"/warfleets",
+  aof:"/age-of-fantasy",
+  "aof-skirmish":"/age-of-fantasy-skirmish",
+  "aof-regiments":"/age-of-fantasy-regiments",
+  "aof-quest":"/age-of-fantasy-quest"
+};
+
+const GAME_ROUTE_ALIASES = {
+  "/heresy":"heresy",
+  "/grimdark":"grimdark",
+  "/gff":"grimdark-firefight",
+  "/star-quest":"opr-star-quest",
+  "/opr-warfleets":"opr-warfleets",
+  "/aof":"aof",
+  "/aof-skirmish":"aof-skirmish",
+  "/aof-regiments":"aof-regiments",
+  "/aof-quest":"aof-quest"
+};
+
+const GAME_SYSTEM_BY_ROUTE = Object.fromEntries(
+  Object.entries(GAME_SYSTEM_ROUTES).map(([gameSystem, route]) => [route, gameSystem])
+);
+
+function normalizedRoutePath(pathname = location.pathname) {
+  const raw = String(pathname || "/");
+  if (raw === "/") return "/";
+  return raw.replace(/\/+$/, "") || "/";
+}
+
+function gameSystemFromPath(pathname = location.pathname) {
+  const path = normalizedRoutePath(pathname);
+  return GAME_SYSTEM_BY_ROUTE[path] || GAME_ROUTE_ALIASES[path] || "";
+}
+
+function gameRouteForSystem(gameSystem = state.gameSystem) {
+  return GAME_SYSTEM_ROUTES[gameSystem] || "/";
+}
+
+function isRootGameChooserPath(pathname = location.pathname) {
+  const path = normalizedRoutePath(pathname);
+  return path === "/" || path === "/index.html";
+}
+
+function applyGameSystemRoute() {
+  const routedSystem = gameSystemFromPath();
+  if (!routedSystem || !GAME_SYSTEMS[routedSystem]?.available) return false;
+
+  state.gameSystem = routedSystem;
+  localStorage.setItem("tv_game_system", routedSystem);
+  localStorage.setItem(GAME_SYSTEM_PICKER_SEEN_KEY, "1");
+  ensureActiveRosterForGame();
+  return true;
+}
+
+function syncGameSystemUrl(gameSystem = state.gameSystem) {
+  const route = gameRouteForSystem(gameSystem);
+  if (!route || normalizedRoutePath() === route) return;
+
+  const url = new URL(location.href);
+  url.pathname = route;
+  history.replaceState({...history.state, tvView:"list"}, "", url.pathname + url.search + url.hash);
+}
+
 function currentGameName() {
   return GAME_SYSTEMS[state.gameSystem]?.name || "Choose a game";
 }
@@ -746,7 +820,8 @@ function showEntryModalIfNeeded() {
   }
 
   const pickerSeen = localStorage.getItem(GAME_SYSTEM_PICKER_SEEN_KEY) === "1";
-  if (!state.gameSystem || !pickerSeen) {
+  const rootChooser = isRootGameChooserPath();
+  if (rootChooser || !state.gameSystem || !pickerSeen) {
     els.firstRunModal?.classList.add("hidden");
     els.gameSystemClose?.classList.toggle("hidden", !state.gameSystem);
     els.gameSystemModal?.classList.remove("hidden");
@@ -854,6 +929,7 @@ function setGameSystem(gameSystem, options = {}) {
 
   state.gameSystem = gameSystem;
   localStorage.setItem("tv_game_system", gameSystem);
+  if (!options.fromRoute) syncGameSystemUrl(gameSystem);
   if (options.fromChooser) {
     localStorage.setItem(GAME_SYSTEM_PICKER_SEEN_KEY, "1");
   }
@@ -900,6 +976,9 @@ function applyGameSystemUi() {
   document.body.classList.toggle("game-legions-imperialis", legionsImperialis);
   document.body.classList.toggle("game-necromunda", necromunda);
   document.body.classList.toggle("game-40k", fortyK);
+  document.title = state.gameSystem
+    ? currentGameName() + " | Tabletop Voice"
+    : "Tabletop Voice";
 
   if (els.settingsCurrentGame) {
     els.settingsCurrentGame.textContent = currentGameName();
