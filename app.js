@@ -8554,7 +8554,6 @@ function renderDndActionEconomy(unit) {
     <section class="detail-section dnd-economy-section">
       <div class="section-heading-row">
         <h3>Action economy</h3>
-        <button class="ghost-button compact" type="button" data-dnd-reset-turn>New turn</button>
       </div>
       <div class="dnd-economy-grid">
         ${rows.map(([key,label]) => `
@@ -8602,13 +8601,73 @@ function dndActionMeta(action) {
     items.push("DC " + action.saveDc + (action.saveAbility ? " " + String(action.saveAbility).toUpperCase() : "") + " save");
   }
   if (action.damage) items.push(action.damage + (action.damageType ? " " + action.damageType : ""));
+  if (action.kind === "spell" && action.upcastDamage) {
+    items.push("Upcast +" + action.upcastDamage + " per slot level");
+  }
   if (action.concentration) items.push("Concentration");
   if (action.ritual) items.push("Ritual");
   if (action.components) items.push(action.components);
   return items;
 }
 
-function renderDndActionCard(action, runtime, focused = false) {
+function dndSpellCastOptions(unit, action, runtime) {
+  if (action?.kind !== "spell" || action.level <= 0 || action.usesSpellSlot === false) return [];
+
+  const minimum = Math.max(
+    Number(action.level || 1),
+    Number(action.castAtLevel || 0)
+  );
+
+  return (unit?.dnd?.spellSlots || [])
+    .filter(slot => slot.level >= minimum && Number(slot.max || 0) > 0)
+    .map(slot => ({
+      level:slot.level,
+      remaining:dndRemainingSlots(unit, runtime, slot)
+    }));
+}
+
+const DND_ELEMENTAL_DAMAGE_TYPES = new Set(["acid","cold","fire","lightning","thunder"]);
+
+function dndActionMatchesListFilter(action, filter = state.dndListFilter) {
+  const query = normalize(filter || "");
+  if (!query) return true;
+
+  const damageType = normalize(action?.damageType || "");
+  if (query === "elemental" || query === "elements") {
+    return DND_ELEMENTAL_DAMAGE_TYPES.has(damageType);
+  }
+  if (query === "damage" || query === "damaging") {
+    return Boolean(action?.damage);
+  }
+  if (query === "melee") {
+    return action?.kind === "attack" &&
+      (!action.range || normalize(action.range).includes("5 ft") || normalize(action.range).includes("reach"));
+  }
+  if (query === "ranged" || query === "range") {
+    return action?.kind === "attack" &&
+      Boolean(action.range) &&
+      !normalize(action.range).includes("5 ft");
+  }
+
+  return [
+    action?.name,
+    action?.damageType,
+    action?.school,
+    action?.description,
+    action?.source
+  ].some(value => normalize(value || "").includes(query));
+}
+
+function renderDndListFilter(kind, count) {
+  if (!state.dndListFilter || state.dndListKind !== kind) return "";
+  return `
+    <div class="dnd-list-filter">
+      <span>LIST: <strong>${escapeHtml(state.dndListFilter)}</strong> · ${count} match${count === 1 ? "" : "es"}</span>
+      <button class="ghost-button compact" type="button" data-dnd-clear-list>Clear</button>
+    </div>`;
+}
+
+function renderDndActionCard(unit, action, runtime, focused = false) {
   const last = runtime.lastRoll?.actionId === action.id ? runtime.lastRoll : null;
   const actionLabel = action.kind === "spell"
     ? action.level > 0 ? "SPELL · LEVEL " + action.level : "CANTRIP"
@@ -8616,11 +8675,26 @@ function renderDndActionCard(action, runtime, focused = false) {
   const buttonLabel = action.kind === "spell"
     ? (action.toHit != null || action.damage ? "Cast / roll" : "Cast")
     : "Roll attack";
+  const castOptions = dndSpellCastOptions(unit, action, runtime);
+  const defaultCast = castOptions.find(option => option.remaining > 0)?.level ?? castOptions[0]?.level ?? action.level;
+
   return `
     <article class="dnd-action-card${focused ? " focused" : ""}" data-dnd-action-card="${escapeHtml(action.id)}">
       <div class="dnd-action-heading">
         <div><span>${escapeHtml(actionLabel)}</span><h4>${escapeHtml(action.name)}</h4></div>
-        <button class="primary-button compact" type="button" data-dnd-use-action="${escapeHtml(action.id)}">${escapeHtml(buttonLabel)}</button>
+        <div class="dnd-action-controls">
+          ${castOptions.length ? `
+            <label class="dnd-cast-level">
+              <span>Cast at</span>
+              <select data-dnd-cast-level aria-label="Cast ${escapeHtml(action.name)} at spell level">
+                ${castOptions.map(option => `
+                  <option value="${option.level}"${option.level === defaultCast ? " selected" : ""}${option.remaining <= 0 ? " disabled" : ""}>
+                    L${option.level} · ${option.remaining} left
+                  </option>`).join("")}
+              </select>
+            </label>` : ""}
+          <button class="primary-button compact" type="button" data-dnd-use-action="${escapeHtml(action.id)}">${escapeHtml(buttonLabel)}</button>
+        </div>
       </div>
       <div class="dnd-action-meta">${dndActionMeta(action).map(item => `<span>${escapeHtml(item)}</span>`).join("")}</div>
       ${action.description ? `<div class="dnd-action-description">${escapeHtml(action.description)}</div>` : ""}
@@ -8630,11 +8704,15 @@ function renderDndActionCard(action, runtime, focused = false) {
 }
 
 function renderDndActions(unit, kind = "all") {
-  const attacks = unit?.dnd?.attacks || [];
-  const spells = unit?.dnd?.spells || [];
   const runtime = getDndRuntimeState(unit);
   const focused = state.dndFocusedActionId;
-  const sortFocused = list => [...list].sort((a,b) => {
+  const applyFilter = list =>
+    state.dndListFilter && state.dndListKind === kind
+      ? list.filter(action => dndActionMatchesListFilter(action))
+      : list;
+  const attacks = applyFilter(unit?.dnd?.attacks || []);
+  const spells = applyFilter(unit?.dnd?.spells || []);
+  const sortStable = list => [...list].sort((a,b) => {
     if ((a.level ?? 0) !== (b.level ?? 0)) return (a.level ?? 0) - (b.level ?? 0);
     return a.name.localeCompare(b.name);
   });
@@ -8642,13 +8720,19 @@ function renderDndActions(unit, kind = "all") {
   const showSpells = kind === "all" || kind === "spell";
 
   return `
-    ${showAttacks && attacks.length ? `<section class="detail-section dnd-actions-section">
+    ${showAttacks ? `<section class="detail-section dnd-actions-section">
       <div class="section-heading-row"><h3>Attacks</h3><span class="section-count">${attacks.length}</span></div>
-      <div class="dnd-action-list">${sortFocused(attacks).map(action => renderDndActionCard(action, runtime, action.id === focused)).join("")}</div>
+      ${renderDndListFilter("attack", attacks.length)}
+      <div class="dnd-action-list">${attacks.length
+        ? sortStable(attacks).map(action => renderDndActionCard(unit, action, runtime, action.id === focused)).join("")
+        : '<div class="empty-section">No matching attacks.</div>'}</div>
     </section>` : ""}
-    ${showSpells && spells.length ? `<section class="detail-section dnd-actions-section">
+    ${showSpells ? `<section class="detail-section dnd-actions-section">
       <div class="section-heading-row"><h3>Spells</h3><span class="section-count">${spells.length}</span></div>
-      <div class="dnd-action-list">${sortFocused(spells).map(action => renderDndActionCard(action, runtime, action.id === focused)).join("")}</div>
+      ${renderDndListFilter("spell", spells.length)}
+      <div class="dnd-action-list">${spells.length
+        ? sortStable(spells).map(action => renderDndActionCard(unit, action, runtime, action.id === focused)).join("")
+        : '<div class="empty-section">No matching spells.</div>'}</div>
     </section>` : ""}`;
 }
 
