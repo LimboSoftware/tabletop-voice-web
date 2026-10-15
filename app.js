@@ -157,9 +157,8 @@ const els = {
   coreRulesImportButton: $("coreRulesImportButton"),
   coreRulesImportStatus: $("coreRulesImportStatus"),
   setupChooseArmies: $("setupChooseArmies"),
-  setupCurrentGame: $("setupCurrentGame"),
   setupChangeGameButton: $("setupChangeGameButton"),
-  resetUnitStatesButton: $("resetUnitStatesButton"),
+  resetGameButton: $("resetGameButton"),
   resetMatchButton: $("resetMatchButton"),
   toast: $("toast"),
   firstRunModal: $("firstRunModal"),
@@ -331,7 +330,7 @@ function bindEvents() {
     if (!state.gameSystem) return;
     els.gameSystemModal?.classList.add("hidden");
   });
-  els.resetUnitStatesButton?.addEventListener("click", resetAllUnitStates);
+  els.resetGameButton?.addEventListener("click", resetGame);
   els.resetMatchButton?.addEventListener("click", resetMatchState);
   document.querySelectorAll("[data-setup-check]").forEach(input => {
     input.addEventListener("change", persistSetupChecks);
@@ -982,9 +981,6 @@ function applyGameSystemUi() {
 
   if (els.settingsCurrentGame) {
     els.settingsCurrentGame.textContent = currentGameName();
-  }
-  if (els.setupCurrentGame) {
-    els.setupCurrentGame.textContent = currentGameName();
   }
 
   renderGameSystemCatalogues(gameProviderForSystem());
@@ -8666,40 +8662,36 @@ function resetScores() {
   toast("Scores reset");
 }
 
-function resetAllUnitStates() {
-  const keys = Object.keys(localStorage).filter(key =>
-    key.startsWith("tv_status_") ||
-    key.startsWith("tv_destroyed_") ||
-    key.startsWith("tv_unit_destroyed_")
-  );
-
-  if (!keys.length) {
-    toast("No unit states to reset");
-    return;
-  }
-
+function resetGame() {
   if (!confirm(
-    "Reset all unit states? This clears Battle-shocked, once-per-game used and any dead/destroyed markers. Loaded lists and pins will stay."
+    "Reset this game? This clears unit states, both players' scores, CP and the current turn. Loaded lists and pins will stay."
   )) return;
 
-  keys.forEach(key => localStorage.removeItem(key));
+  for (const key of Object.keys(localStorage)) {
+    if (
+      key.startsWith("tv_status_") ||
+      key.startsWith("tv_destroyed_") ||
+      key.startsWith("tv_unit_destroyed_") ||
+      key.startsWith("tv_source_cp_")
+    ) {
+      localStorage.removeItem(key);
+    }
+  }
+
+  ["tv_match_cp","tv_match_turn","tv_score_state","tv_score_turn"].forEach(key =>
+    localStorage.removeItem(key)
+  );
+
+  state.scoreTurn = 1;
   updateUnitTopStatuses(state.selected);
+  renderScoreboard();
+  renderMatchTools();
   renderAll();
-  toast("Unit states reset");
+  toast("Game reset");
 }
 
 function resetMatchState() {
-  if (!confirm("Reset scoring, CP, turn and Guide checklist?")) return;
-
-  ["tv_match_cp","tv_match_turn","tv_score_state","tv_score_turn"].forEach(key => localStorage.removeItem(key));
-  for (const key of Object.keys(localStorage)) {
-    if (key.startsWith("tv_source_cp_")) localStorage.removeItem(key);
-  }
-  state.scoreTurn = 1;
-  document.querySelectorAll("[data-setup-check]").forEach(input => input.checked = false);
-  persistSetupChecks();
-  renderScoreboard();
-  toast("Match reset");
+  resetGame();
 }
 
 function setSetupCheck(name, checked = true) {
