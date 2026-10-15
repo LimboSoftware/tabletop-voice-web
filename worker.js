@@ -167,6 +167,92 @@ async function loadOprArmy(id) {
   });
 }
 
+
+function validGyrinxGangUrl(value = "") {
+  let url;
+  try {
+    url = new URL(String(value || "").trim());
+  } catch {
+    return null;
+  }
+
+  const host = url.hostname.toLowerCase();
+  if (!["gyrinx.app","www.gyrinx.app"].includes(host)) return null;
+  if (url.protocol !== "https:") return null;
+
+  // Current Necromunda N26 share pages. Keep this deliberately narrow:
+  // this endpoint is a proxy, not a general-purpose URL fetcher.
+  if (!/^\/n26\/gangs\/[A-Za-z0-9_-]+\/?$/.test(url.pathname)) return null;
+
+  url.search = "";
+  url.hash = "";
+  return url;
+}
+
+async function fetchGyrinxGangPage(rawUrl) {
+  let target = validGyrinxGangUrl(rawUrl);
+  if (!target) {
+    return jsonResponse({
+      error:"Paste a public Gyrinx N26 gang link, e.g. https://gyrinx.app/n26/gangs/…/"
+    }, 400);
+  }
+
+  let response;
+  for (let redirects = 0; redirects < 3; redirects++) {
+    try {
+      response = await fetch(target.toString(), {
+        redirect:"manual",
+        headers:{
+          "Accept":"text/html,application/xhtml+xml",
+          "User-Agent":"TabletopVoice/1.0 (+https://tabletopvoice.app)"
+        }
+      });
+    } catch (error) {
+      console.error("Gyrinx request failed", error);
+      return jsonResponse({error:"Could not reach Gyrinx."}, 502);
+    }
+
+    if (![301,302,303,307,308].includes(response.status)) break;
+
+    const location = response.headers.get("Location");
+    if (!location) break;
+    const redirected = new URL(location, target);
+    target = validGyrinxGangUrl(redirected.toString());
+    if (!target) {
+      return jsonResponse({error:"Gyrinx redirected outside the supported gang page."}, 502);
+    }
+  }
+
+  if (!response?.ok) {
+    return jsonResponse({
+      error:response?.status === 404
+        ? "Gyrinx could not find that public gang."
+        : "Gyrinx returned " + (response?.status || "an error") + "."
+    }, 502);
+  }
+
+  const contentType = String(response.headers.get("Content-Type") || "");
+  if (!contentType.includes("text/html")) {
+    return jsonResponse({error:"Gyrinx returned an unexpected response."}, 502);
+  }
+
+  const html = await response.text();
+  if (!html || html.length > 2_000_000) {
+    return jsonResponse({error:"The Gyrinx gang page was empty or too large to import."}, 502);
+  }
+
+  if (!html.includes("n26-gang-sheet") && !html.includes("model-")) {
+    return jsonResponse({
+      error:"That Gyrinx page did not contain a readable N26 gang sheet. Make sure the gang is public."
+    }, 422);
+  }
+
+  return jsonResponse({
+    url:target.toString(),
+    html
+  });
+}
+
 function addSecurityHeaders(response) {
   const headers = new Headers(response.headers);
   for (const [name, value] of Object.entries(SECURITY_HEADERS)) {
@@ -193,6 +279,13 @@ export default {
         return jsonResponse({error:"Method not allowed."}, 405);
       }
       return loadOprArmy(String(url.searchParams.get("id") || "").trim());
+    }
+
+    if (url.pathname === "/api/gyrinx-gang") {
+      if (request.method !== "GET") {
+        return jsonResponse({error:"Method not allowed."}, 405);
+      }
+      return fetchGyrinxGangPage(String(url.searchParams.get("url") || "").trim());
     }
 
     const response = await env.ASSETS.fetch(request);
