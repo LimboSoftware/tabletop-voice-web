@@ -5539,3 +5539,45 @@ body.game-aos .setup-import-card {
     border-top: 1px solid #25303f !important;
   }
 }
+
+
+/* === Horus Heresy 3rd Edition === */
+body.game-heresy .setup-import-grid {
+  grid-template-columns: minmax(0, 830px);
+}
+
+body.game-heresy .setup-import-card {
+  width: 100%;
+}
+
+.heresy-weapon-table {
+  min-width: 980px;
+}
+
+.heresy-weapon-table th:nth-last-child(-n+2),
+.heresy-weapon-table td:nth-last-child(-n+2) {
+  min-width: 190px;
+  text-align: left;
+}
+
+.heresy-weapon-text {
+  color: #c4d1d8 !important;
+  line-height: 1.4;
+}
+
+@media (max-width: 760px) {
+  body.game-heresy .setup-import-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .heresy-weapon-table {
+    min-width: 0;
+  }
+
+  .heresy-weapon-table .heresy-weapon-text {
+    grid-column: 1 / -1;
+    min-width: 0;
+    padding-top: 9px;
+    border-top: 1px solid #25303f !important;
+  }
+}
