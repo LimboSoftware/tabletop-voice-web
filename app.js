@@ -2994,12 +2994,14 @@ function parseNewRecruitSelection(selection) {
     }))
   );
 
-  const standardAbilityProfiles = allProfiles
-    .filter(profile => profile?.typeName === "Abilities")
-    .map(profile => ({
-      name:profile.name || "Ability",
-      text:characteristicValue((profile.characteristics || [])[0])
-    }));
+  const standardAbilityProfiles = system === "kill-team"
+    ? []
+    : allProfiles
+        .filter(profile => profile?.typeName === "Abilities")
+        .map(profile => ({
+          name:profile.name || "Ability",
+          text:characteristicValue((profile.characteristics || [])[0])
+        }));
 
   const aosAbilityProfiles = system === "aos"
     ? allProfiles
@@ -3912,7 +3914,11 @@ function renderUnitBrowserReferences(source, data = null) {
       ${data.note ? `<div class="roster-refresh-note">${escapeHtml(data.note)}</div>` : ""}
       ${(source.kind === "opr" || inferRosterGameSystem(source.roster) !== "40k") ? "" : renderUnitBrowserReferenceSection("Stratagems", data.stratagems, "stratagem")}
       ${renderUnitBrowserReferenceSection(
-        (source.kind === "opr" || ["grimdark","heresy"].includes(inferRosterGameSystem(source.roster))) ? "Rules" : "Army Rules",
+        inferRosterGameSystem(source.roster) === "kill-team"
+          ? "Team Rules"
+          : (source.kind === "opr" || ["grimdark","heresy"].includes(inferRosterGameSystem(source.roster)))
+            ? "Rules"
+            : "Army Rules",
         data.armyRules,
         "rule"
       )}
