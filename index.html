@@ -90,6 +90,17 @@
             <input id="fileInput" type="file" multiple accept=".json,.ros,.rosz,.txt,application/json,text/plain,application/xml,text/xml,application/zip" hidden />
           </section>
 
+          <section id="necromundaImportCard" class="tool-card setup-import-card necromunda-import-card hidden">
+            <span class="section-label">GYRINX · NECROMUNDA N26</span>
+            <h2>Import shared gang</h2>
+            <p>In Gyrinx, open your gang and use <strong>Share</strong>. Paste the public gang link here and Tabletop Voice will build fighter cards from the live roster.</p>
+            <div class="necromunda-import-controls">
+              <input id="necromundaShareInput" type="url" inputmode="url" autocomplete="off" spellcheck="false" placeholder="https://gyrinx.app/n26/gangs/…" aria-label="Gyrinx shared gang link" />
+              <button id="necromundaImportButton" class="primary-button large setup-main-action" type="button">Import Gyrinx gang</button>
+            </div>
+            <small id="necromundaImportStatus" class="opr-import-status">Current Necromunda N26 gangs · public Gyrinx share link.</small>
+          </section>
+
           <section id="liCommunityImportCard" class="tool-card setup-import-card li-community-import-card hidden">
             <span class="section-label">LEGION COMPANION</span>
             <h2>Import community list</h2>
