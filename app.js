@@ -95,6 +95,7 @@ const els = {
   pageUpdates: $("pageUpdates"),
   pageSettings: $("pageSettings"),
   gameSystemModal: $("gameSystemModal"),
+  gameSystemClose: $("gameSystemClose"),
   gameSystemCatalogue: $("gameSystemCatalogue"),
   settingsGameSystemCatalogue: $("settingsGameSystemCatalogue"),
   settingsCurrentGame: $("settingsCurrentGame"),
@@ -325,6 +326,10 @@ function bindEvents() {
   });
   els.setupChooseArmies?.addEventListener("click", openArmyPicker);
   els.setupChangeGameButton?.addEventListener("click", openGameSystemChooser);
+  els.gameSystemClose?.addEventListener("click", () => {
+    if (!state.gameSystem) return;
+    els.gameSystemModal?.classList.add("hidden");
+  });
   els.resetUnitStatesButton?.addEventListener("click", resetAllUnitStates);
   els.resetMatchButton?.addEventListener("click", resetMatchState);
   document.querySelectorAll("[data-setup-check]").forEach(input => {
@@ -729,6 +734,7 @@ function setGameCatalogueProvider(container, providerId) {
 function openGameSystemChooser() {
   els.firstRunModal?.classList.add("hidden");
   renderGameSystemCatalogues(gameProviderForSystem());
+  els.gameSystemClose?.classList.toggle("hidden", !state.gameSystem);
   els.gameSystemModal?.classList.remove("hidden");
 }
 
@@ -742,6 +748,7 @@ function showEntryModalIfNeeded() {
   const pickerSeen = localStorage.getItem(GAME_SYSTEM_PICKER_SEEN_KEY) === "1";
   if (!state.gameSystem || !pickerSeen) {
     els.firstRunModal?.classList.add("hidden");
+    els.gameSystemClose?.classList.toggle("hidden", !state.gameSystem);
     els.gameSystemModal?.classList.remove("hidden");
     return;
   }
