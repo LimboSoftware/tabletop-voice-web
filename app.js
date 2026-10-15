@@ -3543,6 +3543,782 @@ async function loadGyrinxGang() {
 }
 
 
+
+const DND_ABILITY_IDS = {
+  1:"str",
+  2:"dex",
+  3:"con",
+  4:"int",
+  5:"wis",
+  6:"cha"
+};
+
+const DND_ABILITY_LABELS = {
+  str:"STR",
+  dex:"DEX",
+  con:"CON",
+  int:"INT",
+  wis:"WIS",
+  cha:"CHA"
+};
+
+function dndIsRecord(value) {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function dndNumber(value, fallback = null) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function dndPlainText(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  const doc = new DOMParser().parseFromString(raw, "text/html");
+  return String(doc.body?.textContent || raw)
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function dndModifier(score) {
+  return Math.floor((Number(score || 10) - 10) / 2);
+}
+
+function dndSigned(value) {
+  const number = Number(value || 0);
+  return number >= 0 ? "+" + number : String(number);
+}
+
+function dndProficiencyBonus(level) {
+  return Math.floor((Math.max(1, Number(level || 1)) - 1) / 4) + 2;
+}
+
+function dndBucketEntries(value) {
+  if (Array.isArray(value)) {
+    return value
+      .filter(dndIsRecord)
+      .map(item => ({item, source:""}));
+  }
+  if (!dndIsRecord(value)) return [];
+
+  return Object.entries(value).flatMap(([source, list]) =>
+    Array.isArray(list)
+      ? list.filter(dndIsRecord).map(item => ({item, source}))
+      : []
+  );
+}
+
+function dndAbilityScores(root) {
+  const scores = {str:10,dex:10,con:10,int:10,wis:10,cha:10};
+  const base = Array.isArray(root?.stats) ? root.stats : [];
+  const bonus = Array.isArray(root?.bonusStats) ? root.bonusStats : [];
+  const override = Array.isArray(root?.overrideStats) ? root.overrideStats : [];
+
+  for (const stat of base) {
+    const id = dndNumber(stat?.id ?? stat?.statId ?? stat?.abilityId, 0);
+    const key = DND_ABILITY_IDS[id];
+    if (!key) continue;
+
+    const baseValue = dndNumber(stat?.value ?? stat?.score ?? stat?.total, scores[key]) ?? scores[key];
+    const bonusStat = bonus.find(item =>
+      dndNumber(item?.id ?? item?.statId ?? item?.abilityId, 0) === id
+    );
+    const overrideStat = override.find(item =>
+      dndNumber(item?.id ?? item?.statId ?? item?.abilityId, 0) === id
+    );
+
+    const bonusValue = dndNumber(bonusStat?.value ?? bonusStat?.score ?? bonusStat?.total, 0) || 0;
+    const overrideValue = dndNumber(overrideStat?.value ?? overrideStat?.score ?? overrideStat?.total, 0) || 0;
+    scores[key] = overrideValue > 0 ? overrideValue : baseValue + bonusValue;
+  }
+
+  for (const {item:modifier} of dndBucketEntries(root?.modifiers)) {
+    const subtype = normalize(modifier?.subType || modifier?.subtype || "").replace(/\s+/g, "-");
+    const map = {
+      "strength-score":"str",
+      "dexterity-score":"dex",
+      "constitution-score":"con",
+      "intelligence-score":"int",
+      "wisdom-score":"wis",
+      "charisma-score":"cha"
+    };
+    const key = map[subtype];
+    if (!key) continue;
+
+    const value = dndNumber(modifier?.value, 0) || 0;
+    const type = normalize(modifier?.type);
+    if (type === "bonus") scores[key] += value;
+    if (type === "set" && value > scores[key]) scores[key] = value;
+  }
+
+  return scores;
+}
+
+function dndActivationLabel(value) {
+  const activation = dndIsRecord(value?.activation) ? value.activation : value;
+  const raw = activation?.activationType ?? activation?.type ?? null;
+  if (typeof raw === "string") {
+    const key = normalize(raw);
+    if (key.includes("bonus")) return "Bonus Action";
+    if (key.includes("reaction")) return "Reaction";
+    if (key.includes("action")) return "Action";
+    if (key.includes("minute")) return "Minute";
+    if (key.includes("hour")) return "Hour";
+    if (key.includes("special")) return "Special";
+  }
+
+  return ({
+    0:"No Action",
+    1:"Action",
+    2:"Action",
+    3:"Bonus Action",
+    4:"Reaction",
+    5:"Action",
+    6:"Minute",
+    7:"Hour",
+    8:"Special"
+  })[Number(raw)] || "Action";
+}
+
+function dndRangeLabel(value) {
+  const range = dndIsRecord(value?.range) ? value.range : value;
+  if (!range) return "";
+
+  if (typeof range === "number") return range + " ft.";
+  if (typeof range === "string") return range;
+
+  const normal =
+    dndNumber(range.range, null) ??
+    dndNumber(range.distance, null) ??
+    dndNumber(range.rangeValue?.amount, null) ??
+    dndNumber(range.amount, null);
+  const longRange = dndNumber(range.longRange, null);
+  const origin = String(range.origin || range.rangeType || "").trim();
+
+  if (normal != null && longRange != null) return normal + "/" + longRange + " ft.";
+  if (normal != null) return normal + " ft.";
+  return origin;
+}
+
+function dndDurationLabel(value) {
+  const duration = dndIsRecord(value?.duration) ? value.duration : value;
+  if (!duration) return "";
+  if (typeof duration === "string") return duration;
+
+  const amount = dndNumber(duration.durationInterval ?? duration.amount, null);
+  const unit = String(duration.durationUnit || duration.unit || "").trim();
+  if (amount != null && unit) {
+    return amount + " " + unit + (amount === 1 ? "" : "s");
+  }
+  return String(duration.durationType || duration.type || "").trim();
+}
+
+function dndDiceExpression(value, depth = 0) {
+  if (depth > 5 || value == null) return "";
+
+  if (typeof value === "string") {
+    const match = value.match(/\b(\d+d\d+(?:\s*[+-]\s*\d+)?)\b/i);
+    return match ? match[1].replace(/\s+/g, "") : "";
+  }
+
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const found = dndDiceExpression(item, depth + 1);
+      if (found) return found;
+    }
+    return "";
+  }
+
+  if (!dndIsRecord(value)) return "";
+
+  const direct = [
+    value.diceString,
+    value.damageDiceString,
+    value.die?.diceString,
+    value.dice?.diceString,
+    value.damage?.diceString
+  ];
+  for (const candidate of direct) {
+    const found = dndDiceExpression(candidate, depth + 1);
+    if (found) return found;
+  }
+
+  const count = dndNumber(value.diceCount ?? value.count, null);
+  const sides = dndNumber(value.diceValue ?? value.sides ?? value.dieSize, null);
+  const fixed = dndNumber(value.fixedValue ?? value.bonus, 0) || 0;
+  if (count && sides && sides >= 2) {
+    return count + "d" + sides + (fixed ? (fixed > 0 ? "+" : "") + fixed : "");
+  }
+
+  for (const key of ["damage","dice","damageDice","damageEffect","healing","healingDice","tempHpDice","value"]) {
+    const found = dndDiceExpression(value[key], depth + 1);
+    if (found) return found;
+  }
+
+  return "";
+}
+
+function dndDamageType(value) {
+  if (!value) return "";
+  const direct = value.damageType || value?.definition?.damageType;
+  if (typeof direct === "string") return direct;
+  if (dndIsRecord(direct) && direct.name) return String(direct.name);
+  return "";
+}
+
+function dndAbilityFromId(value, fallback = "cha") {
+  return DND_ABILITY_IDS[dndNumber(value, 0)] || fallback;
+}
+
+function dndSpellAbility(root, spell, definition, scores) {
+  const direct =
+    spell?.spellCastingAbilityId ??
+    spell?.spellcastingAbilityId ??
+    definition?.spellCastingAbilityId ??
+    definition?.spellcastingAbilityId;
+
+  if (DND_ABILITY_IDS[dndNumber(direct, 0)]) {
+    return dndAbilityFromId(direct);
+  }
+
+  const casterClasses = (root?.classes || []).filter(item =>
+    dndIsRecord(item) && dndIsRecord(item.definition)
+  );
+  const best = casterClasses
+    .map(item => dndNumber(item.definition.spellCastingAbilityId, 0))
+    .find(id => DND_ABILITY_IDS[id]);
+
+  if (best) return dndAbilityFromId(best);
+  return Object.entries(scores)
+    .sort((a,b) => dndModifier(b[1]) - dndModifier(a[1]))[0]?.[0] || "cha";
+}
+
+function dndClassSummary(root) {
+  const classes = Array.isArray(root?.classes) ? root.classes : [];
+  const names = [];
+  let level = 0;
+
+  for (const item of classes) {
+    if (!dndIsRecord(item)) continue;
+    const className = String(item.definition?.name || item.name || "Adventurer").trim();
+    const subclassName = String(item.subclassDefinition?.name || "").trim();
+    const classLevel = Math.max(0, dndNumber(item.level, 0) || 0);
+    level += classLevel;
+    names.push((subclassName ? subclassName + " " : "") + className + " " + classLevel);
+  }
+
+  return {
+    level:level || Math.max(1, dndNumber(root?.level, 1) || 1),
+    label:names.filter(Boolean).join(" / ") || "Adventurer"
+  };
+}
+
+function dndArmorClass(root, scores) {
+  const explicit =
+    dndNumber(root?.armorClass, null) ??
+    dndNumber(root?.ac, null) ??
+    dndNumber(root?.overrideArmorClass, null);
+  if (explicit != null && explicit > 0) return explicit;
+
+  const dex = dndModifier(scores.dex);
+  let ac = 10 + dex;
+  let shield = 0;
+
+  for (const item of root?.inventory || []) {
+    if (!dndIsRecord(item) || item.equipped === false) continue;
+    const definition = dndIsRecord(item.definition) ? item.definition : {};
+    const descriptor = normalize([
+      definition.name,
+      definition.type,
+      definition.filterType,
+      definition.subType
+    ].filter(Boolean).join(" "));
+
+    if (descriptor.includes("shield")) {
+      shield += dndNumber(definition.grantedArmorClass ?? definition.acBonus, 2) || 2;
+      continue;
+    }
+
+    const base = dndNumber(definition.armorClass, null);
+    if (base == null || !descriptor.includes("armor")) continue;
+
+    const dexBonus = descriptor.includes("heavy")
+      ? 0
+      : descriptor.includes("medium")
+        ? Math.min(2, dex)
+        : dex;
+    ac = Math.max(ac, base + dexBonus);
+  }
+
+  return ac + shield;
+}
+
+function dndMagicBonus(name) {
+  const match = String(name || "").match(/\+(\d+)/);
+  return match ? Number(match[1]) : 0;
+}
+
+function dndWeaponAbility(definition, scores) {
+  const descriptor = normalize([
+    definition?.type,
+    definition?.filterType,
+    definition?.subType,
+    ...(definition?.properties || []).map(item => item?.name || "")
+  ].join(" "));
+  const ranged = Number(definition?.attackType) === 2 || descriptor.includes("ranged");
+  const finesse = descriptor.includes("finesse");
+  if (finesse) {
+    return dndModifier(scores.dex) > dndModifier(scores.str) ? "dex" : "str";
+  }
+  return ranged ? "dex" : "str";
+}
+
+function dndParseActions(root, scores, proficiencyBonus) {
+  const actions = [];
+
+  for (const {item:action, source} of dndBucketEntries(root?.actions)) {
+    const definition = dndIsRecord(action.definition) ? action.definition : action;
+    const name = String(definition.name || action.name || "").trim();
+    if (!name) continue;
+
+    const ability = dndAbilityFromId(
+      action.abilityModifierStatId ?? definition.abilityModifierStatId,
+      Number(action.attackTypeRange ?? definition.attackTypeRange) === 2 ? "dex" : "str"
+    );
+    const explicitToHit =
+      dndNumber(action.fixedToHit, null) ??
+      dndNumber(action.toHit, null) ??
+      dndNumber(definition.fixedToHit, null) ??
+      dndNumber(definition.toHit, null);
+    const toHit = explicitToHit != null
+      ? explicitToHit
+      : dndModifier(scores[ability]) + (action.isProficient === false ? 0 : proficiencyBonus);
+
+    const dice = dndDiceExpression(action.dice) || dndDiceExpression(definition.dice) || dndDiceExpression(action);
+    const bonus = dndNumber(action.value ?? definition.value, 0) || 0;
+    const damage = dice
+      ? dice + (bonus && !/[+-]\d+$/.test(dice) ? (bonus > 0 ? "+" : "") + bonus : "")
+      : "";
+
+    if (!action.displayAsAttack && !dice && explicitToHit == null && !definition.displayAsAttack) {
+      continue;
+    }
+
+    actions.push({
+      id:"ddb-action-" + String(action.id || definition.id || actions.length + 1),
+      name,
+      kind:"attack",
+      activation:dndActivationLabel(action.activation || definition.activation || action),
+      range:dndRangeLabel(action.range || definition.range),
+      toHit,
+      damage,
+      damageType:dndDamageType(action) || dndDamageType(definition),
+      description:dndPlainText(definition.snippet || definition.description || action.snippet || action.description),
+      source:source || "Action",
+      derived:false
+    });
+  }
+
+  const existing = new Set(actions.map(action => normalize(action.name)));
+  for (const [index, item] of (root?.inventory || []).entries()) {
+    if (!dndIsRecord(item) || item.equipped === false) continue;
+    const definition = dndIsRecord(item.definition) ? item.definition : {};
+    const name = String(definition.name || item.name || "").trim();
+    if (!name || existing.has(normalize(name))) continue;
+
+    const descriptor = normalize([
+      definition.type,
+      definition.filterType,
+      definition.subType
+    ].filter(Boolean).join(" "));
+    const dice = dndDiceExpression(definition.damage);
+    const isWeapon =
+      descriptor.includes("weapon") ||
+      Number(definition.attackType || 0) > 0 ||
+      Boolean(dice);
+    if (!isWeapon || !dice) continue;
+
+    const ability = dndWeaponAbility(definition, scores);
+    const magic = dndMagicBonus(name);
+    const abilityBonus = dndModifier(scores[ability]);
+    const range = typeof definition.range === "number"
+      ? definition.range + (definition.longRange ? "/" + definition.longRange : "") + " ft."
+      : dndRangeLabel(definition.range);
+
+    actions.push({
+      id:"ddb-item-attack-" + String(item.id || definition.id || index + 1),
+      name,
+      kind:"attack",
+      activation:"Action",
+      range,
+      toHit:abilityBonus + proficiencyBonus + magic,
+      damage:dice + ((abilityBonus + magic)
+        ? (abilityBonus + magic > 0 ? "+" : "") + (abilityBonus + magic)
+        : ""),
+      damageType:String(definition.damageType || ""),
+      description:dndPlainText(definition.snippet || definition.description),
+      source:"Equipped weapon",
+      derived:true
+    });
+  }
+
+  return dedupeBy(actions, item => normalize(item.kind + "|" + item.name + "|" + item.damage + "|" + item.toHit));
+}
+
+function dndSpellRecords(root) {
+  const rows = [...dndBucketEntries(root?.spells).map(entry => entry.item)];
+
+  for (const group of root?.classSpells || []) {
+    if (!dndIsRecord(group)) continue;
+    for (const key of ["spells","alwaysPreparedSpells","alwaysKnownSpells","cantrips"]) {
+      for (const spell of group[key] || []) {
+        if (dndIsRecord(spell)) rows.push(spell);
+      }
+    }
+  }
+
+  return dedupeBy(
+    rows,
+    spell => {
+      const definition = dndIsRecord(spell.definition) ? spell.definition : spell;
+      return String(definition.id || spell.definitionId || "") + "|" + normalize(definition.name || spell.name || "");
+    }
+  );
+}
+
+function dndParseSpells(root, scores, proficiencyBonus) {
+  return dndSpellRecords(root).map((spell, index) => {
+    const definition = dndIsRecord(spell.definition) ? spell.definition : spell;
+    const name = String(definition.name || spell.name || "Spell").trim();
+    const ability = dndSpellAbility(root, spell, definition, scores);
+    const spellAttack = dndModifier(scores[ability]) + proficiencyBonus;
+    const level = Math.max(0, dndNumber(definition.level ?? spell.level, 0) || 0);
+    const requiresAttackRoll = Boolean(definition.requiresAttackRoll || spell.requiresAttackRoll || definition.attackType);
+    const requiresSavingThrow = Boolean(definition.requiresSavingThrow || spell.requiresSavingThrow || definition.saveDcAbilityId);
+    const saveAbility = DND_ABILITY_IDS[dndNumber(definition.saveDcAbilityId ?? spell.saveDcAbilityId, 0)] || "";
+    const damage = dndDiceExpression(definition.damageEffect || spell.damageEffect || definition.modifiers || definition.description);
+
+    const components = (definition.components || [])
+      .map(value => ({1:"V",2:"S",3:"M"})[Number(value)])
+      .filter(Boolean)
+      .join(", ");
+
+    return {
+      id:"ddb-spell-" + String(spell.id || definition.id || spell.definitionId || index + 1),
+      name,
+      kind:"spell",
+      level,
+      school:String(definition.school?.name || definition.school || "").trim(),
+      activation:dndActivationLabel(spell.activation || definition.activation || spell),
+      range:dndRangeLabel(spell.range || definition.range),
+      duration:dndDurationLabel(definition.duration || spell.duration),
+      concentration:Boolean(definition.concentration || spell.concentration),
+      ritual:Boolean(definition.ritual || spell.castOnlyAsRitual),
+      prepared:Boolean(spell.prepared || spell.alwaysPrepared || spell.baseLevelAtWill || level === 0),
+      usesSpellSlot:level > 0 && spell.usesSpellSlot !== false && !spell.baseLevelAtWill,
+      toHit:requiresAttackRoll ? spellAttack : null,
+      saveDc:requiresSavingThrow ? 8 + spellAttack : null,
+      saveAbility,
+      damage,
+      damageType:dndDamageType(definition),
+      components,
+      description:dndPlainText(definition.snippet || definition.description || spell.additionalDescription),
+      source:"Spell"
+    };
+  }).filter(spell => spell.name);
+}
+
+function dndSpellSlots(root) {
+  const merged = new Map();
+  for (const slot of [...(root?.spellSlots || []), ...(root?.pactMagic || [])]) {
+    if (!dndIsRecord(slot)) continue;
+    const level = dndNumber(slot.level, 0) || 0;
+    if (level < 1) continue;
+    const max = Math.max(0, dndNumber(slot.available, 0) || 0);
+    const used = Math.max(0, dndNumber(slot.used, 0) || 0);
+    const existing = merged.get(level) || {level,max:0,used:0};
+    existing.max += max;
+    existing.used += used;
+    merged.set(level, existing);
+  }
+  return [...merged.values()].sort((a,b) => a.level - b.level);
+}
+
+function dndInventory(root) {
+  return (root?.inventory || [])
+    .filter(dndIsRecord)
+    .map((item, index) => {
+      const definition = dndIsRecord(item.definition) ? item.definition : {};
+      return {
+        id:"ddb-inventory-" + String(item.id || definition.id || index + 1),
+        name:String(definition.name || item.name || "Item").trim(),
+        quantity:Math.max(0, dndNumber(item.quantity, 1) || 1),
+        equipped:Boolean(item.equipped),
+        type:String(definition.type || definition.filterType || definition.subType || "").trim(),
+        description:dndPlainText(definition.snippet || "")
+      };
+    })
+    .filter(item => item.name);
+}
+
+function dndFeatureRules(root) {
+  const rules = [];
+
+  const add = (value, category) => {
+    if (!dndIsRecord(value)) return;
+    const definition = dndIsRecord(value.definition) ? value.definition : value;
+    const name = String(definition.name || value.name || "").trim();
+    const text = dndPlainText(definition.snippet || definition.description || value.description);
+    if (!name) return;
+    rules.push({name, text, category, source:"D&D Beyond"});
+  };
+
+  for (const trait of root?.race?.racialTraits || []) add(trait, "Species trait");
+  for (const feat of root?.feats || []) add(feat, "Feat");
+  for (const cls of root?.classes || []) {
+    const className = String(cls?.definition?.name || "Class");
+    for (const feature of cls?.classFeatures || []) add(feature, className);
+  }
+
+  return dedupeBy(rules, item => normalize(item.category + "|" + item.name + "|" + item.text));
+}
+
+function parseDndBeyondCharacterPayload(payload, sourceUrl = "") {
+  if (!dndIsRecord(payload)) throw new Error("This D&D Beyond JSON was not readable.");
+  if (payload.success === false) {
+    throw new Error(
+      dndPlainText(payload.data?.serverMessage || payload.message) ||
+      "D&D Beyond did not return this character. Make sure its privacy is Public."
+    );
+  }
+
+  const root = dndIsRecord(payload.data) ? payload.data : payload;
+  if (!dndIsRecord(root) || !root.name) {
+    throw new Error("This does not look like D&D Beyond character-service JSON.");
+  }
+
+  const characterId = String(root.id || "").trim();
+  const classes = dndClassSummary(root);
+  const scores = dndAbilityScores(root);
+  const proficiencyBonus = dndProficiencyBonus(classes.level);
+  const ac = dndArmorClass(root, scores);
+  const overrideHp = dndNumber(root.overrideHitPoints, 0) || 0;
+  const maxHp = Math.max(
+    1,
+    overrideHp > 0
+      ? overrideHp
+      : (dndNumber(root.baseHitPoints, 1) || 1) + (dndNumber(root.bonusHitPoints, 0) || 0)
+  );
+  const removedHp = Math.max(0, dndNumber(root.removedHitPoints, 0) || 0);
+  const tempHp = Math.max(0, dndNumber(root.temporaryHitPoints, 0) || 0);
+  const currentHp = Math.max(0, maxHp - removedHp);
+  const speed =
+    dndNumber(root.speed, null) ??
+    dndNumber(root.race?.weightSpeeds?.normal?.walk, null) ??
+    30;
+
+  const attacks = dndParseActions(root, scores, proficiencyBonus);
+  const spells = dndParseSpells(root, scores, proficiencyBonus);
+  const spellSlots = dndSpellSlots(root);
+  const inventory = dndInventory(root);
+  const features = dndFeatureRules(root);
+
+  const character = {
+    id:"dnd-" + (characterId || normalize(root.name).replace(/\s+/g, "-")),
+    externalId:characterId,
+    name:String(root.name || "D&D Character"),
+    type:"Character",
+    system:"dnd",
+    gameSystemKey:"dnd-5e",
+    categories:dedupeBy([
+      String(root.race?.fullName || root.race?.baseName || "").trim(),
+      classes.label
+    ].filter(Boolean), value => normalize(value)),
+    stats:[
+      {label:"HP", value:currentHp + "/" + maxHp + (tempHp ? " +" + tempHp : "")},
+      {label:"AC", value:String(ac)},
+      {label:"Speed", value:String(speed) + " ft."},
+      {label:"Init", value:dndSigned(dndModifier(scores.dex))},
+      {label:"PB", value:dndSigned(proficiencyBonus)},
+      {label:"Level", value:String(classes.level)}
+    ],
+    profiles:[],
+    rules:features,
+    dnd:{
+      level:classes.level,
+      classes:classes.label,
+      race:String(root.race?.fullName || root.race?.baseName || "").trim(),
+      scores,
+      proficiencyBonus,
+      maxHp,
+      currentHp,
+      tempHp,
+      ac,
+      speed,
+      attacks,
+      spells,
+      spellSlots,
+      inventory
+    },
+    searchText:normalize([
+      root.name,
+      classes.label,
+      root.race?.fullName,
+      attacks.map(item => item.name),
+      spells.map(item => item.name),
+      inventory.map(item => item.name),
+      features.map(item => item.name)
+    ].flat(3).join(" "))
+  };
+
+  return {
+    id:crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random()),
+    name:character.name,
+    faction:classes.label,
+    source:"dndbeyond",
+    gameSystemKey:"dnd-5e",
+    importFormat:sourceUrl ? "ddb-public" : "json",
+    points:null,
+    units:[character],
+    armyRules:features,
+    referenceData:{rules:[], stratagems:[]},
+    importedAt:Date.now(),
+    dnd:{
+      characterId,
+      sourceUrl
+    }
+  };
+}
+
+function extractDndBeyondCharacterId(value = "") {
+  const text = String(value || "").trim();
+  if (/^\d{1,20}$/.test(text)) return text;
+
+  try {
+    const url = new URL(text);
+    if (!["dndbeyond.com","www.dndbeyond.com"].includes(url.hostname.toLowerCase())) return "";
+    const match = url.pathname.match(/\/characters\/(\d{1,20})(?:\/|$)/i);
+    return match?.[1] || "";
+  } catch {
+    return "";
+  }
+}
+
+function saveImportedDndRoster(roster) {
+  const existingIndex = state.rosters.findIndex(existing =>
+    existing.source === "dndbeyond" &&
+    (
+      (roster.dnd?.characterId && existing.dnd?.characterId === roster.dnd.characterId) ||
+      normalize(existing.name) === normalize(roster.name)
+    )
+  );
+
+  if (existingIndex >= 0) {
+    const oldId = state.rosters[existingIndex].id;
+    roster.id = oldId;
+    state.rosters.splice(existingIndex, 1, roster);
+    state.activeRoster = existingIndex;
+  } else {
+    state.rosters.push(roster);
+    state.activeRoster = state.rosters.length - 1;
+  }
+
+  state.unitBrowserSourceId = "roster:" + roster.id;
+  localStorage.setItem("tv_unit_browser_source", state.unitBrowserSourceId);
+  state.selected = roster.units[0] || null;
+  state.selectedRosterId = roster.id;
+  state.dndFocusedActionId = "";
+
+  persist();
+  renderAll();
+  switchPage("datasheets", {silent:true});
+  if (state.selected) renderDetail(state.selected);
+}
+
+async function loadDndBeyondCharacter() {
+  const value = String(els.dndBeyondInput?.value || "").trim();
+  const characterId = extractDndBeyondCharacterId(value);
+
+  if (!isDndMode()) {
+    toast("Switch to D&D 5e before importing a character.");
+    return;
+  }
+  if (!characterId) {
+    if (els.dndBeyondImportStatus) {
+      els.dndBeyondImportStatus.textContent = "Paste a D&D Beyond character link or numeric character ID.";
+    }
+    toast("Paste a D&D Beyond character link or ID.");
+    return;
+  }
+
+  const button = els.dndBeyondImportButton;
+  if (button) {
+    button.disabled = true;
+    button.textContent = "Importing…";
+  }
+  if (els.dndBeyondImportStatus) {
+    els.dndBeyondImportStatus.dataset.busy = "1";
+    els.dndBeyondImportStatus.textContent = "Loading the public character from D&D Beyond…";
+  }
+
+  try {
+    const response = await fetch("/api/dndbeyond-character?id=" + encodeURIComponent(characterId));
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload.error || "Could not import this D&D Beyond character.");
+
+    const sourceUrl = "https://www.dndbeyond.com/characters/" + characterId;
+    const roster = parseDndBeyondCharacterPayload(payload, sourceUrl);
+    saveImportedDndRoster(roster);
+
+    if (els.dndBeyondInput) els.dndBeyondInput.value = "";
+    if (els.dndBeyondImportStatus) {
+      els.dndBeyondImportStatus.dataset.busy = "";
+      els.dndBeyondImportStatus.textContent =
+        "Imported " + roster.name + " · " + roster.faction;
+    }
+    toast("Imported " + roster.name);
+  } catch (error) {
+    console.error("D&D Beyond import failed", error);
+    if (els.dndBeyondImportStatus) {
+      els.dndBeyondImportStatus.dataset.busy = "";
+      els.dndBeyondImportStatus.textContent =
+        error.message || "Could not import this D&D Beyond character.";
+    }
+    toast(error.message || "Could not import this D&D Beyond character.");
+  } finally {
+    if (button) {
+      button.disabled = false;
+      button.textContent = "Import D&D Beyond character";
+    }
+  }
+}
+
+async function handleDndBeyondJsonFile(event) {
+  const file = event.target.files?.[0];
+  if (!file) return;
+
+  try {
+    const payload = JSON.parse(await file.text());
+    const roster = parseDndBeyondCharacterPayload(payload, "");
+    saveImportedDndRoster(roster);
+
+    if (els.dndBeyondImportStatus) {
+      els.dndBeyondImportStatus.textContent =
+        "Imported " + roster.name + " from JSON · " + roster.faction;
+    }
+    toast("Imported " + roster.name);
+  } catch (error) {
+    console.error("D&D Beyond JSON import failed", error);
+    if (els.dndBeyondImportStatus) {
+      els.dndBeyondImportStatus.textContent =
+        error.message || "Could not import this D&D Beyond JSON.";
+    }
+    toast(error.message || "Could not import this D&D Beyond JSON.");
+  } finally {
+    if (els.dndBeyondFileInput) els.dndBeyondFileInput.value = "";
+  }
+}
+
 function rosterSourceSummary(roster) {
   if (roster?.source === "gyrinx") {
     return "Necromunda · Gyrinx · N26";
