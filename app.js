@@ -9958,10 +9958,21 @@ function resetGame() {
       key.startsWith("tv_status_") ||
       key.startsWith("tv_destroyed_") ||
       key.startsWith("tv_unit_destroyed_") ||
-      key.startsWith("tv_source_cp_") ||
-      key.startsWith("tv_dnd_state_")
+      key.startsWith("tv_source_cp_")
     ) {
       localStorage.removeItem(key);
+    }
+
+    if (key.startsWith("tv_dnd_state_")) {
+      let saved = {};
+      try { saved = JSON.parse(localStorage.getItem(key) || "{}"); } catch {}
+      const inventoryDeltas = dndIsRecord(saved?.inventoryDeltas) ? saved.inventoryDeltas : {};
+      localStorage.setItem(key, JSON.stringify({
+        economy:{action:false, bonus:false, reaction:false},
+        slots:{},
+        inventoryDeltas,
+        lastRoll:null
+      }));
     }
   }
 
