@@ -6054,6 +6054,89 @@ body.game-dnd .stat-grid {
   grid-template-columns: repeat(6, minmax(90px, 1fr));
 }
 
+.dnd-rest-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin: 0 0 10px;
+  padding: 9px 10px 9px 12px;
+  border: 1px solid #303c46;
+  border-left: 3px solid var(--accent-strong);
+  border-radius: 3px;
+  background: #0f171d;
+}
+
+.dnd-rest-bar > div:first-child {
+  display: grid;
+  gap: 1px;
+}
+
+.dnd-rest-bar > div:first-child span {
+  color: #758894;
+  font-size: .6rem;
+  font-weight: 850;
+  letter-spacing: .1em;
+}
+
+.dnd-rest-bar > div:first-child strong {
+  font-size: .82rem;
+}
+
+.dnd-rest-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.dnd-action-controls {
+  display: flex;
+  align-items: flex-end;
+  gap: 7px;
+}
+
+.dnd-cast-level {
+  display: grid;
+  gap: 3px;
+}
+
+.dnd-cast-level > span {
+  color: #8295a2;
+  font-size: .57rem;
+  font-weight: 850;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.dnd-cast-level select {
+  min-height: 32px;
+  padding: 0 26px 0 8px;
+  border: 1px solid #3a4a56;
+  border-radius: 3px;
+  background: #0d151b;
+  color: #e2ebef;
+  font: inherit;
+  font-size: .72rem;
+}
+
+.dnd-list-filter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 0 0 9px;
+  padding: 7px 8px 7px 10px;
+  border: 1px solid #31414c;
+  background: #111c23;
+  color: #92a5b0;
+  font-size: .72rem;
+}
+
+.dnd-list-filter strong {
+  color: #d9eef3;
+}
+
 .dnd-mini-tabs {
   display: flex;
   gap: 6px;
@@ -6363,6 +6446,21 @@ body.game-dnd .stat-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
+  .dnd-rest-bar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .dnd-rest-actions {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .dnd-rest-actions .ghost-button {
+    padding-inline: 7px;
+    font-size: .68rem;
+  }
+
   .dnd-mini-tabs {
     margin-inline: -2px;
   }
@@ -6381,6 +6479,12 @@ body.game-dnd .stat-grid {
     flex-direction: column;
   }
 
+  .dnd-action-controls {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .dnd-cast-level select,
   .dnd-action-heading .primary-button {
     width: 100%;
   }
