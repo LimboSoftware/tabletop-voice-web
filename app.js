@@ -2628,14 +2628,100 @@ function resolveRosterAttachments(units = []) {
   return units;
 }
 
+
+function isHeresyUnitProfile(profile) {
+  if (!profile || typeof profile !== "object") return false;
+  const type = normalize(profile.typeName || "");
+  const allowed = new Set([
+    "profile",
+    "vehicle",
+    "knight",
+    "ordinatus carriage",
+    "ordinatus gun"
+  ]);
+  if (!allowed.has(type)) return false;
+
+  const labels = new Set(
+    (profile.characteristics || []).map(item => normalize(item?.name || ""))
+  );
+
+  if (type === "profile") {
+    return labels.has("m") &&
+      (labels.has("ws") || labels.has("bs")) &&
+      (labels.has("sav") || labels.has("t") || labels.has("w"));
+  }
+
+  return labels.has("m") && labels.has("hp");
+}
+
+function heresyTypeCategories(profile) {
+  const typeValue = (profile?.characteristics || [])
+    .find(item => normalize(item?.name || "") === "type");
+
+  const raw = characteristicValue(typeValue);
+  if (!raw) return [];
+
+  return dedupeBy(
+    String(raw)
+      .replace(/[()]/g, ",")
+      .split(",")
+      .map(value => value.trim())
+      .filter(Boolean),
+    value => normalize(value)
+  );
+}
+
+function isHeresyRuleProfile(profile) {
+  if (!profile || profile.hidden) return false;
+  const type = normalize(profile.typeName || "");
+  return [
+    "wargear",
+    "traits",
+    "reaction",
+    "gambit",
+    "psychic power",
+    "cybertheurgic rite",
+    "cybertheurgic rite:",
+    "asset"
+  ].includes(type);
+}
+
+function heresyRuleProfileToRule(profile) {
+  const fields = (profile?.characteristics || [])
+    .map(item => ({
+      label:String(item?.name || "").trim(),
+      value:cleanRuleText(characteristicValue(item)).trim()
+    }))
+    .filter(item => item.value);
+
+  if (!fields.length) return null;
+
+  const preferredText = fields
+    .filter(item => !/^summary$/i.test(item.label))
+    .map(item => item.label ? item.label + ": " + item.value : item.value)
+    .join("\n\n");
+
+  const summary = fields.find(item => /^summary$/i.test(item.label))?.value || "";
+
+  return {
+    name:String(profile.name || profile.typeName || "Rule"),
+    text:preferredText || summary,
+    category:String(profile.typeName || "Rule")
+  };
+}
+
 function parseNewRecruitSelection(selection) {
   const allProfiles = collectProfiles(selection);
-  const unitProfiles = allProfiles.filter(profile => profile?.typeName === "Unit");
+  const unitProfiles = allProfiles.filter(profile =>
+    profile?.typeName === "Unit" || isHeresyUnitProfile(profile)
+  );
   if (!unitProfiles.length) return null;
 
   const primaryUnitProfile =
     unitProfiles.find(profile => normalize(profile.name) === normalize(selection.name)) ||
     unitProfiles[0];
+
+  const heresyProfile = isHeresyUnitProfile(primaryUnitProfile);
 
   const stats = (primaryUnitProfile.characteristics || []).map(characteristic => ({
     label:characteristic.name || "",
@@ -2652,7 +2738,13 @@ function parseNewRecruitSelection(selection) {
     statLabels.has("save") &&
     statLabels.has("control");
 
-  const system = aosProfile ? "aos" : grimdarkProfile ? "opr" : "40k";
+  const system = heresyProfile
+    ? "heresy"
+    : aosProfile
+      ? "aos"
+      : grimdarkProfile
+        ? "opr"
+        : "40k";
 
   const weapons = mergeWeaponProfiles(
     collectWeaponProfiles(selection).map(({profile, quantity}) => ({
@@ -2674,9 +2766,16 @@ function parseNewRecruitSelection(selection) {
         .map(aosAbilityProfileToRule)
     : [];
 
+  const heresyProfileRules = system === "heresy"
+    ? allProfiles
+        .filter(isHeresyRuleProfile)
+        .map(heresyRuleProfileToRule)
+        .filter(Boolean)
+    : [];
+
   const rules = collectRules(selection);
   const abilities = dedupeBy(
-    [...standardAbilityProfiles, ...aosAbilityProfiles, ...rules],
+    [...standardAbilityProfiles, ...aosAbilityProfiles, ...heresyProfileRules, ...rules],
     rule => normalize((rule.category || "") + "|" + rule.name + "|" + rule.text)
   );
 
@@ -2684,7 +2783,13 @@ function parseNewRecruitSelection(selection) {
   if (pts != null) stats.push({label:"Pts", value:String(pts)});
 
   const name = selection.name || primaryUnitProfile.name || "Unit";
-  const categories = collectSelectionCategories(selection);
+  const categories = dedupeBy(
+    [
+      ...collectSelectionCategories(selection),
+      ...(system === "heresy" ? heresyTypeCategories(primaryUnitProfile) : [])
+    ],
+    value => normalize(value)
+  );
 
   return {
     id:selection.id || primaryUnitProfile.id || name,
