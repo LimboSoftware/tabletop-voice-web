@@ -2033,14 +2033,16 @@ function buildRosterFromNewRecruitRoot(root, fileName, importFormat = "json") {
 
   if (gameSystemKey === "40k") resolveRosterAttachments(uniqueUnits);
 
-  const pts = (root.costs || []).find(cost => String(cost.name).toLowerCase() === "pts")?.value;
+  const pts = (root.costs || []).find(cost => isPointsCostName(cost.name))?.value;
   const firstFactionForce =
     allForces.find(force => String(force.catalogueName || "").trim()) ||
     allForces[0];
 
   const armyRules = gameSystemKey === "aos"
     ? extractAosRosterAbilities(root)
-    : extractArmyRules(root);
+    : gameSystemKey === "heresy"
+      ? extractHeresyArmyRules(root)
+      : extractArmyRules(root);
 
   uniqueUnits.forEach(unit => {
     if (unit?.system === "opr") unit.gameSystemKey = gameSystemKey;
@@ -2474,6 +2476,46 @@ function extractSelectedDetachmentRules(root) {
   );
 }
 
+
+function extractHeresyArmyRules(root) {
+  const rules = [...extractArmyRules(root)];
+
+  function addProfile(profile, source = "") {
+    if (!isHeresyRuleProfile(profile)) return;
+    const rule = heresyRuleProfileToRule(profile);
+    if (!rule?.name || !rule?.text) return;
+    rules.push({...rule, source});
+  }
+
+  function addRule(rule, source = "") {
+    if (!rule || rule.hidden) return;
+    const name = cleanRuleText(rule.name || "").trim();
+    const text = cleanRuleText(rule.description || "").trim();
+    if (!name || !text) return;
+    rules.push({name, text, category:"Army rule", source});
+  }
+
+  function walkNonUnitSelection(selection, source = "") {
+    if (!selection || typeof selection !== "object") return;
+    if (normalize(selection.type) === "unit") return;
+
+    for (const profile of selection.profiles || []) addProfile(profile, source);
+    for (const rule of selection.rules || []) addRule(rule, source);
+    for (const child of selection.selections || []) walkNonUnitSelection(child, source);
+  }
+
+  for (const force of collectRosterForces(root?.forces || [])) {
+    const source = force.catalogueName || force.name || "";
+    for (const profile of force.profiles || []) addProfile(profile, source);
+    for (const selection of force.selections || []) walkNonUnitSelection(selection, source);
+  }
+
+  return dedupeBy(
+    rules,
+    item => normalize((item.category || "") + "|" + item.name + "|" + item.text)
+  );
+}
+
 function extractArmyRules(root) {
   const rules = [];
 
@@ -2684,9 +2726,12 @@ function isHeresyRuleProfile(profile) {
   const type = normalize(profile.typeName || "");
   return [
     "wargear",
+    "wargear item",
     "traits",
     "reaction",
+    "reactions",
     "gambit",
+    "detachment description",
     "psychic power",
     "cybertheurgic rite",
     "cybertheurgic rite:",
@@ -2797,7 +2842,7 @@ function parseNewRecruitSelection(selection) {
     rule => normalize((rule.category || "") + "|" + rule.name + "|" + rule.text)
   );
 
-  const pts = (selection.costs || []).find(cost => String(cost.name).toLowerCase() === "pts")?.value;
+  const pts = (selection.costs || []).find(cost => isPointsCostName(cost.name))?.value;
   if (pts != null) stats.push({label:"Pts", value:String(pts)});
 
   const name = selection.name || primaryUnitProfile.name || "Unit";
@@ -4187,6 +4232,11 @@ function dedupeBy(list, fn) {
 
 function normalize(value) {
   return String(value || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+function isPointsCostName(name = "") {
+  const key = normalize(name);
+  return ["pts","pt","point","points","point s"].includes(key);
 }
 
 function setVoicePrompt(page = state.currentPage) {
