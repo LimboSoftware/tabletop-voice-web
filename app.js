@@ -3840,7 +3840,7 @@ function buildRosterFromNewRecruitRoot(root, fileName, importFormat = "json") {
         ? extractKillTeamRules(root)
         : gameSystemKey === "legions-imperialis"
           ? extractLegionsImperialisFormationRules(root)
-          : extractArmyRules(root);
+          : [...extractArmyRules(root), ...extractForceDispositions(root)];
 
   uniqueUnits.forEach(unit => {
     if (unit?.system === "opr") unit.gameSystemKey = gameSystemKey;
@@ -4372,6 +4372,54 @@ function extractHeresyArmyRules(root) {
   return dedupeBy(
     rules,
     item => normalize((item.category || "") + "|" + item.name + "|" + item.text)
+  );
+}
+
+function extractForceDispositions(root) {
+  const dispositions = [];
+
+  for (const force of collectRosterForces(root?.forces || [])) {
+    const source = force.catalogueName || force.name || "";
+
+    function addDisposition(value) {
+      const name = cleanRuleText(value || "").trim();
+      if (!name || normalize(name) === "force disposition") return;
+
+      dispositions.push({
+        name:"Force Disposition",
+        text:name,
+        category:"Force Disposition",
+        source
+      });
+    }
+
+    function walk(value) {
+      if (!value || typeof value !== "object") return;
+      if (Array.isArray(value)) {
+        value.forEach(walk);
+        return;
+      }
+
+      const isDispositionContainer = normalize(value.name || "") === "force disposition";
+      const isDispositionChoice = normalize(value.group || "") === "force disposition";
+
+      if (isDispositionContainer) {
+        for (const child of value.selections || []) {
+          addDisposition(child?.name);
+        }
+      } else if (isDispositionChoice) {
+        addDisposition(value.name);
+      }
+
+      for (const child of value.selections || []) walk(child);
+    }
+
+    walk(force.selections || []);
+  }
+
+  return dedupeBy(
+    dispositions,
+    item => normalize(item.name + "|" + item.text + "|" + item.source)
   );
 }
 
