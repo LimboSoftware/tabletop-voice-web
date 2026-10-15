@@ -1798,6 +1798,21 @@ async function loadLiCommunityReference() {
     const detachments = detachmentData.detachments || [];
     const formations = formationData.formations || [];
 
+    const detachmentByName = new Map();
+    const detachmentByLooseName = new Map();
+    for (const detachment of detachments) {
+      const exactKey = normalize(detachment.name);
+      const looseKey = liCommunityNameKey(detachment.name);
+      if (exactKey && !detachmentByName.has(exactKey)) detachmentByName.set(exactKey, detachment);
+      if (looseKey && !detachmentByLooseName.has(looseKey)) detachmentByLooseName.set(looseKey, detachment);
+    }
+
+    const formationByName = new Map();
+    for (const formation of formations) {
+      const key = normalize(formation.name);
+      if (key && !formationByName.has(key)) formationByName.set(key, formation);
+    }
+
     return {
       units,
       weapons,
@@ -1807,10 +1822,10 @@ async function loadLiCommunityReference() {
       weaponById:new Map(weapons.map(weapon => [String(weapon.id), weapon])),
       weaponByName:new Map(weapons.map(weapon => [normalize(weapon.name), weapon])),
       detachmentById:new Map(detachments.map(detachment => [String(detachment.id), detachment])),
-      detachmentByName:new Map(detachments.map(detachment => [normalize(detachment.name), detachment])),
-      detachmentByLooseName:new Map(detachments.map(detachment => [liCommunityNameKey(detachment.name), detachment])),
+      detachmentByName,
+      detachmentByLooseName,
       formationById:new Map(formations.map(formation => [String(formation.id), formation])),
-      formationByName:new Map(formations.map(formation => [normalize(formation.name), formation]))
+      formationByName
     };
   }).catch(error => {
     liCommunityReferencePromise = null;
@@ -1983,8 +1998,37 @@ function matchLiCommunityWeapon(reference, name) {
 
 function buildLiCommunityUnit(raw, reference, index) {
   const refDetachment = findLiCommunityDetachment(reference, raw.id, raw.name);
+  const mainUnitIds = [...(refDetachment?.mainUnit || [])];
+  let selectedUnitIds = [...(raw.selectedUnitRefs || [])];
+
+  if (!selectedUnitIds.length && refDetachment?.upgradeOptions?.length && raw.notes?.length) {
+    const noteText = normalize(raw.notes.join(" "));
+    for (const upgrade of refDetachment.upgradeOptions) {
+      const upgradeKey = normalize(upgrade.name || "");
+      if (upgradeKey && noteText.includes(upgradeKey) && upgrade.unitRef != null) {
+        selectedUnitIds.push(upgrade.unitRef);
+        continue;
+      }
+
+      const meaningfulWords = upgradeKey
+        .split(" ")
+        .filter(word => word.length > 4 && !["additional","models","model"].includes(word));
+      if (
+        meaningfulWords.length &&
+        meaningfulWords.every(word => noteText.includes(word)) &&
+        upgrade.unitRef != null
+      ) {
+        selectedUnitIds.push(upgrade.unitRef);
+      }
+    }
+  }
+
+  const relatedFallback = selectedUnitIds.length
+    ? selectedUnitIds
+    : (refDetachment?.relatedUnit || []);
+
   const refUnitIds = dedupeBy(
-    [...(refDetachment?.mainUnit || []), ...(refDetachment?.relatedUnit || [])],
+    [...mainUnitIds, ...relatedFallback],
     value => String(value)
   );
 
@@ -2135,11 +2179,15 @@ function liBuilderSlotSize(list, detachment) {
 function liBuilderSlotNotes(list, detachment) {
   const notes = [];
   const selectedWeapons = [];
+  const selectedUnitRefs = [];
   const upgrades = (list.upgrades || []).find(entry => entry.slot_id === detachment.slot_id)?.upgrades || [];
   const loadouts = (list.loadouts || []).find(entry => entry.slot_id === detachment.slot_id)?.loadouts || [];
 
   for (const upgrade of upgrades) {
     const count = Number(upgrade.number) || 0;
+    if (upgrade.unit_ref !== null && upgrade.unit_ref !== undefined) {
+      selectedUnitRefs.push(upgrade.unit_ref);
+    }
     notes.push(
       (count ? count + " × " : "") +
       (upgrade.name || "Upgrade") +
@@ -2161,7 +2209,11 @@ function liBuilderSlotNotes(list, detachment) {
     }
   }
 
-  return {notes, selectedWeapons};
+  return {
+    notes,
+    selectedWeapons,
+    selectedUnitRefs:dedupeBy(selectedUnitRefs, value => String(value))
+  };
 }
 
 function normalizeLiBuilderJsonList(rawList, reference, sourceName = "Legion Builder") {
@@ -2185,6 +2237,7 @@ function normalizeLiBuilderJsonList(rawList, reference, sourceName = "Legion Bui
       points:liBuilderSlotPoints(list, detachment),
       notes:config.notes,
       selectedWeapons:config.selectedWeapons,
+      selectedUnitRefs:config.selectedUnitRefs,
       source:sourceName
     });
   }
