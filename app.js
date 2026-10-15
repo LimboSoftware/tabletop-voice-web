@@ -5431,8 +5431,24 @@ async function getUnitBrowserReferenceData(source) {
   if (source.kind === "opr") {
     return {
       stratagems:[],
-      armyRules:(source.roster?.armyRules || []).filter(rule => rule?.name && rule?.text),
+      armyRules:(source.roster?.armyRules || []).filter(rule => rule?.name),
       note:"OnePageRules list imported from Army Forge."
+    };
+  }
+
+  if (source.kind === "gyrinx") {
+    return {
+      stratagems:[],
+      armyRules:(source.roster?.armyRules || []).filter(rule => rule?.name),
+      note:"Necromunda N26 gang imported from Gyrinx."
+    };
+  }
+
+  if (source.kind === "li-community") {
+    return {
+      stratagems:[],
+      armyRules:(source.roster?.armyRules || []).filter(rule => rule?.name),
+      note:"Legions Imperialis list imported from Legion Companion."
     };
   }
 
@@ -5463,6 +5479,15 @@ async function getUnitBrowserReferenceData(source) {
         note:"Grimdark Future list imported from New Recruit."
       };
     }
+
+    if (rosterGame !== "40k") {
+      return {
+        stratagems:[],
+        armyRules:(roster?.armyRules || []).filter(rule => rule?.name),
+        note:gameSystemDisplayName(rosterGame) + " list imported from New Recruit."
+      };
+    }
+
     const localRules = (roster?.armyRules || []).filter(rule => rule?.name && rule?.text);
     const embeddedDetachmentRules = (roster?.detachmentRules || [])
       .filter(rule => rule?.name && rule?.text);
@@ -6317,7 +6342,9 @@ function renderDataSummary() {
 }
 
 function removeImportedRoster(rosterId) {
-  const index = state.rosters.findIndex(roster => roster.id === rosterId && (roster.source === "new-recruit" || roster.source === "opr"));
+  const index = state.rosters.findIndex(roster =>
+    roster.id === rosterId && isImportedRosterSource(roster)
+  );
   if (index < 0) return;
 
   const removed = state.rosters[index];
