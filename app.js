@@ -20,7 +20,10 @@ const state = {
   shareConnection: null,
   shareScanner: null,
   pendingSharedRoster: null,
-  dndFocusedActionId: ""
+  dndFocusedActionId: "",
+  dndDetailTab: "actions",
+  dndScrollToFocusedAction: false,
+  dndAudioContext: null
 };
 
 const $ = (id) => document.getElementById(id);
@@ -4345,6 +4348,8 @@ function saveImportedDndRoster(roster) {
   state.selected = roster.units[0] || null;
   state.selectedRosterId = roster.id;
   state.dndFocusedActionId = "";
+  state.dndDetailTab = "actions";
+  state.dndScrollToFocusedAction = false;
 
   persist();
   renderAll();
@@ -8403,6 +8408,75 @@ function dndRollExpression(expression) {
 }
 
 
+function getDndAudioContext() {
+  try {
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextClass) return null;
+    if (!state.dndAudioContext) state.dndAudioContext = new AudioContextClass();
+    if (state.dndAudioContext.state === "suspended") {
+      state.dndAudioContext.resume().catch(() => {});
+    }
+    return state.dndAudioContext;
+  } catch {
+    return null;
+  }
+}
+
+function playDndActionSound(kind = "attack") {
+  const context = getDndAudioContext();
+  if (!context) return;
+
+  try {
+    const now = context.currentTime;
+    const master = context.createGain();
+    master.gain.setValueAtTime(0.0001, now);
+    master.gain.exponentialRampToValueAtTime(kind === "spell" ? 0.075 : 0.055, now + 0.008);
+    master.gain.exponentialRampToValueAtTime(0.0001, now + (kind === "spell" ? 0.42 : 0.18));
+    master.connect(context.destination);
+
+    if (kind === "spell") {
+      [440, 660, 880].forEach((frequency, index) => {
+        const oscillator = context.createOscillator();
+        const gain = context.createGain();
+        oscillator.type = index === 0 ? "sine" : "triangle";
+        oscillator.frequency.setValueAtTime(frequency, now);
+        oscillator.frequency.exponentialRampToValueAtTime(frequency * 1.25, now + 0.34);
+        gain.gain.setValueAtTime(index === 0 ? 0.8 : 0.42, now);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.38);
+        oscillator.connect(gain);
+        gain.connect(master);
+        oscillator.start(now + index * 0.025);
+        oscillator.stop(now + 0.4);
+      });
+      return;
+    }
+
+    const impact = context.createOscillator();
+    const impactGain = context.createGain();
+    impact.type = "square";
+    impact.frequency.setValueAtTime(190, now);
+    impact.frequency.exponentialRampToValueAtTime(72, now + 0.14);
+    impactGain.gain.setValueAtTime(0.7, now);
+    impactGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.15);
+    impact.connect(impactGain);
+    impactGain.connect(master);
+    impact.start(now);
+    impact.stop(now + 0.16);
+
+    const ring = context.createOscillator();
+    const ringGain = context.createGain();
+    ring.type = "triangle";
+    ring.frequency.setValueAtTime(980, now);
+    ring.frequency.exponentialRampToValueAtTime(620, now + 0.13);
+    ringGain.gain.setValueAtTime(0.28, now);
+    ringGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.16);
+    ring.connect(ringGain);
+    ringGain.connect(master);
+    ring.start(now + 0.012);
+    ring.stop(now + 0.17);
+  } catch {}
+}
+
 function renderDndAbilityScores(unit) {
   const scores = unit?.dnd?.scores || {};
   return `
@@ -8501,7 +8575,7 @@ function renderDndActionCard(action, runtime, focused = false) {
     </article>`;
 }
 
-function renderDndActions(unit) {
+function renderDndActions(unit, kind = "all") {
   const attacks = unit?.dnd?.attacks || [];
   const spells = unit?.dnd?.spells || [];
   const runtime = getDndRuntimeState(unit);
@@ -8512,12 +8586,15 @@ function renderDndActions(unit) {
     if ((a.level ?? 0) !== (b.level ?? 0)) return (a.level ?? 0) - (b.level ?? 0);
     return a.name.localeCompare(b.name);
   });
+  const showAttacks = kind === "all" || kind === "attack";
+  const showSpells = kind === "all" || kind === "spell";
+
   return `
-    ${attacks.length ? `<section class="detail-section dnd-actions-section">
+    ${showAttacks && attacks.length ? `<section class="detail-section dnd-actions-section">
       <div class="section-heading-row"><h3>Attacks</h3><span class="section-count">${attacks.length}</span></div>
       <div class="dnd-action-list">${sortFocused(attacks).map(action => renderDndActionCard(action, runtime, action.id === focused)).join("")}</div>
     </section>` : ""}
-    ${spells.length ? `<section class="detail-section dnd-actions-section">
+    ${showSpells && spells.length ? `<section class="detail-section dnd-actions-section">
       <div class="section-heading-row"><h3>Spells</h3><span class="section-count">${spells.length}</span></div>
       <div class="dnd-action-list">${sortFocused(spells).map(action => renderDndActionCard(action, runtime, action.id === focused)).join("")}</div>
     </section>` : ""}`;
@@ -8547,14 +8624,61 @@ function renderDndInventory(unit) {
     </section>`;
 }
 
+function dndCharacterTabs(unit) {
+  const hasSpells = Boolean((unit?.dnd?.spells || []).length || (unit?.dnd?.spellSlots || []).length);
+  const tabs = [
+    {id:"actions", label:"Actions"},
+    ...(hasSpells ? [{id:"spells", label:"Spells"}] : []),
+    {id:"inventory", label:"Inventory"},
+    {id:"stats", label:"Stats"}
+  ];
+
+  if (!tabs.some(tab => tab.id === state.dndDetailTab)) {
+    state.dndDetailTab = tabs[0].id;
+  }
+  return tabs;
+}
+
+function renderDndTabBar(unit) {
+  const tabs = dndCharacterTabs(unit);
+  return `
+    <nav class="dnd-mini-tabs" role="tablist" aria-label="Character sections">
+      ${tabs.map(tab => {
+        const active = tab.id === state.dndDetailTab;
+        return `<button
+          class="dnd-mini-tab${active ? " active" : ""}"
+          type="button"
+          role="tab"
+          aria-selected="${active ? "true" : "false"}"
+          data-dnd-tab="${tab.id}">${escapeHtml(tab.label)}</button>`;
+      }).join("")}
+    </nav>`;
+}
+
+function renderDndTabPanel(id, content) {
+  const active = state.dndDetailTab === id;
+  return `
+    <div class="dnd-tab-panel${active ? "" : " hidden"}" data-dnd-panel="${id}" role="tabpanel">
+      ${content || '<div class="empty-section">Nothing to show here yet.</div>'}
+    </div>`;
+}
+
 function renderDndCharacterSections(unit) {
   return [
-    renderDndActionEconomy(unit),
-    renderDndAbilityScores(unit),
-    renderDndSpellSlots(unit),
-    renderDndActions(unit),
-    renderDndInventory(unit),
-    renderUnitKeywordsSection(unit)
+    renderDndTabBar(unit),
+    renderDndTabPanel("actions", [
+      renderDndActionEconomy(unit),
+      renderDndActions(unit, "attack")
+    ].filter(Boolean).join("")),
+    renderDndTabPanel("spells", [
+      renderDndSpellSlots(unit),
+      renderDndActions(unit, "spell")
+    ].filter(Boolean).join("")),
+    renderDndTabPanel("inventory", renderDndInventory(unit)),
+    renderDndTabPanel("stats", [
+      renderDndAbilityScores(unit),
+      renderUnitKeywordsSection(unit)
+    ].filter(Boolean).join(""))
   ].filter(Boolean).join("");
 }
 
@@ -8604,11 +8728,30 @@ function dndUseAction(unit, actionId) {
   runtime.lastRoll = {actionId:action.id, summary, detail:details.join(" · "), at:Date.now()};
   saveDndRuntimeState(unit, runtime);
   state.dndFocusedActionId = action.id;
+  state.dndDetailTab = action.kind === "spell" ? "spells" : "actions";
+  playDndActionSound(action.kind);
   renderDetail(unit);
 }
 
 function bindDndDetailControls(unit = state.selected) {
   if (!unit || unit.system !== "dnd" || !els.detailSections) return;
+
+  els.detailSections.querySelectorAll("[data-dnd-tab]").forEach(button => {
+    button.addEventListener("click", () => {
+      const tab = button.dataset.dndTab;
+      state.dndDetailTab = tab;
+
+      els.detailSections.querySelectorAll("[data-dnd-tab]").forEach(tabButton => {
+        const active = tabButton.dataset.dndTab === tab;
+        tabButton.classList.toggle("active", active);
+        tabButton.setAttribute("aria-selected", active ? "true" : "false");
+      });
+
+      els.detailSections.querySelectorAll("[data-dnd-panel]").forEach(panel => {
+        panel.classList.toggle("hidden", panel.dataset.dndPanel !== tab);
+      });
+    });
+  });
 
   els.detailSections.querySelectorAll("[data-dnd-economy]").forEach(button => {
     button.addEventListener("click", () => {
@@ -8691,7 +8834,8 @@ function bindDndDetailControls(unit = state.selected) {
     });
   });
 
-  if (state.dndFocusedActionId) {
+  if (state.dndFocusedActionId && state.dndScrollToFocusedAction) {
+    state.dndScrollToFocusedAction = false;
     requestAnimationFrame(() => {
       const card = [...els.detailSections.querySelectorAll("[data-dnd-action-card]")]
         .find(item => item.dataset.dndActionCard === state.dndFocusedActionId);
@@ -10700,6 +10844,8 @@ function focusDndAction(context, action) {
   state.selectedRosterId = context.roster.id;
   state.selected = context.unit;
   state.dndFocusedActionId = action.id;
+  state.dndDetailTab = action.kind === "spell" ? "spells" : "actions";
+  state.dndScrollToFocusedAction = true;
   state.unitBrowserSourceId = "roster:" + context.roster.id;
   localStorage.setItem("tv_unit_browser_source", state.unitBrowserSourceId);
   rememberRecentUnit(context.unit);
@@ -10733,6 +10879,8 @@ function handleDndVoiceCommand(primary, alternatives = []) {
       state.selectedRosterId = context.roster.id;
       state.selected = context.unit;
       state.dndFocusedActionId = "";
+      state.dndDetailTab = "inventory";
+      state.dndScrollToFocusedAction = false;
       switchPage("datasheets", {silent:true});
       renderDetail(context.unit);
       toast((delta > 0 ? "Added " : "Removed ") + amount + " " + name);
@@ -10744,6 +10892,8 @@ function handleDndVoiceCommand(primary, alternatives = []) {
     const runtime = getDndRuntimeState(context.unit);
     runtime.economy = {action:false, bonus:false, reaction:false};
     saveDndRuntimeState(context.unit, runtime);
+    state.dndDetailTab = "actions";
+    state.dndScrollToFocusedAction = false;
     renderDetail(context.unit);
     toast("New turn — action economy reset");
     return true;
