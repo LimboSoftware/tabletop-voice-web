@@ -2641,7 +2641,11 @@ function isHeresyUnitProfile(profile) {
     "vehicle",
     "knight",
     "ordinatus carriage",
-    "ordinatus gun"
+    "ordinatus gun",
+    "titan head",
+    "titan carapace",
+    "titan arms",
+    "titan legs"
   ]);
   if (!allowed.has(type)) return false;
 
@@ -2726,6 +2730,16 @@ function parseNewRecruitSelection(selection) {
     unitProfiles[0];
 
   const heresyProfile = isHeresyUnitProfile(primaryUnitProfile);
+  const heresyComponents = unitProfiles
+    .filter(profile => /^titan\s/i.test(String(profile?.typeName || "")))
+    .map(profile => ({
+      name:String(profile.name || profile.typeName || "Component").trim(),
+      type:String(profile.typeName || ""),
+      values:(profile.characteristics || []).map(characteristic => ({
+        label:characteristic.name || "",
+        value:characteristicValue(characteristic)
+      })).filter(item => item.label && item.value !== "")
+    }));
 
   const stats = (primaryUnitProfile.characteristics || []).map(characteristic => ({
     label:characteristic.name || "",
@@ -2804,6 +2818,7 @@ function parseNewRecruitSelection(selection) {
     stats,
     rules:abilities,
     profiles:weapons,
+    heresyComponents,
     selectionIds:collectSelectionIds(selection),
     incomingAssociations:normalizeUnitAssociations(selection.incomingAssociations || []),
     outgoingAssociations:normalizeUnitAssociations(selection.associations || []),
