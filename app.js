@@ -3695,9 +3695,12 @@ function dndRangeLabel(value) {
   const normal =
     dndNumber(range.range, null) ??
     dndNumber(range.distance, null) ??
+    dndNumber(range.rangeValue, null) ??
     dndNumber(range.rangeValue?.amount, null) ??
     dndNumber(range.amount, null);
-  const longRange = dndNumber(range.longRange, null);
+  const longRange =
+    dndNumber(range.longRange, null) ??
+    dndNumber(range.longRangeValue, null);
   const origin = String(range.origin || range.rangeType || "").trim();
 
   if (normal != null && longRange != null) return normal + "/" + longRange + " ft.";
