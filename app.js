@@ -6188,7 +6188,9 @@ function setVoicePrompt(page = state.currentPage) {
       ? "Say a ship or squadron name from your Warfleets fleet"
       : isKillTeamMode()
         ? "Say an operative name from your Kill Team"
-        : isLegionsImperialisMode()
+        : isNecromundaMode()
+          ? "Say a fighter name from your Necromunda gang"
+          : isLegionsImperialisMode()
           ? "Say a detachment name from your Legions Imperialis army"
           : isHeresyMode()
           ? "Say a unit name from your Horus Heresy army"
@@ -6673,6 +6675,18 @@ function getUnitBrowserGroup(unit) {
   if (unit?.system === "kill-team") {
     if (categories.has("leader")) return "Leaders";
     return "Operatives";
+  }
+
+  if (unit?.system === "necromunda") {
+    if (categories.has("leader")) return "Leaders";
+    if (categories.has("champion")) return "Champions";
+    if (categories.has("juve") || categories.has("prospect")) return "Juves & Prospects";
+    if (categories.has("ganger")) return "Gangers";
+    if (categories.has("brute")) return "Brutes";
+    if (categories.has("hanger on")) return "Hangers-on";
+    if (categories.has("vehicle")) return "Vehicles";
+    if (categories.has("pet")) return "Pets";
+    return "Fighters";
   }
 
   if (unit?.system === "legions-imperialis") {
@@ -8167,6 +8181,7 @@ function updateGameContextUi(unit = state.selected) {
   const heresy = isHeresyMode();
   const killTeam = isKillTeamMode();
   const legionsImperialis = isLegionsImperialisMode();
+  const necromunda = isNecromundaMode();
   const non40k = state.gameSystem !== "40k";
 
   els.appNav?.classList.toggle("opr-context", non40k);
@@ -8187,9 +8202,11 @@ function updateGameContextUi(unit = state.selected) {
       ? "Fleet"
       : killTeam
         ? "Operatives"
-        : legionsImperialis
-          ? "Detachments"
-          : "Units";
+        : necromunda
+          ? "Fighters"
+          : legionsImperialis
+            ? "Detachments"
+            : "Units";
   }
 
   const browserEyebrow = els.rosterBrowser?.querySelector(".roster-browser-heading .eyebrow");
@@ -8199,38 +8216,46 @@ function updateGameContextUi(unit = state.selected) {
       ? "FLEET BROWSER"
       : killTeam
         ? "KILL TEAM"
-        : legionsImperialis
-          ? "DETACHMENT BROWSER"
-          : "UNIT BROWSER";
+        : necromunda
+          ? "GANG ROSTER"
+          : legionsImperialis
+            ? "DETACHMENT BROWSER"
+            : "UNIT BROWSER";
   }
   if (browserTitle) {
     browserTitle.textContent = isWarfleetsMode()
       ? "Choose a ship or squadron."
       : killTeam
         ? "Choose an operative."
-        : legionsImperialis
-          ? "Choose a detachment."
-          : "Choose a unit.";
+        : necromunda
+          ? "Choose a fighter."
+          : legionsImperialis
+            ? "Choose a detachment."
+            : "Choose a unit.";
   }
   if (els.searchInput) {
     els.searchInput.placeholder = isWarfleetsMode()
       ? "Type a ship or squadron name…"
       : killTeam
         ? "Type an operative name…"
-        : legionsImperialis
-          ? "Type a detachment name…"
-          : "Type a unit name…";
+        : necromunda
+          ? "Type a fighter name…"
+          : legionsImperialis
+            ? "Type a detachment name…"
+            : "Type a unit name…";
   }
 
   const armyRulesLabel = armyRulesButton?.querySelector("span:last-child");
   if (armyRulesLabel) {
     armyRulesLabel.textContent = killTeam
       ? "Team Rules"
-      : legionsImperialis
-        ? "Formation Rules"
-        : (opr || heresy)
-          ? "Rules"
-          : "Army Rules";
+      : necromunda
+        ? "Gang Rules"
+        : legionsImperialis
+          ? "Formation Rules"
+          : (opr || heresy)
+            ? "Rules"
+            : "Army Rules";
   }
 
   const heading = els.pageArmyRules?.querySelector("h1");
@@ -8240,11 +8265,13 @@ function updateGameContextUi(unit = state.selected) {
   if (heading) {
     heading.textContent = killTeam
       ? "Team Rules"
-      : legionsImperialis
-        ? "Formation Rules"
-        : (opr || heresy)
-          ? "Rules"
-          : "Army Rules";
+      : necromunda
+        ? "Gang Rules"
+        : legionsImperialis
+          ? "Formation Rules"
+          : (opr || heresy)
+            ? "Rules"
+            : "Army Rules";
   }
 
   if (eyebrow) {
@@ -8252,9 +8279,11 @@ function updateGameContextUi(unit = state.selected) {
       ? currentGameName().toUpperCase() + " REFERENCE"
       : killTeam
         ? "KILL TEAM REFERENCE"
-        : legionsImperialis
-          ? "LEGIONS IMPERIALIS REFERENCE"
-          : heresy
+        : necromunda
+          ? "NECROMUNDA REFERENCE"
+          : legionsImperialis
+            ? "LEGIONS IMPERIALIS REFERENCE"
+            : heresy
           ? "HORUS HERESY REFERENCE"
           : aos
             ? "AGE OF SIGMAR REFERENCE"
@@ -8268,9 +8297,11 @@ function updateGameContextUi(unit = state.selected) {
         : "Special rules" + (isOprFantasyMode() ? " and spells" : "") + " referenced by the active " + currentGameName() + (isOprQuestMode() ? " campaign." : " list.")
       : killTeam
         ? "Team-wide abilities, equipment and selected rules imported with the active Kill Team. Operative-specific abilities and unique actions are shown on each operative."
-        : legionsImperialis
-          ? "Formation rules imported with the active Legions Imperialis army. Detachment-specific special rules are shown on each detachment."
-          : heresy
+        : necromunda
+          ? "Gang-wide rules imported from Gyrinx. Fighter-specific skills, powers, gear and campaign state are shown on each fighter."
+          : legionsImperialis
+            ? "Formation rules imported with the active Legions Imperialis army. Detachment-specific special rules are shown on each detachment."
+            : heresy
           ? "Army rules imported with the active Horus Heresy list. Unit-specific wargear, reactions and traits are shown on each unit profile."
           : aos
           ? "Battle traits, spells, prayers and other army-level abilities imported with the active Age of Sigmar list."
@@ -9272,7 +9303,9 @@ function renderQuickLists() {
     ? ["Heavy Ships","Medium Ships","Light Ships","Ships","Squadrons"]
     : isKillTeamMode()
       ? ["Leaders","Operatives"]
-      : isLegionsImperialisMode()
+      : isNecromundaMode()
+        ? ["Leaders","Champions","Gangers","Juves & Prospects","Brutes","Hangers-on","Vehicles","Pets","Fighters"]
+        : isLegionsImperialisMode()
         ? [
             "HQ",
             "Core",
@@ -9372,9 +9405,11 @@ function renderQuickLists() {
         ? "No ships or squadrons were found in this fleet."
         : isKillTeamMode()
           ? "No operatives were found in this kill team."
-          : isLegionsImperialisMode()
-            ? "No detachments were found in this army."
-            : "No units were found in this data source.") +
+          : isNecromundaMode()
+            ? "No fighters were found in this gang."
+            : isLegionsImperialisMode()
+              ? "No detachments were found in this army."
+              : "No units were found in this data source.") +
     '</div>';
 
   els.quickLists.querySelectorAll("[data-entry-index]").forEach(button => {
