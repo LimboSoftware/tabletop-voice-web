@@ -542,6 +542,8 @@ const GAME_SYSTEMS = Object.fromEntries(
   )
 );
 
+const GAME_SYSTEM_PICKER_SEEN_KEY = "tv_game_system_picker_seen_v1";
+
 function currentGameName() {
   return GAME_SYSTEMS[state.gameSystem]?.name || "Choose a game";
 }
@@ -726,7 +728,8 @@ function showEntryModalIfNeeded() {
     return;
   }
 
-  if (!state.gameSystem) {
+  const pickerSeen = localStorage.getItem(GAME_SYSTEM_PICKER_SEEN_KEY) === "1";
+  if (!state.gameSystem || !pickerSeen) {
     els.firstRunModal?.classList.add("hidden");
     els.gameSystemModal?.classList.remove("hidden");
     return;
@@ -833,6 +836,9 @@ function setGameSystem(gameSystem, options = {}) {
 
   state.gameSystem = gameSystem;
   localStorage.setItem("tv_game_system", gameSystem);
+  if (options.fromChooser) {
+    localStorage.setItem(GAME_SYSTEM_PICKER_SEEN_KEY, "1");
+  }
   state.selected = null;
   state.selectedRosterId = null;
   state.unitBrowserSourceId = "all";
@@ -3174,6 +3180,39 @@ function parseGyrinxN26Fighter(header, index) {
   };
 }
 
+function parseGyrinxCampaignState(sheet) {
+  const root = sheet.querySelector("#n26-campaign-state");
+  if (!root) return null;
+
+  const heading = cleanGyrinxText(root.querySelector("h2")?.textContent);
+  const name = heading
+    .replace(/^Campaign\s*[·•:–—-]?\s*/i, "")
+    .trim() || "Campaign";
+
+  const rows = [];
+  for (const term of root.querySelectorAll("dl dt")) {
+    const row = term.parentElement;
+    const description = row?.querySelector(":scope > dd") || term.nextElementSibling;
+    const label = cleanGyrinxText(term.textContent);
+    const value = cleanGyrinxText(description?.textContent);
+    if (!label || !value) continue;
+    rows.push({label, value});
+  }
+
+  const boonSection = [...root.querySelectorAll("section")].find(section =>
+    normalize(cleanGyrinxText(section.querySelector("h3")?.textContent)) === "boons"
+  );
+  const boons = boonSection
+    ? cleanGyrinxText(boonSection.textContent).replace(/^Boons\s*/i, "").trim()
+    : "";
+
+  return {
+    name,
+    rows:dedupeBy(rows, row => normalize(row.label + "|" + row.value)),
+    boons
+  };
+}
+
 function parseGyrinxGangRules(sheet, cardRoots) {
   const rules = [];
 
@@ -3231,11 +3270,29 @@ function parseGyrinxN26GangHtml(html, sourceUrl = "") {
   const gangNames = [
     "Goliath","Escher","Orlock","Van Saar","Cawdor","Delaque",
     "Palanite Enforcers","Corpse Grinder Cult","Genestealer Cult",
-    "Chaos Cult","Venators","Outcasts","Ash Waste Nomads"
+    "Chaos Cult","Venators","Underhive Outcasts","Outcasts",
+    "Ash Waste Nomads","Ironhead Squat Prospectors","Slave Ogryns",
+    "Malstrain","Spyre Hunters"
   ];
   const gangType = headerGangType || gangNames.find(type =>
     normalize(profileWords).includes(normalize(type))
   ) || "Necromunda";
+
+  const campaign = parseGyrinxCampaignState(sheet);
+  const gangRules = parseGyrinxGangRules(sheet, cardRoots);
+  const campaignRules = campaign
+    ? [
+        {name:"Campaign", text:campaign.name, category:"Campaign"},
+        ...campaign.rows.map(row => ({
+          name:row.label,
+          text:row.value,
+          category:"Campaign"
+        })),
+        ...(campaign.boons
+          ? [{name:"Boons", text:campaign.boons, category:"Campaign"}]
+          : [])
+      ]
+    : [];
 
   return {
     id:crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random()),
@@ -3246,13 +3303,17 @@ function parseGyrinxN26GangHtml(html, sourceUrl = "") {
     importFormat:"gyrinx-share",
     points:null,
     units,
-    armyRules:parseGyrinxGangRules(sheet, cardRoots),
+    armyRules:dedupeBy(
+      [...gangRules, ...campaignRules],
+      rule => normalize(rule.category + "|" + rule.name + "|" + rule.text)
+    ),
     referenceData:{rules:[], stratagems:[]},
     importedAt:Date.now(),
     necromunda:{
       rating:ratingMatch ? Number(ratingMatch[1]) : null,
       credits:creditsMatch ? Number(creditsMatch[1]) : null,
       wealth:wealthMatch ? Number(wealthMatch[1]) : null,
+      campaign,
       sourceUrl
     }
   };
@@ -3324,7 +3385,8 @@ async function loadGyrinxGang() {
       els.necromundaImportStatus.dataset.busy = "";
       els.necromundaImportStatus.textContent =
         "Imported " + roster.units.length + " fighters" +
-        (roster.necromunda.rating != null ? " · Rating " + roster.necromunda.rating : "");
+        (roster.necromunda.rating != null ? " · Rating " + roster.necromunda.rating : "") +
+        (roster.necromunda.campaign?.name ? " · " + roster.necromunda.campaign.name : "");
     }
     toast("Imported " + roster.name);
   } catch (error) {
@@ -6630,11 +6692,14 @@ function getUnitBrowserSources() {
     const necromundaRating = roster.source === "gyrinx" && roster.necromunda?.rating != null
       ? "Rating " + roster.necromunda.rating + " · "
       : "";
+    const necromundaCampaign = roster.source === "gyrinx" && roster.necromunda?.campaign?.name
+      ? roster.necromunda.campaign.name + " · "
+      : "";
 
     sources.push({
       id:"roster:" + roster.id,
       label:roster.name,
-      subLabel:necromundaRating +
+      subLabel:necromundaRating + necromundaCampaign +
         (roster.points != null ? roster.points + " pts · " : "") +
         rosterSourceSummary(roster),
       kind,
@@ -8391,7 +8456,7 @@ function updateGameContextUi(unit = state.selected) {
       : killTeam
         ? "Team-wide abilities, equipment and selected rules imported with the active Kill Team. Operative-specific abilities and unique actions are shown on each operative."
         : necromunda
-          ? "Gang-wide rules imported from Gyrinx. Fighter-specific skills, powers, gear and campaign state are shown on each fighter."
+          ? "Gang-wide rules and current campaign state imported from Gyrinx. Fighter-specific skills, powers, gear, injuries and status are shown on each fighter."
           : legionsImperialis
             ? "Formation rules imported with the active Legions Imperialis army. Detachment-specific special rules are shown on each detachment."
             : heresy
