@@ -6007,3 +6007,300 @@ body.game-necromunda .stat {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
+
+
+/* === D&D 5e / D&D Beyond === */
+body.game-dnd .setup-import-grid {
+  grid-template-columns: minmax(0, 830px);
+}
+
+body.game-dnd .setup-import-card {
+  width: 100%;
+}
+
+.dnd-beyond-import-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 10px;
+  align-items: stretch;
+}
+
+.dnd-beyond-import-controls input,
+.dnd-inventory-add input {
+  width: 100%;
+  min-width: 0;
+  min-height: 46px;
+  padding: 0 12px;
+  border: 1px solid #354350;
+  border-radius: 3px;
+  outline: 0;
+  background: #0b1015;
+  color: #edf3f6;
+  font: inherit;
+  font-size: 16px;
+}
+
+.dnd-beyond-import-controls input:focus,
+.dnd-inventory-add input:focus {
+  border-color: var(--accent-strong);
+  box-shadow: 0 0 0 2px rgba(57,184,213,.12);
+}
+
+body.game-dnd .stat-grid {
+  grid-template-columns: repeat(6, minmax(90px, 1fr));
+}
+
+.dnd-ability-grid,
+.dnd-economy-grid,
+.dnd-slot-grid {
+  display: grid;
+  gap: 8px;
+}
+
+.dnd-ability-grid {
+  grid-template-columns: repeat(6, minmax(80px, 1fr));
+}
+
+.dnd-ability {
+  display: grid;
+  place-items: center;
+  gap: 2px;
+  min-height: 82px;
+  border: 1px solid #34414d;
+  background: #101820;
+  padding: 10px;
+}
+
+.dnd-ability span,
+.dnd-slot-card > span {
+  color: #8494a2;
+  font-size: .67rem;
+  font-weight: 850;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.dnd-ability strong {
+  font-size: 1.2rem;
+}
+
+.dnd-ability small {
+  color: #9bc7d2;
+  font-weight: 800;
+}
+
+.dnd-economy-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.dnd-economy-button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 48px;
+  padding: 0 13px;
+  border: 1px solid #354350;
+  border-radius: 3px;
+  background: #111920;
+  color: #dce5ea;
+  font: inherit;
+  cursor: pointer;
+}
+
+.dnd-economy-button strong {
+  color: #78d2e5;
+  font-size: .67rem;
+  letter-spacing: .08em;
+}
+
+.dnd-economy-button.used {
+  opacity: .62;
+  background: #191518;
+}
+
+.dnd-economy-button.used strong {
+  color: #e7959d;
+}
+
+.dnd-slot-grid {
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+}
+
+.dnd-slot-card {
+  display: grid;
+  gap: 7px;
+  border: 1px solid #34414d;
+  background: #101820;
+  padding: 10px 12px;
+}
+
+.dnd-slot-card > strong {
+  font-size: 1.2rem;
+}
+
+.dnd-slot-card > div {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 5px;
+}
+
+.dnd-slot-card button,
+.dnd-inventory-quantity button {
+  min-height: 32px;
+  border: 1px solid #394957;
+  background: #131d25;
+  color: #e7eef1;
+  font: inherit;
+  cursor: pointer;
+}
+
+.dnd-action-list,
+.dnd-inventory-list {
+  display: grid;
+  gap: 8px;
+}
+
+.dnd-action-card {
+  border: 1px solid #33414c;
+  border-left: 3px solid #425564;
+  background: #10171e;
+  padding: 14px;
+}
+
+.dnd-action-card.focused {
+  border-color: var(--accent-strong);
+  border-left-width: 4px;
+  box-shadow: 0 0 0 1px rgba(57,184,213,.12);
+}
+
+.dnd-action-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.dnd-action-heading span {
+  color: #8295a2;
+  font-size: .62rem;
+  font-weight: 850;
+  letter-spacing: .1em;
+}
+
+.dnd-action-heading h4 {
+  margin: 3px 0 0;
+  font-size: 1rem;
+}
+
+.dnd-action-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 10px;
+}
+
+.dnd-action-meta span {
+  padding: 4px 7px;
+  border: 1px solid #354652;
+  background: #14202a;
+  color: #b9c8d0;
+  font-size: .69rem;
+}
+
+.dnd-action-description {
+  margin-top: 11px;
+  color: #aebbc3;
+  font-size: .86rem;
+  line-height: 1.48;
+}
+
+.dnd-derived-note {
+  display: block;
+  margin-top: 8px;
+  color: #788895;
+}
+
+.dnd-roll-result {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-top: 12px;
+  padding: 9px 10px;
+  border-left: 3px solid var(--accent-strong);
+  background: #14222a;
+}
+
+.dnd-roll-result strong {
+  color: #e8f8fb;
+}
+
+.dnd-roll-result small {
+  color: #9ab1bb;
+}
+
+.dnd-inventory-add {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.dnd-inventory-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  min-height: 48px;
+  border-bottom: 1px solid #29343e;
+  padding: 7px 0;
+}
+
+.dnd-inventory-row > div:first-child {
+  display: grid;
+  gap: 2px;
+}
+
+.dnd-inventory-row small {
+  color: #82919c;
+}
+
+.dnd-inventory-quantity {
+  display: grid;
+  grid-template-columns: 34px 34px 34px;
+  align-items: center;
+  text-align: center;
+}
+
+@media (max-width: 760px) {
+  body.game-dnd .setup-import-grid,
+  .dnd-beyond-import-controls {
+    grid-template-columns: 1fr;
+  }
+
+  body.game-dnd .stat-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .dnd-ability-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .dnd-economy-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .dnd-action-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .dnd-action-heading .primary-button {
+    width: 100%;
+  }
+
+  .dnd-roll-result,
+  .dnd-inventory-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}
