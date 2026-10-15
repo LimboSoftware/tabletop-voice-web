@@ -2044,9 +2044,42 @@ body.focus-mode .detail-panel {
 }
 
 .setup-hero-actions .compact {
-  min-height: 36px;
-  padding-inline: 13px;
+  min-height: 34px;
+  padding-inline: 12px;
   white-space: nowrap;
+}
+
+.setup-system-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  min-height: 46px;
+  margin-bottom: 14px;
+  padding: 8px 10px 8px 14px;
+  border: 1px solid #2c3944;
+  border-left: 3px solid var(--accent-strong);
+  background: #10171e;
+}
+
+.setup-system-strip-copy {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.setup-system-strip-copy strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: .9rem;
+}
+
+.setup-system-strip > button {
+  flex: 0 0 auto;
+  min-height: 32px;
+  padding-inline: 11px;
 }
 
 .setup-import-grid {
@@ -2412,6 +2445,29 @@ body.focus-mode .detail-panel {
   .setup-import-grid {
     grid-template-columns: 1fr;
     gap: 10px;
+  }
+
+  .setup-system-strip {
+    gap: 8px;
+    min-height: 44px;
+    padding: 7px 8px 7px 10px;
+  }
+
+  .setup-system-strip-copy {
+    gap: 7px;
+  }
+
+  .setup-system-strip-copy .section-label {
+    display: none;
+  }
+
+  .setup-system-strip-copy strong {
+    font-size: .82rem;
+  }
+
+  .setup-system-strip > button {
+    padding-inline: 9px;
+    font-size: .72rem;
   }
 
   .setup-hero-actions {
