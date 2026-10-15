@@ -2839,7 +2839,9 @@ function splitGyrinxNames(value = "") {
 
 function parseGyrinxFighterStats(cardRoot) {
   const allowed = new Set([
-    "m","ws","bs","s","t","w","i","a","ld","cl","wil","int"
+    "m","ws","bs","s","t","w","i","a","ld","cl","wil","int",
+    "fr","sd","rr","hp","hnd",
+    "front toughness","side toughness","rear toughness","hit points","handling"
   ]);
   const stats = [];
   let typeLine = "";
@@ -7083,10 +7085,18 @@ function renderUnitKeywordsSection(unit) {
   const keywords = getDisplayUnitKeywords(unit);
   if (!keywords.length) return "";
 
+  const heading = unit?.system === "necromunda"
+    ? "Fighter type"
+    : unit?.system === "warfleet"
+      ? "Ship type"
+      : unit?.system === "legions-imperialis"
+        ? "Detachment type"
+        : "Unit keywords";
+
   return `
     <section class="detail-section unit-keywords-section">
       <div class="section-heading-row">
-        <h3>Unit keywords</h3>
+        <h3>${escapeHtml(heading)}</h3>
         <span class="section-count">${keywords.length}</span>
       </div>
       <div class="unit-keyword-chips">
@@ -7117,8 +7127,13 @@ function renderDetail(unit) {
   updateLinkedUnitButton(sourceUnit);
   updatePinButton();
 
+  const necromundaVehicle = unit.system === "necromunda" &&
+    (unit.categories || []).some(category => normalize(category) === "vehicle");
+
   const statOrder = unit.system === "necromunda"
-    ? ["m","ws","bs","s","t","w","i","a","ld","cl","wil","int"]
+    ? necromundaVehicle
+      ? ["m","fr","front toughness","sd","side toughness","rr","rear toughness","hp","hit points","hnd","handling","cl"]
+      : ["m","ws","bs","s","t","w","i","a","ld","cl","wil","int"]
     : unit.system === "legions-imperialis"
       ? ["move","sv","caf","morale","w"]
       : unit.system === "kill-team"
