@@ -157,6 +157,7 @@ const els = {
   coreRulesImportButton: $("coreRulesImportButton"),
   coreRulesImportStatus: $("coreRulesImportStatus"),
   setupChooseArmies: $("setupChooseArmies"),
+  setupCurrentGame: $("setupCurrentGame"),
   setupChangeGameButton: $("setupChangeGameButton"),
   resetGameButton: $("resetGameButton"),
   resetMatchButton: $("resetMatchButton"),
@@ -982,6 +983,9 @@ function applyGameSystemUi() {
   if (els.settingsCurrentGame) {
     els.settingsCurrentGame.textContent = currentGameName();
   }
+  if (els.setupCurrentGame) {
+    els.setupCurrentGame.textContent = currentGameName();
+  }
 
   renderGameSystemCatalogues(gameProviderForSystem());
 
@@ -1001,7 +1005,7 @@ function applyGameSystemUi() {
     els.newRecruitImportLabel.textContent = "NEW RECRUIT";
   }
   if (els.newRecruitImportTitle) {
-    els.newRecruitImportTitle.textContent = "Import exported list";
+    els.newRecruitImportTitle.textContent = "Import list";
   }
   if (els.newRecruitImportCard) {
     els.newRecruitImportCard.classList.toggle(
