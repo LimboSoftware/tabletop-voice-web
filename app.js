@@ -2058,7 +2058,9 @@ function buildRosterFromNewRecruitRoot(root, fileName, importFormat = "json") {
     ? extractAosRosterAbilities(root)
     : gameSystemKey === "heresy"
       ? extractHeresyArmyRules(root)
-      : extractArmyRules(root);
+      : gameSystemKey === "kill-team"
+        ? extractKillTeamRules(root)
+        : extractArmyRules(root);
 
   uniqueUnits.forEach(unit => {
     if (unit?.system === "opr") unit.gameSystemKey = gameSystemKey;
@@ -2500,6 +2502,51 @@ function extractSelectedDetachmentRules(root) {
   );
 }
 
+
+
+function extractKillTeamRules(root) {
+  const rules = [...extractArmyRules(root)];
+
+  function addProfile(profile, source = "") {
+    if (!isKillTeamRuleProfile(profile)) return;
+    const rule = killTeamRuleProfileToRule(profile);
+    if (!rule?.name || !rule?.text) return;
+    rules.push({...rule, source});
+  }
+
+  function addRule(rule, source = "") {
+    if (!rule || rule.hidden) return;
+    const name = cleanRuleText(rule.name || "").trim();
+    const text = cleanRuleText(rule.description || "").trim();
+    if (!name || !text) return;
+    rules.push({name, text, category:"Team rule", source});
+  }
+
+  function hasOperativeProfile(selection) {
+    return collectProfiles(selection).some(isKillTeamOperativeProfile);
+  }
+
+  function walkNonOperativeSelection(selection, source = "") {
+    if (!selection || typeof selection !== "object") return;
+    if (hasOperativeProfile(selection)) return;
+
+    for (const profile of selection.profiles || []) addProfile(profile, source);
+    for (const rule of selection.rules || []) addRule(rule, source);
+    for (const child of selection.selections || []) walkNonOperativeSelection(child, source);
+  }
+
+  for (const force of collectRosterForces(root?.forces || [])) {
+    const source = force.catalogueName || force.name || "";
+    for (const profile of force.profiles || []) addProfile(profile, source);
+    for (const rule of force.rules || []) addRule(rule, source);
+    for (const selection of force.selections || []) walkNonOperativeSelection(selection, source);
+  }
+
+  return dedupeBy(
+    rules,
+    item => normalize((item.category || "") + "|" + item.name + "|" + item.text)
+  );
+}
 
 function extractHeresyArmyRules(root) {
   const rules = [...extractArmyRules(root)];
@@ -4371,9 +4418,11 @@ function setVoicePrompt(page = state.currentPage) {
   const prompts = {
     datasheets: isWarfleetsMode()
       ? "Say a ship or squadron name from your Warfleets fleet"
-      : isHeresyMode()
-        ? "Say a unit name from your Horus Heresy army"
-        : isOprMode()
+      : isKillTeamMode()
+        ? "Say an operative name from your Kill Team"
+        : isHeresyMode()
+          ? "Say a unit name from your Horus Heresy army"
+          : isOprMode()
           ? "Say a unit name from your " + currentGameName() + " list"
           : isAosMode()
         ? "Say a unit name, e.g. “Annihilators”"
@@ -4849,6 +4898,11 @@ function getUnitBrowserGroup(unit) {
     if (categories.has("medium")) return "Medium Ships";
     if (categories.has("light")) return "Light Ships";
     return "Ships";
+  }
+
+  if (unit?.system === "kill-team") {
+    if (categories.has("leader")) return "Leaders";
+    return "Operatives";
   }
 
   if (unit?.system === "heresy") {
@@ -6150,6 +6204,7 @@ function updateGameContextUi(unit = state.selected) {
   const opr = isOprMode();
   const aos = isAosMode();
   const heresy = isHeresyMode();
+  const killTeam = isKillTeamMode();
   const non40k = state.gameSystem !== "40k";
 
   els.appNav?.classList.toggle("opr-context", non40k);
@@ -6165,35 +6220,69 @@ function updateGameContextUi(unit = state.selected) {
 
   const unitButton = els.appNav?.querySelector('[data-page-target="datasheets"]');
   const unitLabel = unitButton?.querySelector("span:last-child");
-  if (unitLabel) unitLabel.textContent = isWarfleetsMode() ? "Fleet" : "Units";
+  if (unitLabel) {
+    unitLabel.textContent = isWarfleetsMode()
+      ? "Fleet"
+      : killTeam
+        ? "Operatives"
+        : "Units";
+  }
 
   const browserEyebrow = els.rosterBrowser?.querySelector(".roster-browser-heading .eyebrow");
   const browserTitle = els.rosterBrowser?.querySelector(".roster-browser-heading h1");
-  if (browserEyebrow) browserEyebrow.textContent = isWarfleetsMode() ? "FLEET BROWSER" : "UNIT BROWSER";
-  if (browserTitle) browserTitle.textContent = isWarfleetsMode() ? "Choose a ship or squadron." : "Choose a unit.";
+  if (browserEyebrow) {
+    browserEyebrow.textContent = isWarfleetsMode()
+      ? "FLEET BROWSER"
+      : killTeam
+        ? "KILL TEAM"
+        : "UNIT BROWSER";
+  }
+  if (browserTitle) {
+    browserTitle.textContent = isWarfleetsMode()
+      ? "Choose a ship or squadron."
+      : killTeam
+        ? "Choose an operative."
+        : "Choose a unit.";
+  }
   if (els.searchInput) {
-    els.searchInput.placeholder = isWarfleetsMode() ? "Type a ship or squadron name…" : "Type a unit name…";
+    els.searchInput.placeholder = isWarfleetsMode()
+      ? "Type a ship or squadron name…"
+      : killTeam
+        ? "Type an operative name…"
+        : "Type a unit name…";
   }
 
   const armyRulesLabel = armyRulesButton?.querySelector("span:last-child");
   if (armyRulesLabel) {
-    armyRulesLabel.textContent = (opr || heresy) ? "Rules" : "Army Rules";
+    armyRulesLabel.textContent = killTeam
+      ? "Team Rules"
+      : (opr || heresy)
+        ? "Rules"
+        : "Army Rules";
   }
 
   const heading = els.pageArmyRules?.querySelector("h1");
   const copy = els.pageArmyRules?.querySelector(".page-heading > p:last-child");
   const eyebrow = els.pageArmyRules?.querySelector(".eyebrow");
 
-  if (heading) heading.textContent = (opr || heresy) ? "Rules" : "Army Rules";
+  if (heading) {
+    heading.textContent = killTeam
+      ? "Team Rules"
+      : (opr || heresy)
+        ? "Rules"
+        : "Army Rules";
+  }
 
   if (eyebrow) {
     eyebrow.textContent = opr
       ? currentGameName().toUpperCase() + " REFERENCE"
-      : heresy
-        ? "HORUS HERESY REFERENCE"
-        : aos
-          ? "AGE OF SIGMAR REFERENCE"
-          : "ARMY REFERENCE";
+      : killTeam
+        ? "KILL TEAM REFERENCE"
+        : heresy
+          ? "HORUS HERESY REFERENCE"
+          : aos
+            ? "AGE OF SIGMAR REFERENCE"
+            : "ARMY REFERENCE";
   }
 
   if (copy) {
@@ -6201,9 +6290,11 @@ function updateGameContextUi(unit = state.selected) {
       ? isWarfleetsMode()
         ? "Ship rules and systems referenced by the active Warfleets fleet."
         : "Special rules" + (isOprFantasyMode() ? " and spells" : "") + " referenced by the active " + currentGameName() + (isOprQuestMode() ? " campaign." : " list.")
-      : heresy
-        ? "Army rules imported with the active Horus Heresy list. Unit-specific wargear, reactions and traits are shown on each unit profile."
-        : aos
+      : killTeam
+        ? "Team-wide abilities, equipment and selected rules imported with the active Kill Team. Operative-specific abilities and unique actions are shown on each operative."
+        : heresy
+          ? "Army rules imported with the active Horus Heresy list. Unit-specific wargear, reactions and traits are shown on each unit profile."
+          : aos
           ? "Battle traits, spells, prayers and other army-level abilities imported with the active Age of Sigmar list."
           : "Rules that apply to the selected imported list or whole army.";
   }
@@ -7201,8 +7292,10 @@ function renderQuickLists() {
 
   const groupOrder = isWarfleetsMode()
     ? ["Heavy Ships","Medium Ships","Light Ships","Ships","Squadrons"]
-    : isHeresyMode()
-      ? [
+    : isKillTeamMode()
+      ? ["Leaders","Operatives"]
+      : isHeresyMode()
+        ? [
           "High Command",
           "Command",
           "Retinue",
@@ -7280,7 +7373,11 @@ function renderQuickLists() {
 
   els.quickLists.innerHTML = html.join("") ||
     '<div class="empty-section">' +
-      (isWarfleetsMode() ? "No ships or squadrons were found in this fleet." : "No units were found in this data source.") +
+      (isWarfleetsMode()
+        ? "No ships or squadrons were found in this fleet."
+        : isKillTeamMode()
+          ? "No operatives were found in this kill team."
+          : "No units were found in this data source.") +
     '</div>';
 
   els.quickLists.querySelectorAll("[data-entry-index]").forEach(button => {
