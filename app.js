@@ -8283,6 +8283,304 @@ function dndRollExpression(expression) {
   return {rolls, bonus, total:rolls.reduce((sum, value) => sum + value, 0) + bonus, expression:String(expression)};
 }
 
+
+function renderDndAbilityScores(unit) {
+  const scores = unit?.dnd?.scores || {};
+  return `
+    <section class="detail-section dnd-ability-section">
+      <div class="section-heading-row"><h3>Ability scores</h3></div>
+      <div class="dnd-ability-grid">
+        ${Object.entries(DND_ABILITY_LABELS).map(([key,label]) => `
+          <div class="dnd-ability">
+            <span>${label}</span>
+            <strong>${escapeHtml(scores[key] ?? "—")}</strong>
+            <small>${escapeHtml(dndSigned(dndModifier(scores[key] ?? 10)))}</small>
+          </div>`).join("")}
+      </div>
+    </section>`;
+}
+
+function renderDndActionEconomy(unit) {
+  const runtime = getDndRuntimeState(unit);
+  const rows = [["action","Action"],["bonus","Bonus Action"],["reaction","Reaction"]];
+  return `
+    <section class="detail-section dnd-economy-section">
+      <div class="section-heading-row">
+        <h3>Action economy</h3>
+        <button class="ghost-button compact" type="button" data-dnd-reset-turn>New turn</button>
+      </div>
+      <div class="dnd-economy-grid">
+        ${rows.map(([key,label]) => `
+          <button class="dnd-economy-button${runtime.economy[key] ? " used" : ""}"
+            type="button" data-dnd-economy="${key}" aria-pressed="${runtime.economy[key] ? "true" : "false"}">
+            <span>${escapeHtml(label)}</span>
+            <strong>${runtime.economy[key] ? "USED" : "READY"}</strong>
+          </button>`).join("")}
+      </div>
+    </section>`;
+}
+
+function renderDndSpellSlots(unit) {
+  const slots = unit?.dnd?.spellSlots || [];
+  if (!slots.length) return "";
+  const runtime = getDndRuntimeState(unit);
+  return `
+    <section class="detail-section dnd-slot-section">
+      <div class="section-heading-row"><h3>Spell slots</h3></div>
+      <div class="dnd-slot-grid">
+        ${slots.map(slot => {
+          const used = dndSlotUsed(unit, runtime, slot);
+          const remaining = Math.max(0, Number(slot.max || 0) - used);
+          return `
+            <div class="dnd-slot-card">
+              <span>Level ${slot.level}</span>
+              <strong>${remaining}/${slot.max}</strong>
+              <div>
+                <button type="button" data-dnd-slot-use="${slot.level}" aria-label="Use level ${slot.level} spell slot">−</button>
+                <button type="button" data-dnd-slot-restore="${slot.level}" aria-label="Restore level ${slot.level} spell slot">+</button>
+              </div>
+            </div>`;
+        }).join("")}
+      </div>
+    </section>`;
+}
+
+function dndActionMeta(action) {
+  const items = [];
+  if (action.activation) items.push(action.activation);
+  if (action.kind === "spell") items.push(action.level ? "Level " + action.level : "Cantrip");
+  if (action.range) items.push(action.range);
+  if (action.toHit != null) items.push(dndSigned(action.toHit) + " to hit");
+  if (action.saveDc != null) {
+    items.push("DC " + action.saveDc + (action.saveAbility ? " " + String(action.saveAbility).toUpperCase() : "") + " save");
+  }
+  if (action.damage) items.push(action.damage + (action.damageType ? " " + action.damageType : ""));
+  if (action.concentration) items.push("Concentration");
+  if (action.ritual) items.push("Ritual");
+  if (action.components) items.push(action.components);
+  return items;
+}
+
+function renderDndActionCard(action, runtime, focused = false) {
+  const last = runtime.lastRoll?.actionId === action.id ? runtime.lastRoll : null;
+  const actionLabel = action.kind === "spell"
+    ? action.level > 0 ? "SPELL · LEVEL " + action.level : "CANTRIP"
+    : "ATTACK";
+  const buttonLabel = action.kind === "spell"
+    ? (action.toHit != null || action.damage ? "Cast / roll" : "Cast")
+    : "Roll attack";
+  return `
+    <article class="dnd-action-card${focused ? " focused" : ""}" data-dnd-action-card="${escapeHtml(action.id)}">
+      <div class="dnd-action-heading">
+        <div><span>${escapeHtml(actionLabel)}</span><h4>${escapeHtml(action.name)}</h4></div>
+        <button class="primary-button compact" type="button" data-dnd-use-action="${escapeHtml(action.id)}">${escapeHtml(buttonLabel)}</button>
+      </div>
+      <div class="dnd-action-meta">${dndActionMeta(action).map(item => `<span>${escapeHtml(item)}</span>`).join("")}</div>
+      ${action.description ? `<div class="dnd-action-description">${escapeHtml(action.description)}</div>` : ""}
+      ${action.derived ? `<small class="dnd-derived-note">Attack values derived from the imported equipped weapon.</small>` : ""}
+      ${last ? `<div class="dnd-roll-result"><strong>${escapeHtml(last.summary || "")}</strong>${last.detail ? `<small>${escapeHtml(last.detail)}</small>` : ""}</div>` : ""}
+    </article>`;
+}
+
+function renderDndActions(unit) {
+  const attacks = unit?.dnd?.attacks || [];
+  const spells = unit?.dnd?.spells || [];
+  const runtime = getDndRuntimeState(unit);
+  const focused = state.dndFocusedActionId;
+  const sortFocused = list => [...list].sort((a,b) => {
+    if (a.id === focused) return -1;
+    if (b.id === focused) return 1;
+    if ((a.level ?? 0) !== (b.level ?? 0)) return (a.level ?? 0) - (b.level ?? 0);
+    return a.name.localeCompare(b.name);
+  });
+  return `
+    ${attacks.length ? `<section class="detail-section dnd-actions-section">
+      <div class="section-heading-row"><h3>Attacks</h3><span class="section-count">${attacks.length}</span></div>
+      <div class="dnd-action-list">${sortFocused(attacks).map(action => renderDndActionCard(action, runtime, action.id === focused)).join("")}</div>
+    </section>` : ""}
+    ${spells.length ? `<section class="detail-section dnd-actions-section">
+      <div class="section-heading-row"><h3>Spells</h3><span class="section-count">${spells.length}</span></div>
+      <div class="dnd-action-list">${sortFocused(spells).map(action => renderDndActionCard(action, runtime, action.id === focused)).join("")}</div>
+    </section>` : ""}`;
+}
+
+function renderDndInventory(unit) {
+  const runtime = getDndRuntimeState(unit);
+  const items = dndMergedInventory(unit, runtime);
+  return `
+    <section class="detail-section dnd-inventory-section">
+      <div class="section-heading-row"><h3>Inventory</h3><span class="section-count">${items.length}</span></div>
+      <div class="dnd-inventory-add">
+        <input type="text" data-dnd-inventory-input autocomplete="off" placeholder="Add item, e.g. Hempen Rope">
+        <button class="ghost-button compact" type="button" data-dnd-inventory-add>Add item</button>
+      </div>
+      <div class="dnd-inventory-list">
+        ${items.length ? items.map(item => `
+          <div class="dnd-inventory-row">
+            <div><strong>${escapeHtml(item.name)}</strong><small>${escapeHtml(item.type || (item.equipped ? "Equipped" : "Item"))}${item.equipped ? " · Equipped" : ""}</small></div>
+            <div class="dnd-inventory-quantity">
+              <button type="button" data-dnd-inventory-minus="${escapeHtml(item.key)}" aria-label="Remove one ${escapeHtml(item.name)}">−</button>
+              <strong>${item.quantity}</strong>
+              <button type="button" data-dnd-inventory-plus="${escapeHtml(item.key)}" aria-label="Add one ${escapeHtml(item.name)}">+</button>
+            </div>
+          </div>`).join("") : '<div class="empty-section">No carried items.</div>'}
+      </div>
+    </section>`;
+}
+
+function renderDndCharacterSections(unit) {
+  return [
+    renderDndActionEconomy(unit),
+    renderDndAbilityScores(unit),
+    renderDndSpellSlots(unit),
+    renderDndActions(unit),
+    renderDndInventory(unit),
+    renderUnitKeywordsSection(unit)
+  ].filter(Boolean).join("");
+}
+
+function dndFindAction(unit, actionId) {
+  return [...(unit?.dnd?.attacks || []), ...(unit?.dnd?.spells || [])]
+    .find(action => String(action.id) === String(actionId)) || null;
+}
+
+function dndUseAction(unit, actionId) {
+  const action = dndFindAction(unit, actionId);
+  if (!action) return;
+  const runtime = getDndRuntimeState(unit);
+
+  if (action.kind === "spell" && action.level > 0 && action.usesSpellSlot !== false) {
+    const eligible = (unit.dnd?.spellSlots || [])
+      .filter(slot => slot.level >= action.level && dndRemainingSlots(unit, runtime, slot) > 0)
+      .sort((a,b) => a.level - b.level);
+    const slot = eligible[0];
+    if (!slot) {
+      toast("No level " + action.level + "+ spell slot is available.");
+      return;
+    }
+    runtime.slots[String(slot.level)] = dndSlotUsed(unit, runtime, slot) + 1;
+  }
+
+  const economyKey = dndActionEconomyKey(action);
+  if (economyKey) runtime.economy[economyKey] = true;
+
+  let summary = action.kind === "spell" ? "Cast " + action.name : action.name;
+  const details = [];
+  if (action.toHit != null) {
+    const d20 = dndRollDie(20);
+    const total = d20 + Number(action.toHit || 0);
+    summary = "Attack roll " + total;
+    details.push("d20 " + d20 + " " + dndSigned(action.toHit));
+  } else if (action.saveDc != null) {
+    summary = "DC " + action.saveDc + (action.saveAbility ? " " + String(action.saveAbility).toUpperCase() : "") + " save";
+  }
+  if (action.damage) {
+    const damage = dndRollExpression(action.damage);
+    if (damage) {
+      details.push("Damage " + damage.total + " (" + damage.rolls.join("+") +
+        (damage.bonus ? (damage.bonus > 0 ? "+" : "") + damage.bonus : "") + ")" +
+        (action.damageType ? " " + action.damageType : ""));
+    }
+  }
+  runtime.lastRoll = {actionId:action.id, summary, detail:details.join(" · "), at:Date.now()};
+  saveDndRuntimeState(unit, runtime);
+  state.dndFocusedActionId = action.id;
+  renderDetail(unit);
+}
+
+function bindDndDetailControls(unit = state.selected) {
+  if (!unit || unit.system !== "dnd" || !els.detailSections) return;
+
+  els.detailSections.querySelectorAll("[data-dnd-economy]").forEach(button => {
+    button.addEventListener("click", () => {
+      const runtime = getDndRuntimeState(unit);
+      const key = button.dataset.dndEconomy;
+      runtime.economy[key] = !runtime.economy[key];
+      saveDndRuntimeState(unit, runtime);
+      renderDetail(unit);
+    });
+  });
+
+  els.detailSections.querySelector("[data-dnd-reset-turn]")?.addEventListener("click", () => {
+    const runtime = getDndRuntimeState(unit);
+    runtime.economy = {action:false, bonus:false, reaction:false};
+    saveDndRuntimeState(unit, runtime);
+    renderDetail(unit);
+    toast("New turn — action economy reset");
+  });
+
+  els.detailSections.querySelectorAll("[data-dnd-slot-use]").forEach(button => {
+    button.addEventListener("click", () => {
+      const level = Number(button.dataset.dndSlotUse);
+      const slot = (unit.dnd?.spellSlots || []).find(item => item.level === level);
+      if (!slot) return;
+      const runtime = getDndRuntimeState(unit);
+      const used = dndSlotUsed(unit, runtime, slot);
+      if (used >= slot.max) return toast("No level " + level + " slots remaining.");
+      runtime.slots[String(level)] = used + 1;
+      saveDndRuntimeState(unit, runtime);
+      renderDetail(unit);
+    });
+  });
+
+  els.detailSections.querySelectorAll("[data-dnd-slot-restore]").forEach(button => {
+    button.addEventListener("click", () => {
+      const level = Number(button.dataset.dndSlotRestore);
+      const slot = (unit.dnd?.spellSlots || []).find(item => item.level === level);
+      if (!slot) return;
+      const runtime = getDndRuntimeState(unit);
+      runtime.slots[String(level)] = Math.max(0, dndSlotUsed(unit, runtime, slot) - 1);
+      saveDndRuntimeState(unit, runtime);
+      renderDetail(unit);
+    });
+  });
+
+  els.detailSections.querySelectorAll("[data-dnd-use-action]").forEach(button => {
+    button.addEventListener("click", () => dndUseAction(unit, button.dataset.dndUseAction));
+  });
+
+  const addItem = () => {
+    const input = els.detailSections.querySelector("[data-dnd-inventory-input]");
+    const name = input?.value?.trim();
+    if (!name) return;
+    adjustDndInventory(unit, name, 1);
+    renderDetail(unit);
+    toast("Added " + name);
+  };
+  els.detailSections.querySelector("[data-dnd-inventory-add]")?.addEventListener("click", addItem);
+  els.detailSections.querySelector("[data-dnd-inventory-input]")?.addEventListener("keydown", event => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      addItem();
+    }
+  });
+
+  els.detailSections.querySelectorAll("[data-dnd-inventory-plus]").forEach(button => {
+    button.addEventListener("click", () => {
+      const item = dndMergedInventory(unit).find(row => row.key === button.dataset.dndInventoryPlus);
+      if (!item) return;
+      adjustDndInventory(unit, item.name, 1);
+      renderDetail(unit);
+    });
+  });
+  els.detailSections.querySelectorAll("[data-dnd-inventory-minus]").forEach(button => {
+    button.addEventListener("click", () => {
+      const item = dndMergedInventory(unit).find(row => row.key === button.dataset.dndInventoryMinus);
+      if (!item) return;
+      adjustDndInventory(unit, item.name, -1);
+      renderDetail(unit);
+    });
+  });
+
+  if (state.dndFocusedActionId) {
+    requestAnimationFrame(() => {
+      const card = [...els.detailSections.querySelectorAll("[data-dnd-action-card]")]
+        .find(item => item.dataset.dndActionCard === state.dndFocusedActionId);
+      card?.scrollIntoView({block:"center", behavior:"smooth"});
+    });
+  }
+}
+
 function renderDetail(unit) {
   updateGameContextUi(unit);
 
