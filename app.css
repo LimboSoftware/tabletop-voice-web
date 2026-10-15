@@ -5769,3 +5769,137 @@ body.game-legions-imperialis .stat-grid {
     grid-template-columns: 1fr;
   }
 }
+
+
+/* === Necromunda N26 === */
+body.game-necromunda .setup-import-grid {
+  grid-template-columns: minmax(0, 830px);
+}
+
+body.game-necromunda .setup-import-card {
+  width: 100%;
+}
+
+.necromunda-import-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: stretch;
+}
+
+.necromunda-import-controls input {
+  width: 100%;
+  min-width: 0;
+  min-height: 50px;
+  padding: 0 12px;
+  border: 1px solid #354350;
+  border-radius: 3px;
+  outline: 0;
+  background: #0b1015;
+  color: #edf3f6;
+  font: inherit;
+  font-size: 16px;
+}
+
+.necromunda-import-controls input:focus {
+  border-color: var(--accent-strong);
+  box-shadow: 0 0 0 2px rgba(57,184,213,.12);
+}
+
+body.game-necromunda .stat-grid {
+  grid-template-columns: repeat(6, minmax(82px, 1fr));
+}
+
+body.game-necromunda .stat {
+  padding: 11px;
+}
+
+.necromunda-campaign-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px;
+}
+
+.necromunda-campaign-row {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-2);
+  padding: 10px 12px;
+}
+
+.necromunda-campaign-row span {
+  color: var(--muted);
+  font-size: .76rem;
+}
+
+.necromunda-campaign-row strong {
+  min-width: 0;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.necromunda-weapon-table {
+  min-width: 860px;
+}
+
+.necromunda-weapon-table th:nth-child(2),
+.necromunda-weapon-table td:nth-child(2),
+.necromunda-weapon-table th:nth-child(3),
+.necromunda-weapon-table td:nth-child(3),
+.necromunda-weapon-table th:nth-child(4),
+.necromunda-weapon-table td:nth-child(4),
+.necromunda-weapon-table th:nth-child(5),
+.necromunda-weapon-table td:nth-child(5),
+.necromunda-weapon-table th:nth-child(6),
+.necromunda-weapon-table td:nth-child(6) {
+  width: 72px;
+}
+
+.necromunda-weapon-table th:last-child,
+.necromunda-weapon-table td:last-child {
+  min-width: 260px;
+  text-align: left;
+}
+
+.necromunda-weapon-traits {
+  color: #c4d1d8 !important;
+  line-height: 1.4;
+}
+
+@media (max-width: 760px) {
+  body.game-necromunda .setup-import-grid,
+  .necromunda-import-controls {
+    grid-template-columns: 1fr;
+  }
+
+  body.game-necromunda .stat-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 7px;
+  }
+
+  body.game-necromunda .stat {
+    padding: 9px;
+  }
+
+  .necromunda-weapon-table {
+    min-width: 0;
+  }
+
+  .necromunda-weapon-table .necromunda-weapon-traits {
+    grid-column: 1 / -1;
+    min-width: 0;
+    padding-top: 9px;
+    border-top: 1px solid #25303f !important;
+  }
+}
+
+@media (max-width: 440px) {
+  body.game-necromunda .stat-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
