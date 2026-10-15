@@ -10545,6 +10545,126 @@ function rankVoiceCandidates(alternatives) {
     .sort((a,b) => b.score - a.score || a.unit.name.localeCompare(b.unit.name));
 }
 
+
+function getDndCharacterContexts() {
+  return state.rosters.flatMap((roster, rosterIndex) => {
+    if (roster.source !== "dndbeyond" || !rosterMatchesSelectedGame(roster)) return [];
+    return (roster.units || [])
+      .filter(unit => unit.system === "dnd")
+      .map(unit => ({roster, rosterIndex, unit}));
+  });
+}
+
+function activeDndCharacterContext() {
+  const contexts = getDndCharacterContexts();
+  return contexts.find(item =>
+    state.selected?.id === item.unit.id ||
+    state.selectedRosterId === item.roster.id
+  ) || contexts[0] || null;
+}
+
+function focusDndAction(context, action) {
+  if (!context || !action) return false;
+  state.activeRoster = context.rosterIndex;
+  state.selectedRosterId = context.roster.id;
+  state.selected = context.unit;
+  state.dndFocusedActionId = action.id;
+  state.unitBrowserSourceId = "roster:" + context.roster.id;
+  localStorage.setItem("tv_unit_browser_source", state.unitBrowserSourceId);
+  rememberRecentUnit(context.unit);
+  switchPage("datasheets", {silent:true});
+  renderAll();
+  renderDetail(context.unit);
+  if (els.voiceHint) els.voiceHint.textContent = action.name;
+  toast(action.name);
+  return true;
+}
+
+function handleDndVoiceCommand(primary, alternatives = []) {
+  if (!isDndMode()) return false;
+  const contexts = getDndCharacterContexts();
+  if (!contexts.length) return false;
+
+  const raw = String(primary || "").trim();
+  const q = normalize(raw);
+  if (!q) return false;
+
+  const context = activeDndCharacterContext();
+
+  const inventoryMatch = raw.match(/^\s*(add|remove|drop|delete)\s+(?:(\d+)\s+)?(.+?)\s*$/i);
+  if (inventoryMatch && context) {
+    const verb = inventoryMatch[1].toLowerCase();
+    const amount = Math.max(1, Number(inventoryMatch[2] || 1));
+    const name = inventoryMatch[3].trim();
+    const delta = /remove|drop|delete/.test(verb) ? -amount : amount;
+    if (adjustDndInventory(context.unit, name, delta)) {
+      state.activeRoster = context.rosterIndex;
+      state.selectedRosterId = context.roster.id;
+      state.selected = context.unit;
+      state.dndFocusedActionId = "";
+      switchPage("datasheets", {silent:true});
+      renderDetail(context.unit);
+      toast((delta > 0 ? "Added " : "Removed ") + amount + " " + name);
+      return true;
+    }
+  }
+
+  if (/^(new turn|reset turn|start turn)$/.test(q) && context) {
+    const runtime = getDndRuntimeState(context.unit);
+    runtime.economy = {action:false, bonus:false, reaction:false};
+    saveDndRuntimeState(context.unit, runtime);
+    renderDetail(context.unit);
+    toast("New turn — action economy reset");
+    return true;
+  }
+
+  let kind = "";
+  let query = raw;
+  if (/^\s*(attack|strike|shoot)\b/i.test(raw)) {
+    kind = "attack";
+    query = raw.replace(/^\s*(?:attack|strike|shoot)(?:\s+with)?\s+/i, "");
+  } else if (/^\s*cast\b/i.test(raw)) {
+    kind = "spell";
+    query = raw.replace(/^\s*cast\s+/i, "");
+  } else if (/^\s*use\b/i.test(raw)) {
+    query = raw.replace(/^\s*use\s+/i, "");
+  }
+
+  const spoken = [
+    query,
+    ...alternatives.slice(1).map(item =>
+      String(item?.transcript || "")
+        .replace(/^\s*(?:attack|strike|shoot)(?:\s+with)?\s+/i, "")
+        .replace(/^\s*cast\s+/i, "")
+        .replace(/^\s*use\s+/i, "")
+    )
+  ].filter(Boolean);
+
+  const ranked = [];
+  for (const item of contexts) {
+    const actions = [
+      ...(item.unit.dnd?.attacks || []),
+      ...(item.unit.dnd?.spells || [])
+    ].filter(action => !kind || action.kind === kind);
+
+    for (const action of actions) {
+      const score = Math.max(...spoken.map(value => scoreVoicePhrase(value, action.name)));
+      ranked.push({...item, action, score});
+    }
+  }
+
+  ranked.sort((a,b) => b.score - a.score || a.action.name.localeCompare(b.action.name));
+  const top = ranked[0];
+  const second = ranked[1];
+  if (!top || top.score < .52) return false;
+
+  const margin = top.score - (second?.score || 0);
+  const exact = spoken.some(value => normalize(value) === normalize(top.action.name));
+  if (!exact && top.score < .72 && margin < .12) return false;
+
+  return focusDndAction(top, top.action);
+}
+
 function chooseBestVoiceMatch(input) {
   const alternatives = Array.isArray(input)
     ? input
@@ -10580,6 +10700,7 @@ function chooseBestVoiceMatch(input) {
 
   if (state.currentPage !== "datasheets") return;
 
+  if (isDndMode() && handleDndVoiceCommand(primary, alternatives)) return;
   if (handleDatasheetVoiceCommand(q)) return;
 
   if (!state.rosters.length) {
