@@ -7622,7 +7622,7 @@ function setVoicePrompt(page = state.currentPage) {
         : isNecromundaMode()
           ? "Say a fighter name from your Necromunda gang"
           : isDndMode()
-            ? "Try “attack longsword”, “cast fireball”, “list fire spells”, or “short rest”"
+            ? "Try “roll stealth”, “attack longsword”, “cast fireball”, “list fire spells”, or “short rest”"
             : isLegionsImperialisMode()
           ? "Say a detachment name from your Legions Imperialis army"
           : isHeresyMode()
