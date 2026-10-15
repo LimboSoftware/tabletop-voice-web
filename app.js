@@ -11097,6 +11097,8 @@ function focusDndAction(context, action) {
   state.dndFocusedActionId = action.id;
   state.dndDetailTab = action.kind === "spell" ? "spells" : "actions";
   state.dndScrollToFocusedAction = true;
+  state.dndListFilter = "";
+  state.dndListKind = "";
   state.unitBrowserSourceId = "roster:" + context.roster.id;
   localStorage.setItem("tv_unit_browser_source", state.unitBrowserSourceId);
   rememberRecentUnit(context.unit);
@@ -11118,6 +11120,68 @@ function handleDndVoiceCommand(primary, alternatives = []) {
   if (!q) return false;
 
   const context = activeDndCharacterContext();
+
+  if (/^(short rest|take a short rest)$/.test(q) && context) {
+    state.dndDetailTab = "actions";
+    state.dndScrollToFocusedAction = false;
+    dndApplyRest(context.unit, "short");
+    return true;
+  }
+
+  if (/^(long rest|take a long rest)$/.test(q) && context) {
+    state.dndDetailTab = "actions";
+    state.dndScrollToFocusedAction = false;
+    dndApplyRest(context.unit, "long");
+    return true;
+  }
+
+  if (/^list\b/.test(q) && context) {
+    let phrase = q.replace(/^list\s+(?:all\s+)?/, "").trim();
+    let listKind = "";
+
+    if (/\bspells?$/.test(phrase)) {
+      listKind = "spell";
+      phrase = phrase.replace(/\bspells?$/, "").trim();
+    } else if (/\b(?:actions?|attacks?)$/.test(phrase)) {
+      listKind = "attack";
+      phrase = phrase.replace(/\b(?:actions?|attacks?)$/, "").trim();
+    }
+
+    if (phrase === "all") phrase = "";
+    if (phrase !== "damage" && phrase !== "damaging") {
+      phrase = phrase.replace(/\bdamage(?:\s+type)?\b/g, "").trim();
+    }
+
+    const spellMatches = (context.unit.dnd?.spells || []).filter(action =>
+      dndActionMatchesListFilter(action, phrase)
+    );
+    const attackMatches = (context.unit.dnd?.attacks || []).filter(action =>
+      dndActionMatchesListFilter(action, phrase)
+    );
+
+    if (!listKind) {
+      listKind = spellMatches.length ? "spell" : "attack";
+    }
+
+    const matches = listKind === "spell" ? spellMatches : attackMatches;
+    state.activeRoster = context.rosterIndex;
+    state.selectedRosterId = context.roster.id;
+    state.selected = context.unit;
+    state.dndFocusedActionId = "";
+    state.dndDetailTab = listKind === "spell" ? "spells" : "actions";
+    state.dndScrollToFocusedAction = false;
+    state.dndListFilter = phrase;
+    state.dndListKind = listKind;
+    switchPage("datasheets", {silent:true});
+    renderDetail(context.unit);
+
+    const label = listKind === "spell" ? "spells" : "attacks";
+    toast(
+      (phrase ? phrase + " " : "") +
+      label + " · " + matches.length
+    );
+    return true;
+  }
 
   const inventoryMatch = raw.match(/^\s*(add|remove|drop|delete)\s+(?:(\d+)\s+)?(.+?)\s*$/i);
   if (inventoryMatch && context) {
