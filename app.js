@@ -3840,7 +3840,9 @@ function buildRosterFromNewRecruitRoot(root, fileName, importFormat = "json") {
         ? extractKillTeamRules(root)
         : gameSystemKey === "legions-imperialis"
           ? extractLegionsImperialisFormationRules(root)
-          : [...extractArmyRules(root), ...extractForceDispositions(root)];
+          : gameSystemKey === "40k"
+            ? [...extractArmyRules(root), ...extractForceDispositions(root)]
+            : extractArmyRules(root);
 
   uniqueUnits.forEach(unit => {
     if (unit?.system === "opr") unit.gameSystemKey = gameSystemKey;
