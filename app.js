@@ -2031,12 +2031,37 @@ function parseTextRosterFile(text, fileName) {
   };
 }
 
+
+function collectKillTeamOperativeSelections(selections = []) {
+  const found = [];
+
+  function walk(selection) {
+    if (!selection || typeof selection !== "object") return;
+
+    const directOperative = (selection.profiles || []).some(isKillTeamOperativeProfile);
+    if (directOperative) {
+      found.push(selection);
+      return;
+    }
+
+    for (const child of selection.selections || []) walk(child);
+  }
+
+  for (const selection of selections || []) walk(selection);
+  return found;
+}
+
 function buildRosterFromNewRecruitRoot(root, fileName, importFormat = "json") {
   const units = [];
   const allForces = collectRosterForces(root?.forces || []);
+  const metadataGameSystem = detectNewRecruitGameSystem(root, []);
 
   for (const force of allForces) {
-    for (const selection of force.selections || []) {
+    const selections = metadataGameSystem === "kill-team"
+      ? collectKillTeamOperativeSelections(force.selections || [])
+      : (force.selections || []);
+
+    for (const selection of selections) {
       const unit = parseNewRecruitSelection(selection);
       if (unit) units.push(unit);
     }
