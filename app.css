@@ -6050,6 +6050,33 @@ body.game-dnd .stat-grid {
   grid-template-columns: repeat(6, minmax(90px, 1fr));
 }
 
+.dnd-ability-section .section-heading-row,
+.dnd-economy-section .section-heading-row,
+.dnd-slot-section .section-heading-row,
+.dnd-actions-section .section-heading-row,
+.dnd-inventory-section .section-heading-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.dnd-ability-section .section-heading-row h3,
+.dnd-economy-section .section-heading-row h3,
+.dnd-slot-section .section-heading-row h3,
+.dnd-actions-section .section-heading-row h3,
+.dnd-inventory-section .section-heading-row h3 {
+  margin: 0;
+}
+
+.dnd-actions-section .section-count,
+.dnd-inventory-section .section-count {
+  color: #80909b;
+  font-size: .7rem;
+  font-weight: 800;
+}
+
 .dnd-ability-grid,
 .dnd-economy-grid,
 .dnd-slot-grid {
