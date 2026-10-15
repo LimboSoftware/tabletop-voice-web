@@ -492,7 +492,7 @@ const GAME_PROVIDERS = [
       {id:"necromunda", name:"Necromunda", detail:"Planned", available:false},
       {id:"warcry", name:"Warcry", detail:"Planned", available:false},
       {id:"underworlds", name:"Warhammer Underworlds", detail:"Planned", available:false},
-      {id:"legions-imperialis", name:"Legions Imperialis", detail:"New Recruit roster support", available:true, beta:true},
+      {id:"legions-imperialis", name:"Legions Imperialis", detail:"New Recruit · Legion Builder · Legion Companion", available:true, beta:true},
       {id:"adeptus-titanicus", name:"Adeptus Titanicus", detail:"Planned", available:false},
       {id:"blood-bowl", name:"Blood Bowl", detail:"Planned", available:false},
       {id:"middle-earth", name:"Middle-earth Strategy Battle Game", detail:"Planned", available:false},
