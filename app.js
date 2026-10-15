@@ -1105,6 +1105,11 @@ function applyGameSystemUi() {
       : ".json,.ros,.rosz,application/json,application/xml,text/xml,application/zip";
   }
 
+  const setupHeroTitle = els.welcome?.querySelector(".setup-hero h1");
+  if (setupHeroTitle) {
+    setupHeroTitle.textContent = dnd ? "Load your character." : "Load your army.";
+  }
+
   const setupHero = els.welcome?.querySelector(".setup-hero .lede");
   if (setupHero) {
     setupHero.textContent = opr
