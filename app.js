@@ -3083,7 +3083,14 @@ function parseGyrinxN26Fighter(header, index) {
   const headerText = cleanGyrinxText(header.textContent);
   const ratingMatch = headerText.match(/(\d+)\s*(?:cr|¢)\b/i);
   const statusCandidates = [
-    "In Recovery","Ransomed","Captured","Dead","Destroyed","Active"
+    "In Recovery",
+    "Critically Injured",
+    "Critically Damaged",
+    "Ransomed",
+    "Captured",
+    "Dead",
+    "Destroyed",
+    "Active"
   ];
   const status = statusCandidates.find(candidate =>
     normalize(headerText).includes(normalize(candidate))
@@ -3191,9 +3198,13 @@ function parseGyrinxN26GangHtml(html, sourceUrl = "") {
 
   const cardRoots = headers.map(header => header.parentElement).filter(Boolean);
   const pageText = cleanGyrinxText(sheet.textContent);
-  const name = cleanGyrinxText(sheet.querySelector("h1")?.textContent) ||
+  const heading = sheet.querySelector("h1");
+  const name = cleanGyrinxText(heading?.textContent) ||
     cleanGyrinxText(doc.title).replace(/\s*[|–—-]\s*Gyrinx.*$/i, "") ||
     "Necromunda gang";
+  const headerGangType = cleanGyrinxText(
+    heading?.parentElement?.querySelector("p.text-muted")?.textContent
+  );
 
   const ratingMatch = pageText.match(/\bRating\s+(\d+)\b/i);
   const creditsMatch = pageText.match(/\bCredits\s+(\d+)\b/i);
@@ -3207,7 +3218,7 @@ function parseGyrinxN26GangHtml(html, sourceUrl = "") {
     "Palanite Enforcers","Corpse Grinder Cult","Genestealer Cult",
     "Chaos Cult","Venators","Outcasts","Ash Waste Nomads"
   ];
-  const gangType = gangNames.find(type =>
+  const gangType = headerGangType || gangNames.find(type =>
     normalize(profileWords).includes(normalize(type))
   ) || "Necromunda";
 
