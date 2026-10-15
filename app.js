@@ -54,6 +54,14 @@ const els = {
   dndBeyondFileButton: $("dndBeyondFileButton"),
   dndBeyondFileInput: $("dndBeyondFileInput"),
   dndBeyondImportStatus: $("dndBeyondImportStatus"),
+  dndRollModal: $("dndRollModal"),
+  dndRollClose: $("dndRollClose"),
+  dndRollDone: $("dndRollDone"),
+  dndRollEyebrow: $("dndRollEyebrow"),
+  dndRollTitle: $("dndRollTitle"),
+  dndRollTotal: $("dndRollTotal"),
+  dndRollSubtitle: $("dndRollSubtitle"),
+  dndRollBreakdown: $("dndRollBreakdown"),
   clearRoster: $("clearRoster"),
   searchInput: $("searchInput"),
   resultList: $("resultList"),
@@ -243,6 +251,17 @@ function bindEvents() {
     if (event.key === "Enter") {
       event.preventDefault();
       loadDndBeyondCharacter();
+    }
+  });
+  const closeDndRoll = () => els.dndRollModal?.classList.add("hidden");
+  els.dndRollClose?.addEventListener("click", closeDndRoll);
+  els.dndRollDone?.addEventListener("click", closeDndRoll);
+  els.dndRollModal?.addEventListener("click", event => {
+    if (event.target === els.dndRollModal) closeDndRoll();
+  });
+  document.addEventListener("keydown", event => {
+    if (event.key === "Escape" && !els.dndRollModal?.classList.contains("hidden")) {
+      closeDndRoll();
     }
   });
   els.necromundaShareInput?.addEventListener("keydown", event => {
@@ -8756,6 +8775,34 @@ function dndRollExpression(expression) {
 }
 
 
+function showDndRollModal({
+  eyebrow = "ROLL RESULT",
+  title = "Roll",
+  total = "—",
+  subtitle = "",
+  breakdown = []
+} = {}) {
+  if (!els.dndRollModal) return;
+
+  els.dndRollEyebrow.textContent = String(eyebrow || "ROLL RESULT");
+  els.dndRollTitle.textContent = String(title || "Roll");
+  els.dndRollTotal.textContent = String(total ?? "—");
+  els.dndRollSubtitle.textContent = String(subtitle || "");
+  els.dndRollSubtitle.classList.toggle("hidden", !subtitle);
+
+  const rows = Array.isArray(breakdown)
+    ? breakdown.filter(Boolean)
+    : [breakdown].filter(Boolean);
+  els.dndRollBreakdown.innerHTML = rows
+    .map(row => `<div>${escapeHtml(String(row))}</div>`)
+    .join("");
+  els.dndRollBreakdown.classList.toggle("hidden", !rows.length);
+
+  els.dndRollModal.classList.remove("hidden");
+  els.dndRollModal.classList.remove("celebrate");
+  requestAnimationFrame(() => els.dndRollModal?.classList.add("celebrate"));
+}
+
 function getDndAudioContext() {
   try {
     const AudioContextClass = window.AudioContext || window.webkitAudioContext;
@@ -8916,6 +8963,13 @@ function dndRollCheck(unit, kind, key) {
   };
   saveDndRuntimeState(unit, runtime);
   renderDetail(unit);
+  showDndRollModal({
+    eyebrow:kind === "skill" ? "SKILL CHECK" : "ABILITY CHECK",
+    title:label,
+    total:runtime.lastCheck.total,
+    subtitle:"d20 " + d20 + " " + dndSigned(bonus),
+    breakdown:[bonus ? "Modifier " + dndSigned(bonus) : "No modifier"]
+  });
   toast(label + " " + runtime.lastCheck.total);
 }
 
