@@ -9027,12 +9027,21 @@ function dndActionMeta(action) {
     items.push("DC " + action.saveDc + (action.saveAbility ? " " + String(action.saveAbility).toUpperCase() : "") + " save");
   }
   if (action.damage) items.push(action.damage + (action.damageType ? " " + action.damageType : ""));
-  if (action.kind === "spell" && Array.isArray(action.upcastScaling)) {
-    for (const scaling of action.upcastScaling) {
+  if (action.healing) items.push(action.healing + " healing");
+
+  if (action.kind === "spell") {
+    for (const scaling of action.upcastScaling || []) {
       const interval = Math.max(1, Number(scaling.interval || 1));
       items.push(
         "Upcast +" + scaling.expression +
         (scaling.damageType ? " " + scaling.damageType : "") +
+        (interval === 1 ? " per slot level" : " every " + interval + " slot levels")
+      );
+    }
+    for (const scaling of action.upcastHealingScaling || []) {
+      const interval = Math.max(1, Number(scaling.interval || 1));
+      items.push(
+        "Upcast +" + scaling.expression + " healing" +
         (interval === 1 ? " per slot level" : " every " + interval + " slot levels")
       );
     }
@@ -9106,7 +9115,7 @@ function renderDndActionCard(unit, action, runtime, focused = false) {
     ? action.level > 0 ? "SPELL · LEVEL " + action.level : "CANTRIP"
     : "ATTACK";
   const buttonLabel = action.kind === "spell"
-    ? (action.toHit != null || action.damage ? "Cast / roll" : "Cast")
+    ? (action.toHit != null || action.damage || action.healing ? "Cast / roll" : "Cast")
     : "Roll attack";
   const castOptions = dndSpellCastOptions(unit, action, runtime);
   const defaultCast = castOptions.find(option => option.remaining > 0)?.level ?? castOptions[0]?.level ?? action.level;
@@ -9256,7 +9265,6 @@ function renderDndCharacterSections(unit) {
   return [
     renderDndAbilityScores(unit),
     renderDndSkills(unit),
-    renderUnitKeywordsSection(unit),
     renderDndRestControls(unit),
     renderDndTabBar(unit),
     renderDndTabPanel("actions", [
@@ -9267,7 +9275,8 @@ function renderDndCharacterSections(unit) {
       renderDndSpellSlots(unit),
       renderDndActions(unit, "spell")
     ].filter(Boolean).join("")),
-    renderDndTabPanel("inventory", renderDndInventory(unit))
+    renderDndTabPanel("inventory", renderDndInventory(unit)),
+    renderUnitKeywordsSection(unit)
   ].filter(Boolean).join("");
 }
 
@@ -9276,9 +9285,42 @@ function dndFindAction(unit, actionId) {
     .find(action => String(action.id) === String(actionId)) || null;
 }
 
+function dndRollScalingParts(action, scalingRows, castLevel, fallbackType = "") {
+  const parts = [];
+
+  for (const scaling of scalingRows || []) {
+    const interval = Math.max(1, Number(scaling.interval || 1));
+    const baseLevel = Math.max(
+      0,
+      Number(scaling.baseLevel ?? action?.level ?? 0)
+    );
+    const delta = Math.max(0, Number(castLevel || 0) - baseLevel);
+    const steps = Math.floor(delta / interval);
+    if (steps <= 0) continue;
+
+    const rolls = [];
+    for (let index = 0; index < steps; index++) {
+      const roll = dndRollExpression(scaling.expression);
+      if (roll) rolls.push(roll);
+    }
+    if (!rolls.length) continue;
+
+    parts.push({
+      expression:scaling.expression,
+      damageType:scaling.damageType || fallbackType || "",
+      steps,
+      total:rolls.reduce((sum, roll) => sum + roll.total, 0),
+      rolls
+    });
+  }
+
+  return parts;
+}
+
 function dndUseAction(unit, actionId, requestedCastLevel = null) {
   const action = dndFindAction(unit, actionId);
   if (!action) return;
+
   const runtime = getDndRuntimeState(unit);
   let castLevel = action.kind === "spell" ? Number(action.level || 0) : 0;
 
@@ -9304,6 +9346,14 @@ function dndUseAction(unit, actionId, requestedCastLevel = null) {
     : action.name;
   const details = [];
 
+  const popup = {
+    eyebrow:action.kind === "spell" ? "SPELL" : "ATTACK",
+    title:action.name,
+    total:"",
+    subtitle:castLevel > 0 ? "Cast at level " + castLevel : "",
+    breakdown:[]
+  };
+
   if (action.kind === "spell" && castLevel > 0) {
     details.push("Cast at level " + castLevel);
   }
@@ -9314,40 +9364,31 @@ function dndUseAction(unit, actionId, requestedCastLevel = null) {
     summary = "Attack roll " + total +
       (action.kind === "spell" && castLevel > 0 ? " · L" + castLevel : "");
     details.push("d20 " + d20 + " " + dndSigned(action.toHit));
+
+    popup.eyebrow = action.kind === "spell" ? "SPELL ATTACK" : "ATTACK ROLL";
+    popup.total = String(total);
+    popup.subtitle = "d20 " + d20 + " " + dndSigned(action.toHit);
   } else if (action.saveDc != null) {
     summary = "DC " + action.saveDc +
       (action.saveAbility ? " " + String(action.saveAbility).toUpperCase() : "") +
       " save" +
       (action.kind === "spell" && castLevel > 0 ? " · L" + castLevel : "");
+
+    popup.eyebrow = "SPELL SAVE";
+    popup.total = "DC " + action.saveDc;
+    popup.subtitle =
+      (action.saveAbility ? String(action.saveAbility).toUpperCase() + " save" : "Saving throw") +
+      (castLevel > 0 ? " · cast at level " + castLevel : "");
   }
 
   if (action.damage) {
     const baseDamage = dndRollExpression(action.damage);
-    const upcastDelta = action.kind === "spell"
-      ? Math.max(0, castLevel - Number(action.level || 0))
-      : 0;
-    const upcastParts = [];
-
-    for (const scaling of action.upcastScaling || []) {
-      const interval = Math.max(1, Number(scaling.interval || 1));
-      const steps = Math.floor(upcastDelta / interval);
-      if (steps <= 0) continue;
-
-      const rolls = [];
-      for (let index = 0; index < steps; index++) {
-        const roll = dndRollExpression(scaling.expression);
-        if (roll) rolls.push(roll);
-      }
-      if (!rolls.length) continue;
-
-      upcastParts.push({
-        expression:scaling.expression,
-        damageType:scaling.damageType || action.damageType || "",
-        steps,
-        total:rolls.reduce((sum, roll) => sum + roll.total, 0),
-        rolls
-      });
-    }
+    const upcastParts = dndRollScalingParts(
+      action,
+      action.upcastScaling,
+      castLevel,
+      action.damageType
+    );
 
     if (baseDamage) {
       const sameDamageType = upcastParts.every(part =>
@@ -9367,26 +9408,85 @@ function dndUseAction(unit, actionId, requestedCastLevel = null) {
           )
         ];
 
-        details.push(
+        const damageLine =
           "Damage " + total +
           " (" + rollParts.join(" + ") + ")" +
-          (action.damageType ? " " + action.damageType : "")
-        );
+          (action.damageType ? " " + action.damageType : "");
+        details.push(damageLine);
+
+        if (!popup.total) {
+          popup.eyebrow = "DAMAGE ROLL";
+          popup.total = String(total);
+          popup.subtitle = action.damageType
+            ? action.damageType + " damage"
+            : "Damage";
+        } else {
+          popup.breakdown.push(damageLine);
+        }
       } else {
-        details.push(
+        const baseLine =
           "Damage " + baseDamage.total +
           " (" + action.damage + ")" +
-          (action.damageType ? " " + action.damageType : "")
-        );
+          (action.damageType ? " " + action.damageType : "");
+        details.push(baseLine);
+        popup.breakdown.push(baseLine);
+
         for (const part of upcastParts) {
-          details.push(
+          const extraLine =
             "Upcast +" + part.total +
             " (" + (part.steps > 1 ? part.steps + "×" : "") + part.expression + ")" +
-            (part.damageType ? " " + part.damageType : "")
-          );
+            (part.damageType ? " " + part.damageType : "");
+          details.push(extraLine);
+          popup.breakdown.push(extraLine);
+        }
+
+        if (!popup.total) {
+          popup.eyebrow = "DAMAGE ROLL";
+          popup.total = String(baseDamage.total);
         }
       }
     }
+  }
+
+  if (action.healing) {
+    const baseHealing = dndRollExpression(action.healing);
+    const upcastParts = dndRollScalingParts(
+      action,
+      action.upcastHealingScaling,
+      castLevel,
+      ""
+    );
+
+    if (baseHealing) {
+      const extraTotal = upcastParts.reduce((sum, part) => sum + part.total, 0);
+      const total = baseHealing.total + extraTotal;
+      const rollParts = [
+        action.healing + "=" + baseHealing.total,
+        ...upcastParts.map(part =>
+          (part.steps > 1 ? part.steps + "×" : "") +
+          part.expression + "=" + part.total
+        )
+      ];
+      const healingLine =
+        "Healing " + total +
+        " (" + rollParts.join(" + ") + ")";
+      details.push(healingLine);
+
+      if (!popup.total) {
+        popup.eyebrow = "HEALING ROLL";
+        popup.total = String(total);
+        popup.subtitle = castLevel > 0
+          ? "Cast at level " + castLevel
+          : "Healing";
+      } else {
+        popup.breakdown.push(healingLine);
+      }
+    }
+  }
+
+  if (!popup.total) {
+    popup.total = action.kind === "spell" ? "CAST" : "USED";
+    popup.eyebrow = action.kind === "spell" ? "SPELL CAST" : "ACTION";
   }
 
   runtime.lastRoll = {
@@ -9397,12 +9497,15 @@ function dndUseAction(unit, actionId, requestedCastLevel = null) {
     at:Date.now()
   };
   saveDndRuntimeState(unit, runtime);
+
   state.dndFocusedActionId = action.id;
   state.dndDetailTab = action.kind === "spell" ? "spells" : "actions";
   state.dndListFilter = "";
   state.dndListKind = "";
+
   playDndActionSound(action.kind);
   renderDetail(unit);
+  showDndRollModal(popup);
 }
 
 function dndApplyRest(unit, type) {
