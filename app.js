@@ -3999,9 +3999,11 @@ function renderUnitBrowserReferences(source, data = null) {
       ${renderUnitBrowserReferenceSection(
         inferRosterGameSystem(source.roster) === "kill-team"
           ? "Team Rules"
-          : (source.kind === "opr" || ["grimdark","heresy"].includes(inferRosterGameSystem(source.roster)))
-            ? "Rules"
-            : "Army Rules",
+          : inferRosterGameSystem(source.roster) === "legions-imperialis"
+            ? "Formation Rules"
+            : (source.kind === "opr" || ["grimdark","heresy"].includes(inferRosterGameSystem(source.roster)))
+              ? "Rules"
+              : "Army Rules",
         data.armyRules,
         "rule"
       )}
@@ -4534,7 +4536,9 @@ function setVoicePrompt(page = state.currentPage) {
       ? "Say a ship or squadron name from your Warfleets fleet"
       : isKillTeamMode()
         ? "Say an operative name from your Kill Team"
-        : isHeresyMode()
+        : isLegionsImperialisMode()
+          ? "Say a detachment name from your Legions Imperialis army"
+          : isHeresyMode()
           ? "Say a unit name from your Horus Heresy army"
           : isOprMode()
           ? "Say a unit name from your " + currentGameName() + " list"
@@ -5017,6 +5021,23 @@ function getUnitBrowserGroup(unit) {
   if (unit?.system === "kill-team") {
     if (categories.has("leader")) return "Leaders";
     return "Operatives";
+  }
+
+  if (unit?.system === "legions-imperialis") {
+    if (categories.has("hq")) return "HQ";
+    if (categories.has("core")) return "Core";
+    if (categories.has("support")) return "Support";
+    if (categories.has("vanguard")) return "Vanguard";
+    if (categories.has("light armour")) return "Light Armour";
+    if (categories.has("battle tank")) return "Battle Tank";
+    if (categories.has("heavy armour")) return "Heavy Armour";
+    if (categories.has("artillery")) return "Artillery";
+    if (categories.has("bastion")) return "Bastion";
+    if (categories.has("transport")) return "Transport";
+    if (categories.has("air support")) return "Air Support";
+    if (categories.has("knight") || hasPrefix("knight")) return "Knights";
+    if (categories.has("titan") || hasPrefix("titan")) return "Titans";
+    return "Other Detachments";
   }
 
   if (unit?.system === "heresy") {
@@ -6407,6 +6428,7 @@ function updateGameContextUi(unit = state.selected) {
   const aos = isAosMode();
   const heresy = isHeresyMode();
   const killTeam = isKillTeamMode();
+  const legionsImperialis = isLegionsImperialisMode();
   const non40k = state.gameSystem !== "40k";
 
   els.appNav?.classList.toggle("opr-context", non40k);
@@ -6427,7 +6449,9 @@ function updateGameContextUi(unit = state.selected) {
       ? "Fleet"
       : killTeam
         ? "Operatives"
-        : "Units";
+        : legionsImperialis
+          ? "Detachments"
+          : "Units";
   }
 
   const browserEyebrow = els.rosterBrowser?.querySelector(".roster-browser-heading .eyebrow");
@@ -6437,30 +6461,38 @@ function updateGameContextUi(unit = state.selected) {
       ? "FLEET BROWSER"
       : killTeam
         ? "KILL TEAM"
-        : "UNIT BROWSER";
+        : legionsImperialis
+          ? "DETACHMENT BROWSER"
+          : "UNIT BROWSER";
   }
   if (browserTitle) {
     browserTitle.textContent = isWarfleetsMode()
       ? "Choose a ship or squadron."
       : killTeam
         ? "Choose an operative."
-        : "Choose a unit.";
+        : legionsImperialis
+          ? "Choose a detachment."
+          : "Choose a unit.";
   }
   if (els.searchInput) {
     els.searchInput.placeholder = isWarfleetsMode()
       ? "Type a ship or squadron name…"
       : killTeam
         ? "Type an operative name…"
-        : "Type a unit name…";
+        : legionsImperialis
+          ? "Type a detachment name…"
+          : "Type a unit name…";
   }
 
   const armyRulesLabel = armyRulesButton?.querySelector("span:last-child");
   if (armyRulesLabel) {
     armyRulesLabel.textContent = killTeam
       ? "Team Rules"
-      : (opr || heresy)
-        ? "Rules"
-        : "Army Rules";
+      : legionsImperialis
+        ? "Formation Rules"
+        : (opr || heresy)
+          ? "Rules"
+          : "Army Rules";
   }
 
   const heading = els.pageArmyRules?.querySelector("h1");
@@ -6470,9 +6502,11 @@ function updateGameContextUi(unit = state.selected) {
   if (heading) {
     heading.textContent = killTeam
       ? "Team Rules"
-      : (opr || heresy)
-        ? "Rules"
-        : "Army Rules";
+      : legionsImperialis
+        ? "Formation Rules"
+        : (opr || heresy)
+          ? "Rules"
+          : "Army Rules";
   }
 
   if (eyebrow) {
@@ -6480,7 +6514,9 @@ function updateGameContextUi(unit = state.selected) {
       ? currentGameName().toUpperCase() + " REFERENCE"
       : killTeam
         ? "KILL TEAM REFERENCE"
-        : heresy
+        : legionsImperialis
+          ? "LEGIONS IMPERIALIS REFERENCE"
+          : heresy
           ? "HORUS HERESY REFERENCE"
           : aos
             ? "AGE OF SIGMAR REFERENCE"
@@ -6494,7 +6530,9 @@ function updateGameContextUi(unit = state.selected) {
         : "Special rules" + (isOprFantasyMode() ? " and spells" : "") + " referenced by the active " + currentGameName() + (isOprQuestMode() ? " campaign." : " list.")
       : killTeam
         ? "Team-wide abilities, equipment and selected rules imported with the active Kill Team. Operative-specific abilities and unique actions are shown on each operative."
-        : heresy
+        : legionsImperialis
+          ? "Formation rules imported with the active Legions Imperialis army. Detachment-specific special rules are shown on each detachment."
+          : heresy
           ? "Army rules imported with the active Horus Heresy list. Unit-specific wargear, reactions and traits are shown on each unit profile."
           : aos
           ? "Battle traits, spells, prayers and other army-level abilities imported with the active Age of Sigmar list."
@@ -7496,7 +7534,24 @@ function renderQuickLists() {
     ? ["Heavy Ships","Medium Ships","Light Ships","Ships","Squadrons"]
     : isKillTeamMode()
       ? ["Leaders","Operatives"]
-      : isHeresyMode()
+      : isLegionsImperialisMode()
+        ? [
+            "HQ",
+            "Core",
+            "Support",
+            "Vanguard",
+            "Light Armour",
+            "Battle Tank",
+            "Heavy Armour",
+            "Artillery",
+            "Bastion",
+            "Transport",
+            "Air Support",
+            "Knights",
+            "Titans",
+            "Other Detachments"
+          ]
+        : isHeresyMode()
         ? [
           "High Command",
           "Command",
@@ -7579,7 +7634,9 @@ function renderQuickLists() {
         ? "No ships or squadrons were found in this fleet."
         : isKillTeamMode()
           ? "No operatives were found in this kill team."
-          : "No units were found in this data source.") +
+          : isLegionsImperialisMode()
+            ? "No detachments were found in this army."
+            : "No units were found in this data source.") +
     '</div>';
 
   els.quickLists.querySelectorAll("[data-entry-index]").forEach(button => {
