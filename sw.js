@@ -1,9 +1,12 @@
-const CACHE = "tabletop-voice-beta-v41";
+const CACHE = "tabletop-voice-beta-v42";
 const ASSETS = [
   "./",
   "./index.html",
   "./app.css",
   "./app.js",
+  "./li-community-units-weapons.json",
+  "./li-community-detachments.json",
+  "./li-community-formations.json",
   "./manifest.webmanifest",
   "./icon.svg",
   "./privacy.html",
