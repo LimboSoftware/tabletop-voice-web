@@ -8177,7 +8177,7 @@ function dndRosterForUnit(unit = state.selected) {
   if (!unit) return null;
   return state.rosters.find(roster =>
     roster.source === "dndbeyond" &&
-    (roster.id === state.selectedRosterId || (roster.units || []).some(candidate => candidate.id === unit.id))
+    (roster.units || []).some(candidate => candidate.id === unit.id)
   ) || null;
 }
 
