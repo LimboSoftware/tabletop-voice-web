@@ -1853,6 +1853,7 @@ function xmlForceToObject(element) {
     catalogueName:element.getAttribute("catalogueName") || element.getAttribute("name") || "",
     selections:xmlContainerChildren(element, "selections", "selection").map(xmlSelectionToObject),
     forces:xmlContainerChildren(element, "forces", "force").map(xmlForceToObject),
+    profiles:xmlContainerChildren(element, "profiles", "profile").map(xmlProfileToObject),
     rules:xmlContainerChildren(element, "rules", "rule").map(xmlRuleToObject),
     costs:xmlContainerChildren(element, "costs", "cost").map(xmlCostToObject),
     categories:xmlContainerChildren(element, "categories", "category").map(xmlCategoryToObject)
