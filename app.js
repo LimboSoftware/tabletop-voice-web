@@ -8163,6 +8163,126 @@ function renderUnitKeywordsSection(unit) {
 }
 
 
+function dndRosterForUnit(unit = state.selected) {
+  if (!unit) return null;
+  return state.rosters.find(roster =>
+    roster.source === "dndbeyond" &&
+    (roster.id === state.selectedRosterId || (roster.units || []).some(candidate => candidate.id === unit.id))
+  ) || null;
+}
+
+function dndRuntimeKey(unit = state.selected) {
+  const roster = dndRosterForUnit(unit);
+  return roster ? "tv_dnd_state_" + roster.id : "";
+}
+
+function getDndRuntimeState(unit = state.selected) {
+  const key = dndRuntimeKey(unit);
+  let saved = {};
+  try { saved = key ? JSON.parse(localStorage.getItem(key) || "{}") : {}; } catch {}
+  return {
+    economy:{
+      action:Boolean(saved?.economy?.action),
+      bonus:Boolean(saved?.economy?.bonus),
+      reaction:Boolean(saved?.economy?.reaction)
+    },
+    slots:dndIsRecord(saved?.slots) ? {...saved.slots} : {},
+    inventoryDeltas:dndIsRecord(saved?.inventoryDeltas) ? {...saved.inventoryDeltas} : {},
+    lastRoll:dndIsRecord(saved?.lastRoll) ? saved.lastRoll : null
+  };
+}
+
+function saveDndRuntimeState(unit, runtime) {
+  const key = dndRuntimeKey(unit);
+  if (key) localStorage.setItem(key, JSON.stringify(runtime));
+}
+
+function dndSlotUsed(unit, runtime, slot) {
+  const saved = dndNumber(runtime?.slots?.[String(slot.level)], null);
+  return saved != null ? Math.max(0, saved) : Math.max(0, Number(slot.used || 0));
+}
+
+function dndRemainingSlots(unit, runtime, slot) {
+  return Math.max(0, Number(slot.max || 0) - dndSlotUsed(unit, runtime, slot));
+}
+
+function dndMergedInventory(unit, runtime = getDndRuntimeState(unit)) {
+  const rows = new Map();
+  for (const item of unit?.dnd?.inventory || []) {
+    const key = normalize(item.name);
+    if (!key) continue;
+    const delta = dndNumber(runtime.inventoryDeltas?.[key]?.delta, 0) || 0;
+    rows.set(key, {
+      key,
+      name:item.name,
+      type:item.type || "",
+      equipped:Boolean(item.equipped),
+      imported:true,
+      quantity:Math.max(0, Number(item.quantity || 0) + delta)
+    });
+  }
+  for (const [key, change] of Object.entries(runtime.inventoryDeltas || {})) {
+    if (rows.has(key)) continue;
+    const quantity = Math.max(0, dndNumber(change?.delta, 0) || 0);
+    if (!quantity) continue;
+    rows.set(key, {
+      key,
+      name:String(change?.name || key),
+      type:"Added in Tabletop Voice",
+      equipped:false,
+      imported:false,
+      quantity
+    });
+  }
+  return [...rows.values()].filter(item => item.quantity > 0).sort((a,b) => a.name.localeCompare(b.name));
+}
+
+function adjustDndInventory(unit, rawName, delta) {
+  const name = String(rawName || "").trim();
+  const key = normalize(name);
+  if (!unit || !key || !delta) return false;
+  const runtime = getDndRuntimeState(unit);
+  const current = dndMergedInventory(unit, runtime).find(item => item.key === key);
+  const imported = (unit.dnd?.inventory || []).find(item => normalize(item.name) === key);
+  const base = Number(imported?.quantity || 0);
+  const existingDelta = dndNumber(runtime.inventoryDeltas?.[key]?.delta, 0) || 0;
+  const nextTotal = Math.max(0, base + existingDelta + delta);
+  const nextDelta = nextTotal - base;
+  runtime.inventoryDeltas[key] = {name:current?.name || imported?.name || name, delta:nextDelta};
+  if (!nextDelta && imported) delete runtime.inventoryDeltas[key];
+  if (!nextTotal && !imported) delete runtime.inventoryDeltas[key];
+  saveDndRuntimeState(unit, runtime);
+  return true;
+}
+
+function dndActionEconomyKey(action) {
+  const activation = normalize(action?.activation || "");
+  if (activation.includes("bonus")) return "bonus";
+  if (activation.includes("reaction")) return "reaction";
+  if (activation === "action" || activation.includes(" action")) return "action";
+  return "";
+}
+
+function dndRollDie(sides) {
+  const size = Math.max(2, Math.floor(Number(sides) || 6));
+  if (window.crypto?.getRandomValues) {
+    const array = new Uint32Array(1);
+    window.crypto.getRandomValues(array);
+    return (array[0] % size) + 1;
+  }
+  return Math.floor(Math.random() * size) + 1;
+}
+
+function dndRollExpression(expression) {
+  const match = String(expression || "").replace(/\s+/g, "").match(/^(\d+)d(\d+)([+-]\d+)?$/i);
+  if (!match) return null;
+  const count = Math.min(100, Math.max(1, Number(match[1])));
+  const sides = Math.max(2, Number(match[2]));
+  const bonus = Number(match[3] || 0);
+  const rolls = Array.from({length:count}, () => dndRollDie(sides));
+  return {rolls, bonus, total:rolls.reduce((sum, value) => sum + value, 0) + bonus, expression:String(expression)};
+}
+
 function renderDetail(unit) {
   updateGameContextUi(unit);
 
