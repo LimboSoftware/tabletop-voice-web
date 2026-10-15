@@ -81,15 +81,22 @@
             <p class="lede">Bring in your New Recruit lists, or load the wider dataset when you need broader lookup at the table.</p>
           </div>
           <div class="setup-hero-actions" aria-label="Setup actions">
-            <button id="setupChangeGameButton" class="ghost-button compact" type="button">Change system</button>
             <button id="resetGameButton" class="ghost-button compact" type="button">Reset game</button>
           </div>
+        </div>
+
+        <div class="setup-system-strip">
+          <div class="setup-system-strip-copy">
+            <span class="section-label">GAME SYSTEM</span>
+            <strong id="setupCurrentGame">Choose a game</strong>
+          </div>
+          <button id="setupChangeGameButton" class="ghost-button compact" type="button">Change game system</button>
         </div>
 
         <div class="setup-import-grid">
           <section id="newRecruitImportCard" class="tool-card setup-import-card">
             <span id="newRecruitImportLabel" class="section-label">NEW RECRUIT</span>
-            <h2 id="newRecruitImportTitle">Import exported list</h2>
+            <h2 id="newRecruitImportTitle">Import list</h2>
             <p id="newRecruitImportCopy">Export your roster from New Recruit, then choose the JSON, ROS, ROSZ or TXT file here.</p>
             <button id="importButton" class="primary-button large setup-main-action" type="button">Choose New Recruit file</button>
             <input id="fileInput" type="file" multiple accept=".json,.ros,.rosz,.txt,application/json,text/plain,application/xml,text/xml,application/zip" hidden />
