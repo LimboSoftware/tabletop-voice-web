@@ -11440,6 +11440,40 @@ function handleDndVoiceCommand(primary, alternatives = []) {
     return true;
   }
 
+  const checkMatch = raw.match(/^\s*(?:roll|check)\s+(.+?)\s*$/i);
+  if (checkMatch && context) {
+    const query = checkMatch[1].trim();
+    const candidates = [
+      ...(context.unit.dnd?.skills || []).map(skill => ({
+        kind:"skill",
+        key:skill.key,
+        name:skill.name
+      })),
+      ...Object.entries(DND_ABILITY_NAMES).map(([key,name]) => ({
+        kind:"ability",
+        key,
+        name
+      }))
+    ]
+      .map(candidate => ({
+        ...candidate,
+        score:scoreVoicePhrase(query, candidate.name)
+      }))
+      .sort((a,b) => b.score - a.score);
+
+    const best = candidates[0];
+    if (best && best.score >= .72) {
+      state.activeRoster = context.rosterIndex;
+      state.selectedRosterId = context.roster.id;
+      state.selected = context.unit;
+      state.dndFocusedActionId = "";
+      state.dndScrollToFocusedAction = false;
+      switchPage("datasheets", {silent:true});
+      dndRollCheck(context.unit, best.kind, best.key);
+      return true;
+    }
+  }
+
   if (/^list\b/.test(q) && context) {
     let phrase = q.replace(/^list\s+(?:all\s+)?/, "").trim();
     let listKind = "";
