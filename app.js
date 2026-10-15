@@ -2255,7 +2255,15 @@ function parseLiCommunityText(text, reference) {
     : "Legion Builder";
 
   const lines = rawText.split("\n");
-  const slotPattern = /^(HQ|CORE|SUPPORT|TRANSPORT|VANGUARD|LIGHT\s+ARMOU?R|BATTLE\s+TANK|HEAVY\s+ARMOU?R|ARTILLERY|BASTION|AIR\s+SUPPORT|KNIGHT|TITAN|DEDICATED)\s*:\s*(.+?)\s*(?:\((\d+)\))?\s*(?:[-–—,]\s*)?(\d+)\s*pts?\b/i;
+  const slotNamePattern = "(HQ|CORE|SUPPORT|TRANSPORT|VANGUARD|LIGHT\\s+ARMOU?R|BATTLE\\s+TANK|HEAVY\\s+ARMOU?R|ARTILLERY|BASTION|AIR\\s+SUPPORT|KNIGHT|TITAN|DEDICATED)";
+  const slotPatternWithSize = new RegExp(
+    "^" + slotNamePattern + "\\s*:\\s*(.+?)\\s*\\((\\d+)\\)\\s*(?:[-–—,]\\s*)?(\\d+)\\s*pts?\\b",
+    "i"
+  );
+  const slotPattern = new RegExp(
+    "^" + slotNamePattern + "\\s*:\\s*(.+?)\\s*(?:[-–—,]\\s*)?(\\d+)\\s*pts?\\b",
+    "i"
+  );
 
   let currentFormation = null;
   let currentDetachment = null;
@@ -2291,8 +2299,10 @@ function parseLiCommunityText(text, reference) {
     }
     if (/^(formation strength|breakpoint)\s*:/i.test(line)) continue;
 
-    const detachmentMatch = line.match(slotPattern);
+    const sizedDetachmentMatch = line.match(slotPatternWithSize);
+    const detachmentMatch = sizedDetachmentMatch || line.match(slotPattern);
     if (detachmentMatch) {
+      const hasSize = Boolean(sizedDetachmentMatch);
       const name = detachmentMatch[2].trim();
       const refDetachment = findLiCommunityDetachment(reference, null, name);
       currentDetachment = {
@@ -2300,8 +2310,8 @@ function parseLiCommunityText(text, reference) {
         name:refDetachment?.name || name,
         slotType:detachmentMatch[1].replace(/\s+/g, " ").trim(),
         formationName:currentFormation?.name || "",
-        size:detachmentMatch[3] ? Number(detachmentMatch[3]) : null,
-        points:Number(detachmentMatch[4]),
+        size:hasSize ? Number(detachmentMatch[3]) : refDetachment?.baseSize ?? null,
+        points:Number(detachmentMatch[hasSize ? 4 : 3]),
         notes:[],
         selectedWeapons:[],
         source:sourceName
@@ -2315,12 +2325,27 @@ function parseLiCommunityText(text, reference) {
       const possibleName = pointsLine[1].trim();
       if (pushFormation(possibleName)) continue;
 
-      if (!rosterName && !/^(total|list total|allies|main faction)/i.test(possibleName)) {
+      if (/^(total|list total)/i.test(possibleName)) {
+        declaredTotal = Number(pointsLine[2]);
+        continue;
+      }
+
+      if (currentDetachment) {
+        currentDetachment.notes.push(line);
+        continue;
+      }
+
+      if (!rosterName && !/^(allies|main faction)/i.test(possibleName)) {
         rosterName = possibleName;
         declaredTotal = Number(pointsLine[2]);
-      } else if (/^(total|list total)/i.test(possibleName)) {
-        declaredTotal = Number(pointsLine[2]);
       }
+      continue;
+    }
+
+    const inlineTotal = line.match(/^(.+?)\s+(\d+)\s*pts?\s*$/i);
+    if (inlineTotal && !currentDetachment && !rosterName) {
+      rosterName = inlineTotal[1].trim();
+      declaredTotal = Number(inlineTotal[2]);
       continue;
     }
 
