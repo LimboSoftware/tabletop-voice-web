@@ -38,6 +38,10 @@ const els = {
   liCommunityFileButton: $("liCommunityFileButton"),
   liCommunityFileInput: $("liCommunityFileInput"),
   liCommunityImportStatus: $("liCommunityImportStatus"),
+  necromundaImportCard: $("necromundaImportCard"),
+  necromundaShareInput: $("necromundaShareInput"),
+  necromundaImportButton: $("necromundaImportButton"),
+  necromundaImportStatus: $("necromundaImportStatus"),
   clearRoster: $("clearRoster"),
   searchInput: $("searchInput"),
   resultList: $("resultList"),
@@ -214,6 +218,13 @@ function bindEvents() {
   els.liCommunityImportButton?.addEventListener("click", () => importLiCommunityPayload(els.liCommunityInput?.value || "", "paste"));
   els.liCommunityFileButton?.addEventListener("click", () => els.liCommunityFileInput?.click());
   els.liCommunityFileInput?.addEventListener("change", handleLiCommunityFile);
+  els.necromundaImportButton?.addEventListener("click", loadGyrinxGang);
+  els.necromundaShareInput?.addEventListener("keydown", event => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      loadGyrinxGang();
+    }
+  });
   els.liCommunityInput?.addEventListener("keydown", event => {
     if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
       event.preventDefault();
@@ -489,7 +500,7 @@ const GAME_PROVIDERS = [
       {id:"heresy", name:"Warhammer: The Horus Heresy", detail:"3rd Edition · New Recruit roster support", available:true, beta:true},
       {id:"old-world", name:"Warhammer: The Old World", detail:"Planned", available:false},
       {id:"kill-team", name:"Kill Team", detail:"2024 · New Recruit roster support", available:true, beta:true},
-      {id:"necromunda", name:"Necromunda", detail:"Planned", available:false},
+      {id:"necromunda", name:"Necromunda", detail:"N26 · Gyrinx shared gang", available:true, beta:true},
       {id:"warcry", name:"Warcry", detail:"Planned", available:false},
       {id:"underworlds", name:"Warhammer Underworlds", detail:"Planned", available:false},
       {id:"legions-imperialis", name:"Legions Imperialis", detail:"New Recruit · Legion Companion", available:true, beta:true},
@@ -629,6 +640,10 @@ function isLegionsImperialisMode(gameSystem = state.gameSystem) {
   return gameSystem === "legions-imperialis";
 }
 
+function isNecromundaMode(gameSystem = state.gameSystem) {
+  return gameSystem === "necromunda";
+}
+
 function gameProviderForSystem(gameSystem = state.gameSystem) {
   return GAME_SYSTEMS[gameSystem]?.provider || "gw";
 }
@@ -727,6 +742,7 @@ function inferUnitGameSystem(unit) {
   if (unit?.system === "heresy") return "heresy";
   if (unit?.system === "kill-team") return "kill-team";
   if (unit?.system === "legions-imperialis") return "legions-imperialis";
+  if (unit?.system === "necromunda") return "necromunda";
   if (unit?.system === "opr") return oprGameSystemKey(unit?.gameSystem) || "grimdark";
   if (unit?.system === "40k") return "40k";
 
@@ -849,6 +865,7 @@ function applyGameSystemUi() {
   const heresy = isHeresyMode();
   const killTeam = isKillTeamMode();
   const legionsImperialis = isLegionsImperialisMode();
+  const necromunda = isNecromundaMode();
   const fortyK = state.gameSystem === "40k";
 
   document.body.classList.toggle("game-grimdark", grimdark);
@@ -857,6 +874,7 @@ function applyGameSystemUi() {
   document.body.classList.toggle("game-heresy", heresy);
   document.body.classList.toggle("game-kill-team", killTeam);
   document.body.classList.toggle("game-legions-imperialis", legionsImperialis);
+  document.body.classList.toggle("game-necromunda", necromunda);
   document.body.classList.toggle("game-40k", fortyK);
 
   if (els.settingsCurrentGame) {
@@ -870,6 +888,7 @@ function applyGameSystemUi() {
   // Army Forge is the primary current-data source for supported OPR games.
   if (els.oprImportCard) els.oprImportCard.classList.toggle("hidden", !opr);
   if (els.liCommunityImportCard) els.liCommunityImportCard.classList.toggle("hidden", !legionsImperialis);
+  if (els.necromundaImportCard) els.necromundaImportCard.classList.toggle("hidden", !necromunda);
 
   if (els.fullDataArmySection) {
     const hasFullData = fortyK && state.rosters.some(roster => roster.source === "bsdata");
@@ -883,7 +902,10 @@ function applyGameSystemUi() {
     els.newRecruitImportTitle.textContent = "Import exported list";
   }
   if (els.newRecruitImportCard) {
-    els.newRecruitImportCard.classList.toggle("hidden", isOprQuestMode() || isWarfleetsMode());
+    els.newRecruitImportCard.classList.toggle(
+      "hidden",
+      isOprQuestMode() || isWarfleetsMode() || necromunda
+    );
   }
 
   if (els.oprImportCard) {
@@ -958,7 +980,9 @@ function applyGameSystemUi() {
             ? "Import your Kill Team from New Recruit for operative profiles, weapons, abilities and team rules at the table."
             : legionsImperialis
               ? "Import your Legions Imperialis army from New Recruit or Legion Companion for detachment profiles, weapons and formation rules at the table."
-              : "Bring in your New Recruit lists, or load the wider dataset when you need broader 40K lookup at the table.";
+              : necromunda
+                ? "Import a current Necromunda N26 gang from a public Gyrinx share link for fighter profiles, weapons, skills, gear and campaign state."
+                : "Bring in your New Recruit lists, or load the wider dataset when you need broader 40K lookup at the table.";
   }
 
   updateGameContextUi();
