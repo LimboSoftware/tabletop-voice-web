@@ -5729,3 +5729,43 @@ body.game-legions-imperialis .stat-grid {
     border-top: 1px solid #25303f !important;
   }
 }
+
+
+/* === Legions Imperialis community imports === */
+.li-community-import-controls {
+  display: grid;
+  gap: 10px;
+}
+
+.li-community-import-controls textarea {
+  width: 100%;
+  min-width: 0;
+  min-height: 150px;
+  padding: 12px;
+  border: 1px solid #354350;
+  border-radius: 3px;
+  outline: 0;
+  resize: vertical;
+  background: #0b1015;
+  color: #edf3f6;
+  font: inherit;
+  font-size: 15px;
+  line-height: 1.4;
+}
+
+.li-community-import-controls textarea:focus {
+  border-color: var(--accent-strong);
+  box-shadow: 0 0 0 2px rgba(57,184,213,.12);
+}
+
+.li-community-import-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 10px;
+}
+
+@media (max-width: 620px) {
+  .li-community-import-actions {
+    grid-template-columns: 1fr;
+  }
+}
