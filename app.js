@@ -19,7 +19,8 @@ const state = {
   sharePeer: null,
   shareConnection: null,
   shareScanner: null,
-  pendingSharedRoster: null
+  pendingSharedRoster: null,
+  dndFocusedActionId: ""
 };
 
 const $ = (id) => document.getElementById(id);
@@ -42,6 +43,12 @@ const els = {
   necromundaShareInput: $("necromundaShareInput"),
   necromundaImportButton: $("necromundaImportButton"),
   necromundaImportStatus: $("necromundaImportStatus"),
+  dndBeyondImportCard: $("dndBeyondImportCard"),
+  dndBeyondInput: $("dndBeyondInput"),
+  dndBeyondImportButton: $("dndBeyondImportButton"),
+  dndBeyondFileButton: $("dndBeyondFileButton"),
+  dndBeyondFileInput: $("dndBeyondFileInput"),
+  dndBeyondImportStatus: $("dndBeyondImportStatus"),
   clearRoster: $("clearRoster"),
   searchInput: $("searchInput"),
   resultList: $("resultList"),
@@ -224,6 +231,15 @@ function bindEvents() {
   els.liCommunityFileButton?.addEventListener("click", () => els.liCommunityFileInput?.click());
   els.liCommunityFileInput?.addEventListener("change", handleLiCommunityFile);
   els.necromundaImportButton?.addEventListener("click", loadGyrinxGang);
+  els.dndBeyondImportButton?.addEventListener("click", loadDndBeyondCharacter);
+  els.dndBeyondFileButton?.addEventListener("click", () => els.dndBeyondFileInput?.click());
+  els.dndBeyondFileInput?.addEventListener("change", handleDndBeyondJsonFile);
+  els.dndBeyondInput?.addEventListener("keydown", event => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      loadDndBeyondCharacter();
+    }
+  });
   els.necromundaShareInput?.addEventListener("keydown", event => {
     if (event.key === "Enter") {
       event.preventDefault();
@@ -536,6 +552,13 @@ const GAME_PROVIDERS = [
     ]
   },
   {
+    id:"dnd",
+    name:"Dungeons & Dragons",
+    systems:[
+      {id:"dnd-5e", name:"D&D 5e", detail:"D&D Beyond characters · attacks, spells, slots and inventory", available:true, beta:true}
+    ]
+  },
+  {
     id:"other",
     name:"Other",
     systems:[
@@ -562,6 +585,7 @@ const GAME_SYSTEM_ROUTES = {
   "kill-team":"/kill-team",
   necromunda:"/necromunda",
   "legions-imperialis":"/legions-imperialis",
+  "dnd-5e":"/dnd",
   grimdark:"/grimdark-future",
   "grimdark-firefight":"/grimdark-firefight",
   "opr-star-quest":"/grimdark-star-quest",
@@ -581,7 +605,9 @@ const GAME_ROUTE_ALIASES = {
   "/aof":"aof",
   "/aof-skirmish":"aof-skirmish",
   "/aof-regiments":"aof-regiments",
-  "/aof-quest":"aof-quest"
+  "/aof-quest":"aof-quest",
+  "/dnd-5e":"dnd-5e",
+  "/dungeons-and-dragons":"dnd-5e"
 };
 
 const GAME_SYSTEM_BY_ROUTE = Object.fromEntries(
@@ -730,6 +756,10 @@ function isNecromundaMode(gameSystem = state.gameSystem) {
   return gameSystem === "necromunda";
 }
 
+function isDndMode(gameSystem = state.gameSystem) {
+  return gameSystem === "dnd-5e";
+}
+
 function gameProviderForSystem(gameSystem = state.gameSystem) {
   return GAME_SYSTEMS[gameSystem]?.provider || "gw";
 }
@@ -839,6 +869,7 @@ function inferUnitGameSystem(unit) {
   if (unit?.system === "kill-team") return "kill-team";
   if (unit?.system === "legions-imperialis") return "legions-imperialis";
   if (unit?.system === "necromunda") return "necromunda";
+  if (unit?.system === "dnd") return "dnd-5e";
   if (unit?.system === "opr") return oprGameSystemKey(unit?.gameSystem) || "grimdark";
   if (unit?.system === "40k") return "40k";
 
@@ -869,6 +900,7 @@ function inferRosterGameSystem(roster) {
   }
 
   if (roster.source === "bsdata") return "40k";
+  if (roster.source === "dndbeyond") return "dnd-5e";
 
   const metadata = normalize([
     roster.faction,
@@ -966,6 +998,7 @@ function applyGameSystemUi() {
   const killTeam = isKillTeamMode();
   const legionsImperialis = isLegionsImperialisMode();
   const necromunda = isNecromundaMode();
+  const dnd = isDndMode();
   const fortyK = state.gameSystem === "40k";
 
   document.body.classList.toggle("game-grimdark", grimdark);
@@ -975,6 +1008,7 @@ function applyGameSystemUi() {
   document.body.classList.toggle("game-kill-team", killTeam);
   document.body.classList.toggle("game-legions-imperialis", legionsImperialis);
   document.body.classList.toggle("game-necromunda", necromunda);
+  document.body.classList.toggle("game-dnd", dnd);
   document.body.classList.toggle("game-40k", fortyK);
   document.title = state.gameSystem
     ? currentGameName() + " | Tabletop Voice"
@@ -995,6 +1029,7 @@ function applyGameSystemUi() {
   if (els.oprImportCard) els.oprImportCard.classList.toggle("hidden", !opr);
   if (els.liCommunityImportCard) els.liCommunityImportCard.classList.toggle("hidden", !legionsImperialis);
   if (els.necromundaImportCard) els.necromundaImportCard.classList.toggle("hidden", !necromunda);
+  if (els.dndBeyondImportCard) els.dndBeyondImportCard.classList.toggle("hidden", !dnd);
 
   if (els.fullDataArmySection) {
     const hasFullData = fortyK && state.rosters.some(roster => roster.source === "bsdata");
@@ -1010,7 +1045,7 @@ function applyGameSystemUi() {
   if (els.newRecruitImportCard) {
     els.newRecruitImportCard.classList.toggle(
       "hidden",
-      isOprQuestMode() || isWarfleetsMode() || necromunda
+      isOprQuestMode() || isWarfleetsMode() || necromunda || dnd
     );
   }
 
@@ -1088,7 +1123,9 @@ function applyGameSystemUi() {
               ? "Import your Legions Imperialis army from New Recruit or Legion Companion for detachment profiles, weapons and formation rules at the table."
               : necromunda
                 ? "Import a current Necromunda N26 gang from a public Gyrinx share link for fighter profiles, weapons, skills, gear and campaign state."
-                : "Bring in your New Recruit lists, or load the wider dataset when you need broader 40K lookup at the table.";
+                : dnd
+                  ? "Import a D&D Beyond character, then use voice for attacks and spells while Tabletop Voice tracks slots, action economy and inventory."
+                  : "Bring in your New Recruit lists, or load the wider dataset when you need broader 40K lookup at the table.";
   }
 
   updateGameContextUi();
