@@ -23,6 +23,8 @@ const state = {
   dndFocusedActionId: "",
   dndDetailTab: "actions",
   dndScrollToFocusedAction: false,
+  dndListFilter: "",
+  dndListKind: "",
   dndAudioContext: null
 };
 
@@ -3997,6 +3999,54 @@ function dndSpellRecords(root) {
   );
 }
 
+function dndSpellUpcastDamage(definition) {
+  if (!definition?.canCastAtHigherLevel) return "";
+
+  const candidates = [];
+  for (const modifier of definition.modifiers || []) {
+    if (!dndIsRecord(modifier) || normalize(modifier.type) !== "damage") continue;
+    const higher = modifier.atHigherLevels;
+    if (!dndIsRecord(higher)) continue;
+
+    const scaleType = normalize(higher.scaleType || definition.scaleType || "");
+    if (scaleType !== "spellscale") continue;
+
+    for (const entry of higher.higherLevelDefinitions || []) {
+      if (!dndIsRecord(entry)) continue;
+      const dice = dndDiceExpression(entry.dice || entry.die || entry);
+      if (dice) candidates.push(dice);
+    }
+  }
+
+  const parsed = candidates
+    .map(expression => {
+      const match = String(expression).match(/^(\d+)d(\d+)([+-]\d+)?$/i);
+      return match
+        ? {expression, dice:Number(match[1]), sides:Number(match[2])}
+        : {expression, dice:0, sides:0};
+    })
+    .sort((a,b) => b.dice - a.dice || b.sides - a.sides);
+
+  return parsed[0]?.expression || "";
+}
+
+function dndSpellDamageType(definition) {
+  const direct = dndDamageType(definition);
+  if (direct) return direct;
+
+  const known = new Set([
+    "acid","cold","fire","force","lightning","necrotic","poison",
+    "psychic","radiant","thunder","bludgeoning","piercing","slashing"
+  ]);
+
+  for (const modifier of definition?.modifiers || []) {
+    if (!dndIsRecord(modifier) || normalize(modifier.type) !== "damage") continue;
+    const subtype = normalize(modifier.subType || modifier.friendlySubtypeName || "");
+    if (known.has(subtype)) return subtype;
+  }
+  return "";
+}
+
 function dndParseSpells(root, scores, proficiencyBonus) {
   return dndSpellRecords(root).map((spell, index) => {
     const definition = dndIsRecord(spell.definition) ? spell.definition : spell;
@@ -4008,6 +4058,7 @@ function dndParseSpells(root, scores, proficiencyBonus) {
     const requiresSavingThrow = Boolean(definition.requiresSavingThrow || spell.requiresSavingThrow || definition.saveDcAbilityId);
     const saveAbility = DND_ABILITY_IDS[dndNumber(definition.saveDcAbilityId ?? spell.saveDcAbilityId, 0)] || "";
     const damage = dndDiceExpression(definition.damageEffect || spell.damageEffect || definition.modifiers);
+    const upcastDamage = dndSpellUpcastDamage(definition);
 
     const components = (definition.components || [])
       .map(value => ({1:"V",2:"S",3:"M"})[Number(value)])
@@ -4031,7 +4082,10 @@ function dndParseSpells(root, scores, proficiencyBonus) {
       saveDc:requiresSavingThrow ? 8 + spellAttack : null,
       saveAbility,
       damage,
-      damageType:dndDamageType(definition),
+      upcastDamage,
+      canCastAtHigherLevel:Boolean(definition.canCastAtHigherLevel),
+      castAtLevel:dndNumber(spell.castAtLevel, null),
+      damageType:dndSpellDamageType(definition),
       components,
       description:dndPlainText(definition.snippet || definition.description || spell.additionalDescription),
       source:"Spell"
@@ -8627,14 +8681,34 @@ function dndCharacterTabs(unit) {
   const tabs = [
     {id:"actions", label:"Actions"},
     ...(hasSpells ? [{id:"spells", label:"Spells"}] : []),
-    {id:"inventory", label:"Inventory"},
-    {id:"stats", label:"Stats"}
+    {id:"inventory", label:"Inventory"}
   ];
 
   if (!tabs.some(tab => tab.id === state.dndDetailTab)) {
     state.dndDetailTab = tabs[0].id;
   }
   return tabs;
+}
+
+function renderDndRestControls(unit) {
+  const pactSlots = (unit?.dnd?.spellSlots || []).filter(slot =>
+    (slot.pools || []).includes("pact") && !(slot.pools || []).includes("spell")
+  ).length;
+
+  return `
+    <div class="dnd-rest-bar">
+      <div>
+        <span>SESSION</span>
+        <strong>Turn & rest</strong>
+      </div>
+      <div class="dnd-rest-actions">
+        <button class="ghost-button compact" type="button" data-dnd-reset-turn>New turn</button>
+        <button class="ghost-button compact" type="button" data-dnd-short-rest>
+          Short rest${pactSlots ? " · pact slots" : ""}
+        </button>
+        <button class="ghost-button compact" type="button" data-dnd-long-rest>Long rest</button>
+      </div>
+    </div>`;
 }
 
 function renderDndTabBar(unit) {
@@ -8663,6 +8737,9 @@ function renderDndTabPanel(id, content) {
 
 function renderDndCharacterSections(unit) {
   return [
+    renderDndAbilityScores(unit),
+    renderUnitKeywordsSection(unit),
+    renderDndRestControls(unit),
     renderDndTabBar(unit),
     renderDndTabPanel("actions", [
       renderDndActionEconomy(unit),
@@ -8672,11 +8749,7 @@ function renderDndCharacterSections(unit) {
       renderDndSpellSlots(unit),
       renderDndActions(unit, "spell")
     ].filter(Boolean).join("")),
-    renderDndTabPanel("inventory", renderDndInventory(unit)),
-    renderDndTabPanel("stats", [
-      renderDndAbilityScores(unit),
-      renderUnitKeywordsSection(unit)
-    ].filter(Boolean).join(""))
+    renderDndTabPanel("inventory", renderDndInventory(unit))
   ].filter(Boolean).join("");
 }
 
