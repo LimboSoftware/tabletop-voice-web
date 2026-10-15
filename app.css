@@ -5581,3 +5581,24 @@ body.game-heresy .setup-import-card {
     border-top: 1px solid #25303f !important;
   }
 }
+
+
+.heresy-profile-table {
+  min-width: 1180px;
+}
+
+.heresy-component-table {
+  min-width: 820px;
+}
+
+.heresy-component-table th:not(:first-child),
+.heresy-component-table td:not(:first-child) {
+  min-width: 92px;
+}
+
+@media (max-width: 760px) {
+  .heresy-profile-table,
+  .heresy-component-table {
+    min-width: 760px;
+  }
+}
