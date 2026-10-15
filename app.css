@@ -5602,3 +5602,62 @@ body.game-heresy .setup-import-card {
     min-width: 760px;
   }
 }
+
+
+/* === Kill Team 2024 === */
+body.game-kill-team .setup-import-grid {
+  grid-template-columns: minmax(0, 830px);
+}
+
+body.game-kill-team .setup-import-card {
+  width: 100%;
+}
+
+.kill-team-weapon-table {
+  min-width: 760px;
+}
+
+.kill-team-weapon-table th:nth-child(2),
+.kill-team-weapon-table td:nth-child(2),
+.kill-team-weapon-table th:nth-child(3),
+.kill-team-weapon-table td:nth-child(3),
+.kill-team-weapon-table th:nth-child(4),
+.kill-team-weapon-table td:nth-child(4) {
+  width: 90px;
+}
+
+.kill-team-weapon-table th:last-child,
+.kill-team-weapon-table td:last-child {
+  min-width: 300px;
+  text-align: left;
+}
+
+.kill-team-weapon-rules {
+  color: #c4d1d8 !important;
+  line-height: 1.4;
+}
+
+body.game-kill-team .stat-grid {
+  grid-template-columns: repeat(4, minmax(100px, 1fr));
+}
+
+@media (max-width: 760px) {
+  body.game-kill-team .setup-import-grid {
+    grid-template-columns: 1fr;
+  }
+
+  body.game-kill-team .stat-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .kill-team-weapon-table {
+    min-width: 0;
+  }
+
+  .kill-team-weapon-table .kill-team-weapon-rules {
+    grid-column: 1 / -1;
+    min-width: 0;
+    padding-top: 9px;
+    border-top: 1px solid #25303f !important;
+  }
+}
