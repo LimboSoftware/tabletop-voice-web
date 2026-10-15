@@ -8532,7 +8532,8 @@ function getDndRuntimeState(unit = state.selected) {
     },
     slots:dndIsRecord(saved?.slots) ? {...saved.slots} : {},
     inventoryDeltas:dndIsRecord(saved?.inventoryDeltas) ? {...saved.inventoryDeltas} : {},
-    lastRoll:dndIsRecord(saved?.lastRoll) ? saved.lastRoll : null
+    lastRoll:dndIsRecord(saved?.lastRoll) ? saved.lastRoll : null,
+    lastCheck:dndIsRecord(saved?.lastCheck) ? saved.lastCheck : null
   };
 }
 
@@ -8699,18 +8700,96 @@ function playDndActionSound(kind = "attack") {
 
 function renderDndAbilityScores(unit) {
   const scores = unit?.dnd?.scores || {};
+  const runtime = getDndRuntimeState(unit);
   return `
     <section class="detail-section dnd-ability-section">
-      <div class="section-heading-row"><h3>Ability scores</h3></div>
+      <div class="section-heading-row">
+        <h3>Ability scores</h3>
+        <small>Tap any score to roll an ability check</small>
+      </div>
       <div class="dnd-ability-grid">
-        ${Object.entries(DND_ABILITY_LABELS).map(([key,label]) => `
-          <div class="dnd-ability">
-            <span>${label}</span>
-            <strong>${escapeHtml(scores[key] ?? "—")}</strong>
-            <small>${escapeHtml(dndSigned(dndModifier(scores[key] ?? 10)))}</small>
-          </div>`).join("")}
+        ${Object.entries(DND_ABILITY_LABELS).map(([key,label]) => {
+          const check = runtime.lastCheck?.key === "ability:" + key ? runtime.lastCheck : null;
+          return `
+            <button class="dnd-ability${check ? " rolled" : ""}" type="button" data-dnd-ability-check="${key}">
+              <span>${label}</span>
+              <strong>${escapeHtml(scores[key] ?? "—")}</strong>
+              <small>${escapeHtml(dndSigned(dndModifier(scores[key] ?? 10)))}</small>
+              ${check ? `<em>${check.total}</em>` : ""}
+            </button>`;
+        }).join("")}
       </div>
     </section>`;
+}
+
+function renderDndSkills(unit) {
+  const skills = unit?.dnd?.skills || [];
+  const runtime = getDndRuntimeState(unit);
+  if (!skills.length) return "";
+
+  return `
+    <section class="detail-section dnd-skills-section">
+      <div class="section-heading-row">
+        <h3>Skills</h3>
+        <small>Tap to roll</small>
+      </div>
+      <div class="dnd-skill-grid">
+        ${skills.map(skill => {
+          const check = runtime.lastCheck?.key === "skill:" + skill.key ? runtime.lastCheck : null;
+          return `
+            <button class="dnd-skill-row${check ? " rolled" : ""}" type="button" data-dnd-skill-roll="${escapeHtml(skill.key)}">
+              <div>
+                <strong>${escapeHtml(skill.name)}</strong>
+                <small>
+                  ${escapeHtml(String(skill.ability || "").toUpperCase())}
+                  ${skill.proficiencyLabel ? " · " + escapeHtml(skill.proficiencyLabel) : ""}
+                </small>
+              </div>
+              <span>${escapeHtml(dndSigned(skill.bonus))}</span>
+              ${check ? `<em>${check.total}</em>` : ""}
+            </button>`;
+        }).join("")}
+      </div>
+      ${runtime.lastCheck ? `
+        <div class="dnd-check-result">
+          <strong>${escapeHtml(runtime.lastCheck.label || "Check")} ${runtime.lastCheck.total}</strong>
+          <small>d20 ${runtime.lastCheck.d20} ${escapeHtml(dndSigned(runtime.lastCheck.bonus || 0))}</small>
+        </div>` : ""}
+    </section>`;
+}
+
+function dndRollCheck(unit, kind, key) {
+  const runtime = getDndRuntimeState(unit);
+  let label = "";
+  let bonus = 0;
+  let checkKey = "";
+
+  if (kind === "skill") {
+    const skill = (unit?.dnd?.skills || []).find(item => item.key === key);
+    if (!skill) return;
+    label = skill.name;
+    bonus = Number(skill.bonus || 0);
+    checkKey = "skill:" + skill.key;
+  } else {
+    const score = unit?.dnd?.scores?.[key];
+    if (score == null) return;
+    label = (DND_ABILITY_NAMES[key] || key).replace(/^./, char => char.toUpperCase()) + " check";
+    bonus = dndModifier(score);
+    checkKey = "ability:" + key;
+  }
+
+  const d20 = dndRollDie(20);
+  runtime.lastCheck = {
+    key:checkKey,
+    label,
+    d20,
+    bonus,
+    total:d20 + bonus,
+    at:Date.now()
+  };
+  saveDndRuntimeState(unit, runtime);
+  renderDetail(unit);
+  toast(label + " " + runtime.lastCheck.total);
 }
 
 function renderDndActionEconomy(unit) {
@@ -8988,6 +9067,7 @@ function renderDndTabPanel(id, content) {
 function renderDndCharacterSections(unit) {
   return [
     renderDndAbilityScores(unit),
+    renderDndSkills(unit),
     renderUnitKeywordsSection(unit),
     renderDndRestControls(unit),
     renderDndTabBar(unit),
@@ -9146,6 +9226,18 @@ function bindDndDetailControls(unit = state.selected) {
       els.detailSections.querySelectorAll("[data-dnd-panel]").forEach(panel => {
         panel.classList.toggle("hidden", panel.dataset.dndPanel !== tab);
       });
+    });
+  });
+
+  els.detailSections.querySelectorAll("[data-dnd-ability-check]").forEach(button => {
+    button.addEventListener("click", () => {
+      dndRollCheck(unit, "ability", button.dataset.dndAbilityCheck);
+    });
+  });
+
+  els.detailSections.querySelectorAll("[data-dnd-skill-roll]").forEach(button => {
+    button.addEventListener("click", () => {
+      dndRollCheck(unit, "skill", button.dataset.dndSkillRoll);
     });
   });
 
