@@ -156,6 +156,9 @@ const els = {
   coreRulesImportButton: $("coreRulesImportButton"),
   coreRulesImportStatus: $("coreRulesImportStatus"),
   setupChooseArmies: $("setupChooseArmies"),
+  setupCurrentGame: $("setupCurrentGame"),
+  setupChangeGameButton: $("setupChangeGameButton"),
+  resetUnitStatesButton: $("resetUnitStatesButton"),
   resetMatchButton: $("resetMatchButton"),
   toast: $("toast"),
   firstRunModal: $("firstRunModal"),
@@ -321,6 +324,8 @@ function bindEvents() {
     if (value) connectOpponentShareLink(value);
   });
   els.setupChooseArmies?.addEventListener("click", openArmyPicker);
+  els.setupChangeGameButton?.addEventListener("click", openGameSystemChooser);
+  els.resetUnitStatesButton?.addEventListener("click", resetAllUnitStates);
   els.resetMatchButton?.addEventListener("click", resetMatchState);
   document.querySelectorAll("[data-setup-check]").forEach(input => {
     input.addEventListener("change", persistSetupChecks);
@@ -721,6 +726,12 @@ function setGameCatalogueProvider(container, providerId) {
   renderGameSystemCatalogue(container, providerId);
 }
 
+function openGameSystemChooser() {
+  els.firstRunModal?.classList.add("hidden");
+  renderGameSystemCatalogues(gameProviderForSystem());
+  els.gameSystemModal?.classList.remove("hidden");
+}
+
 function showEntryModalIfNeeded() {
   const params = new URLSearchParams(location.search);
   if (params.has("tvshare") || params.has("transfer")) {
@@ -885,6 +896,9 @@ function applyGameSystemUi() {
 
   if (els.settingsCurrentGame) {
     els.settingsCurrentGame.textContent = currentGameName();
+  }
+  if (els.setupCurrentGame) {
+    els.setupCurrentGame.textContent = currentGameName();
   }
 
   renderGameSystemCatalogues(gameProviderForSystem());
@@ -8564,6 +8578,28 @@ function resetScores() {
   renderScoreboard();
   setVoicePrompt("score");
   toast("Scores reset");
+}
+
+function resetAllUnitStates() {
+  const keys = Object.keys(localStorage).filter(key =>
+    key.startsWith("tv_status_") ||
+    key.startsWith("tv_destroyed_") ||
+    key.startsWith("tv_unit_destroyed_")
+  );
+
+  if (!keys.length) {
+    toast("No unit states to reset");
+    return;
+  }
+
+  if (!confirm(
+    "Reset all unit states? This clears Battle-shocked, once-per-game used and any dead/destroyed markers. Loaded lists and pins will stay."
+  )) return;
+
+  keys.forEach(key => localStorage.removeItem(key));
+  updateUnitTopStatuses(state.selected);
+  renderAll();
+  toast("Unit states reset");
 }
 
 function resetMatchState() {
