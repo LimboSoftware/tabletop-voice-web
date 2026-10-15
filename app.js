@@ -7038,9 +7038,11 @@ function renderDetail(unit) {
   updateLinkedUnitButton(sourceUnit);
   updatePinButton();
 
-  const statOrder = unit.system === "legions-imperialis"
-    ? ["move","sv","caf","morale","w"]
-    : unit.system === "kill-team"
+  const statOrder = unit.system === "necromunda"
+    ? ["m","ws","bs","s","t","w","i","a","ld","cl","wil","int"]
+    : unit.system === "legions-imperialis"
+      ? ["move","sv","caf","morale","w"]
+      : unit.system === "kill-team"
       ? ["apl","move","save","wounds"]
       : unit.system === "heresy"
       ? [
@@ -7084,6 +7086,10 @@ function renderDetail(unit) {
 
   const sections = [];
 
+  if (unit.system === "necromunda") {
+    sections.push(renderNecromundaCampaignSection(unit));
+  }
+
   if (unit.system === "legions-imperialis" && unit.legionsImperialisProfiles?.length > 1) {
     sections.push(renderLegionsImperialisProfileSection(unit.legionsImperialisProfiles));
   }
@@ -7106,6 +7112,8 @@ function renderDetail(unit) {
 
     if (unit.system === "warfleet") {
       sections.push(renderWarfleetsWeaponSection(unit.profiles, "Weapons"));
+    } else if (unit.system === "necromunda") {
+      sections.push(renderNecromundaWeaponSection(unit.profiles, "Weapons"));
     } else if (unit.system === "legions-imperialis") {
       sections.push(renderLegionsImperialisWeaponSection(unit.profiles, "Weapons"));
     } else if (unit.system === "kill-team") {
@@ -7144,9 +7152,11 @@ function renderDetail(unit) {
     sections.push(
       (unit.system === "opr" || unit.system === "warfleet")
         ? renderOprAbilitySection(unit.rules, unit.system === "warfleet" ? "Rules & systems" : "Special rules")
-        : unit.system === "legions-imperialis"
-          ? renderOprAbilitySection(unit.rules, "Special rules")
-          : unit.system === "kill-team"
+        : unit.system === "necromunda"
+          ? renderOprAbilitySection(unit.rules, "Skills, rules & gear")
+          : unit.system === "legions-imperialis"
+            ? renderOprAbilitySection(unit.rules, "Special rules")
+            : unit.system === "kill-team"
             ? renderOprAbilitySection(unit.rules, "Abilities, actions & equipment")
             : unit.system === "heresy"
             ? renderOprAbilitySection(unit.rules, "Wargear, reactions & rules")
@@ -7290,6 +7300,82 @@ function cleanUniqueRuleText(text = "") {
 
 
 
+
+
+function renderNecromundaCampaignSection(unit) {
+  const data = unit?.necromunda || {};
+  const rows = [
+    ["Profile", data.profileName || data.typeLine || ""],
+    ["Status", data.status || "Active"],
+    ["XP", data.xp || ""],
+    ["Rating", data.rating != null ? data.rating + "cr" : ""],
+    ...(data.counters || []).map(counter => [counter.label, counter.value])
+  ].filter(([,value]) => value !== null && value !== undefined && value !== "");
+
+  if (!rows.length) return "";
+
+  return '<section class="detail-section necromunda-campaign-section">' +
+    '<div class="section-heading-row"><h3>Fighter status</h3></div>' +
+    '<div class="necromunda-campaign-grid">' +
+      rows.map(([label,value]) =>
+        '<div class="necromunda-campaign-row">' +
+          '<span>' + escapeHtml(label) + '</span>' +
+          '<strong>' + escapeHtml(value) + '</strong>' +
+        '</div>'
+      ).join("") +
+    '</div></section>';
+}
+
+function renderNecromundaWeaponSection(profiles, title = "Weapons") {
+  const columns = ["SR","LR","Str","AP","L","Traits"];
+  const aliases = {
+    sr:["sr","short range"],
+    lr:["lr","long range"],
+    str:["str","strength"],
+    ap:["ap","armour piercing","armor piercing"],
+    l:["l","lethality"],
+    traits:["traits","trait"]
+  };
+
+  function valueFor(values, column) {
+    const choices = aliases[normalize(column)] || [normalize(column)];
+    for (const choice of choices) {
+      if (values.has(choice)) return values.get(choice);
+    }
+    return "—";
+  }
+
+  const rows = (profiles || []).map(profile => {
+    const values = new Map(
+      (profile.values || []).map(item => [normalize(item.label), item.value ?? ""])
+    );
+    return {
+      name:profile.name || "Weapon",
+      values:columns.map(column => valueFor(values, column) || "—")
+    };
+  });
+
+  const head = columns.map(column => "<th>" + escapeHtml(column) + "</th>").join("");
+  const body = rows.map(row => {
+    const cells = row.values.map((value,index) =>
+      '<td data-label="' + escapeHtml(columns[index]) + '" class="' +
+      (index === 5 ? "necromunda-weapon-traits" : "weapon-number") + '">' +
+      escapeHtml(value) + '</td>'
+    ).join("");
+
+    return '<tr class="weapon-row weapon-stat-row">' +
+      '<td class="weapon-name"><strong>' + escapeHtml(row.name) + '</strong></td>' +
+      cells +
+      '</tr>';
+  }).join("");
+
+  return '<section class="detail-section weapon-section necromunda-weapon-section">' +
+    '<div class="section-heading-row"><h3>' + escapeHtml(title) + '</h3>' +
+    '<span class="section-count">' + rows.length + '</span></div>' +
+    '<div class="weapon-table-wrap"><table class="weapon-table compact-weapon-table necromunda-weapon-table">' +
+    '<thead><tr><th class="weapon-name-column">Weapon</th>' + head + '</tr></thead>' +
+    '<tbody>' + body + '</tbody></table></div></section>';
+}
 
 function renderLegionsImperialisProfileSection(profiles = []) {
   const columns = ["Move","Sv","CAF","Morale","W"];
