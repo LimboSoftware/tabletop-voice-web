@@ -473,7 +473,7 @@ const GAME_PROVIDERS = [
       {id:"aos", name:"Warhammer Age of Sigmar", detail:"AoS 4th · New Recruit roster support", available:true, beta:true},
       {id:"heresy", name:"Warhammer: The Horus Heresy", detail:"3rd Edition · New Recruit roster support", available:true, beta:true},
       {id:"old-world", name:"Warhammer: The Old World", detail:"Planned", available:false},
-      {id:"kill-team", name:"Kill Team", detail:"Planned", available:false},
+      {id:"kill-team", name:"Kill Team", detail:"2024 · New Recruit roster support", available:true, beta:true},
       {id:"necromunda", name:"Necromunda", detail:"Planned", available:false},
       {id:"warcry", name:"Warcry", detail:"Planned", available:false},
       {id:"underworlds", name:"Warhammer Underworlds", detail:"Planned", available:false},
@@ -606,6 +606,10 @@ function isHeresyMode(gameSystem = state.gameSystem) {
   return gameSystem === "heresy";
 }
 
+function isKillTeamMode(gameSystem = state.gameSystem) {
+  return gameSystem === "kill-team";
+}
+
 function gameProviderForSystem(gameSystem = state.gameSystem) {
   return GAME_SYSTEMS[gameSystem]?.provider || "gw";
 }
@@ -702,6 +706,7 @@ function inferUnitGameSystem(unit) {
   if (unit?.gameSystemKey && GAME_SYSTEMS[unit.gameSystemKey]) return unit.gameSystemKey;
   if (unit?.system === "aos") return "aos";
   if (unit?.system === "heresy") return "heresy";
+  if (unit?.system === "kill-team") return "kill-team";
   if (unit?.system === "opr") return oprGameSystemKey(unit?.gameSystem) || "grimdark";
   if (unit?.system === "40k") return "40k";
 
@@ -742,6 +747,10 @@ function inferRosterGameSystem(roster) {
   ].filter(Boolean).join(" "));
 
   if (metadata.includes("age of sigmar")) return "aos";
+  if (
+    metadata.includes("kill team") ||
+    metadata.includes("c521 ad27 44df f959")
+  ) return "kill-team";
   if (
     metadata.includes("horus heresy") ||
     metadata.includes("age of darkness") ||
@@ -814,12 +823,14 @@ function applyGameSystemUi() {
   const opr = isOprMode();
   const aos = isAosMode();
   const heresy = isHeresyMode();
+  const killTeam = isKillTeamMode();
   const fortyK = state.gameSystem === "40k";
 
   document.body.classList.toggle("game-grimdark", grimdark);
   document.body.classList.toggle("game-opr", opr);
   document.body.classList.toggle("game-aos", aos);
   document.body.classList.toggle("game-heresy", heresy);
+  document.body.classList.toggle("game-kill-team", killTeam);
   document.body.classList.toggle("game-40k", fortyK);
 
   if (els.settingsCurrentGame) {
@@ -889,7 +900,9 @@ function applyGameSystemUi() {
         ? "Export your Age of Sigmar 4th edition roster from New Recruit, then choose the JSON, ROS or ROSZ file here."
         : heresy
           ? "Export your Horus Heresy 3rd Edition roster from New Recruit, then choose the JSON, ROS or ROSZ file here."
-          : "Export your Warhammer 40,000 roster from New Recruit, then choose the JSON, ROS, ROSZ or TXT file here.";
+          : killTeam
+            ? "Export your Kill Team 2024 roster from New Recruit, then choose the JSON, ROS or ROSZ file here."
+            : "Export your Warhammer 40,000 roster from New Recruit, then choose the JSON, ROS, ROSZ or TXT file here.";
   }
   if (els.importButton) {
     els.importButton.textContent = "Choose New Recruit file";
@@ -912,7 +925,9 @@ function applyGameSystemUi() {
         ? "Import your Age of Sigmar army from New Recruit, then use Tabletop Voice for warscroll lookup at the table."
         : heresy
           ? "Import your Horus Heresy army from New Recruit for profiles, weapons, reactions, wargear and rules at the table."
-          : "Bring in your New Recruit lists, or load the wider dataset when you need broader 40K lookup at the table.";
+          : killTeam
+            ? "Import your Kill Team from New Recruit for operative profiles, weapons, abilities and team rules at the table."
+            : "Bring in your New Recruit lists, or load the wider dataset when you need broader 40K lookup at the table.";
   }
 
   updateGameContextUi();
@@ -2099,6 +2114,10 @@ function detectNewRecruitGameSystem(root, units = []) {
   );
 
   if (systemName.includes("age of sigmar")) return "aos";
+  if (
+    systemName.includes("kill team") ||
+    systemName.includes("c521 ad27 44df f959")
+  ) return "kill-team";
   if (
     systemName.includes("horus heresy") ||
     systemName.includes("age of darkness") ||
