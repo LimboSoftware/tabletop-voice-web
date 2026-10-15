@@ -75,31 +75,15 @@
     <main class="app-main">
       <section id="welcome" class="app-page data-page" data-page="setup">
         <div class="page-hero compact-hero setup-hero">
-          <div>
+          <div class="setup-hero-copy">
             <p class="eyebrow">GAME SETUP</p>
             <h1>Load your army.</h1>
             <p class="lede">Bring in your New Recruit lists, or load the wider dataset when you need broader lookup at the table.</p>
           </div>
-        </div>
-
-        <div class="setup-control-grid">
-          <section class="tool-card setup-control-card">
-            <div>
-              <span class="section-label">GAME SYSTEM</span>
-              <h2 id="setupCurrentGame">Choose a game</h2>
-              <p>Change game system without deleting lists already stored on this device.</p>
-            </div>
-            <button id="setupChangeGameButton" class="ghost-button large" type="button">Change game system</button>
-          </section>
-
-          <section class="tool-card setup-control-card">
-            <div>
-              <span class="section-label">UNIT STATES</span>
-              <h2>Reset table states</h2>
-              <p>Clear Battle-shocked, once-per-game used and dead/destroyed markers across all loaded units.</p>
-            </div>
-            <button id="resetUnitStatesButton" class="ghost-button large" type="button">Reset all unit states</button>
-          </section>
+          <div class="setup-hero-actions" aria-label="Setup actions">
+            <button id="setupChangeGameButton" class="ghost-button compact" type="button">Change system</button>
+            <button id="resetGameButton" class="ghost-button compact" type="button">Reset game</button>
+          </div>
         </div>
 
         <div class="setup-import-grid">
