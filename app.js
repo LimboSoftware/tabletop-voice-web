@@ -11728,6 +11728,9 @@ function clearRosters() {
   localStorage.removeItem("tv_active_search_rosters");
   localStorage.removeItem("tv_active_search_scopes");
   localStorage.removeItem(CORE_REFERENCE_STORAGE_KEY);
+  for (const key of Object.keys(localStorage)) {
+    if (key.startsWith("tv_dnd_state_")) localStorage.removeItem(key);
+  }
   if (els.searchInput) els.searchInput.value = "";
   els.datasheetResultsShell?.classList.add("hidden");
   renderAll();
