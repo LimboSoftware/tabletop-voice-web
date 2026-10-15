@@ -2112,6 +2112,10 @@ function buildRosterFromNewRecruitRoot(root, fileName, importFormat = "json") {
       unit.system = "kill-team";
       unit.gameSystemKey = "kill-team";
     }
+    if (gameSystemKey === "legions-imperialis") {
+      unit.system = "legions-imperialis";
+      unit.gameSystemKey = "legions-imperialis";
+    }
   });
 
   return {
@@ -2791,6 +2795,42 @@ function resolveRosterAttachments(units = []) {
 
 
 
+
+function isLegionsImperialisDetachmentProfile(profile) {
+  if (!profile || typeof profile !== "object") return false;
+  if (normalize(profile.typeName || "") !== "detachment") return false;
+
+  const labels = new Set(
+    (profile.characteristics || []).map(item => normalize(item?.name || ""))
+  );
+
+  return labels.has("move") &&
+    labels.has("sv") &&
+    labels.has("caf") &&
+    labels.has("morale") &&
+    labels.has("w");
+}
+
+function isLegionsImperialisRuleProfile(profile) {
+  return profile &&
+    !profile.hidden &&
+    normalize(profile.typeName || "") === "special rules";
+}
+
+function legionsImperialisRuleProfileToRule(profile) {
+  const text = cleanRuleText(
+    characteristicValue((profile.characteristics || [])[0])
+  ).trim();
+
+  if (!text) return null;
+
+  return {
+    name:String(profile.name || "Special Rule").trim(),
+    text,
+    category:"Special Rule"
+  };
+}
+
 function isKillTeamOperativeProfile(profile) {
   if (!profile || typeof profile !== "object") return false;
   if (normalize(profile.typeName || "") !== "operative") return false;
@@ -2947,7 +2987,8 @@ function parseNewRecruitSelection(selection) {
   const unitProfiles = allProfiles.filter(profile =>
     profile?.typeName === "Unit" ||
     isHeresyUnitProfile(profile) ||
-    isKillTeamOperativeProfile(profile)
+    isKillTeamOperativeProfile(profile) ||
+    isLegionsImperialisDetachmentProfile(profile)
   );
   if (!unitProfiles.length) return null;
 
@@ -2957,6 +2998,7 @@ function parseNewRecruitSelection(selection) {
 
   const heresyProfile = isHeresyUnitProfile(primaryUnitProfile);
   const killTeamProfile = isKillTeamOperativeProfile(primaryUnitProfile);
+  const legionsImperialisProfile = isLegionsImperialisDetachmentProfile(primaryUnitProfile);
   const heresyComponents = unitProfiles
     .filter(profile => /^titan\s/i.test(String(profile?.typeName || "")))
     .map(profile => ({
@@ -2981,6 +3023,16 @@ function parseNewRecruitSelection(selection) {
         }))
     : [];
 
+  const legionsImperialisProfiles = legionsImperialisProfile
+    ? unitProfiles.map(profile => ({
+        name:String(profile.name || selection.name || "Detachment").trim(),
+        values:(profile.characteristics || []).map(characteristic => ({
+          label:characteristic.name || "",
+          value:characteristicValue(characteristic)
+        })).filter(item => item.label && item.value !== "")
+      }))
+    : [];
+
   const stats = (primaryUnitProfile.characteristics || []).map(characteristic => ({
     label:characteristic.name || "",
     value:characteristicValue(characteristic)
@@ -2996,9 +3048,11 @@ function parseNewRecruitSelection(selection) {
     statLabels.has("save") &&
     statLabels.has("control");
 
-  const system = killTeamProfile
-    ? "kill-team"
-    : heresyProfile
+  const system = legionsImperialisProfile
+    ? "legions-imperialis"
+    : killTeamProfile
+      ? "kill-team"
+      : heresyProfile
       ? "heresy"
       : aosProfile
         ? "aos"
@@ -3042,14 +3096,21 @@ function parseNewRecruitSelection(selection) {
         .filter(Boolean)
     : [];
 
+  const legionsImperialisProfileRules = system === "legions-imperialis"
+    ? allProfiles
+        .filter(isLegionsImperialisRuleProfile)
+        .map(legionsImperialisRuleProfileToRule)
+        .filter(Boolean)
+    : [];
+
   const rules = collectRules(selection);
   const abilities = dedupeBy(
-    [...standardAbilityProfiles, ...aosAbilityProfiles, ...heresyProfileRules, ...killTeamProfileRules, ...rules],
+    [...standardAbilityProfiles, ...aosAbilityProfiles, ...heresyProfileRules, ...killTeamProfileRules, ...legionsImperialisProfileRules, ...rules],
     rule => normalize((rule.category || "") + "|" + rule.name + "|" + rule.text)
   );
 
   const directPts = (selection.costs || []).find(cost => isPointsCostName(cost.name))?.value;
-  const pts = system === "heresy"
+  const pts = (system === "heresy" || system === "legions-imperialis")
     ? newRecruitSelectionPointTotal(selection)
     : directPts;
   if (pts != null && Number(pts) !== 0) stats.push({label:"Pts", value:String(pts)});
@@ -3066,9 +3127,11 @@ function parseNewRecruitSelection(selection) {
   return {
     id:selection.id || primaryUnitProfile.id || name,
     name,
-    type:system === "kill-team"
-      ? "Operative"
-      : system === "heresy"
+    type:system === "legions-imperialis"
+      ? "Detachment"
+      : system === "kill-team"
+        ? "Operative"
+        : system === "heresy"
         ? (heresyComponents.length
             ? "Titan"
             : normalize(primaryUnitProfile.typeName) === "profile"
@@ -3082,6 +3145,7 @@ function parseNewRecruitSelection(selection) {
     profiles:weapons,
     heresyComponents,
     heresyModelProfiles,
+    legionsImperialisProfiles,
     selectionIds:collectSelectionIds(selection),
     incomingAssociations:normalizeUnitAssociations(selection.incomingAssociations || []),
     outgoingAssociations:normalizeUnitAssociations(selection.associations || []),
