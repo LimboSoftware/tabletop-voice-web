@@ -2047,6 +2047,76 @@ function parseTextRosterFile(text, fileName) {
 }
 
 
+
+function hasLegionsImperialisDetachmentProfile(selection) {
+  return collectProfiles(selection).some(isLegionsImperialisDetachmentProfile);
+}
+
+function isLegionsImperialisDetachmentSelection(selection) {
+  if (!selection || typeof selection !== "object") return false;
+  if (normalize(selection.type) !== "unit") return false;
+  if (normalize(selection.subType || selection.subtype || "") === "unit group") return false;
+  return hasLegionsImperialisDetachmentProfile(selection);
+}
+
+function collectLegionsImperialisDetachmentSelections(selections = []) {
+  const found = [];
+
+  function walk(selection) {
+    if (!selection || typeof selection !== "object") return;
+
+    if (isLegionsImperialisDetachmentSelection(selection)) {
+      found.push(selection);
+      return;
+    }
+
+    for (const child of selection.selections || []) walk(child);
+  }
+
+  for (const selection of selections || []) walk(selection);
+  return found;
+}
+
+function extractLegionsImperialisFormationRules(root) {
+  const rules = [];
+
+  function addRule(rule, source = "") {
+    if (!rule || rule.hidden) return;
+    const name = cleanRuleText(rule.name || "").trim();
+    const text = cleanRuleText(rule.description || "").trim();
+    if (!name || !text) return;
+    rules.push({name, text, category:"Formation Rule", source});
+  }
+
+  function addProfile(profile, source = "") {
+    if (!isLegionsImperialisRuleProfile(profile)) return;
+    const rule = legionsImperialisRuleProfileToRule(profile);
+    if (!rule?.name || !rule?.text) return;
+    rules.push({...rule, category:"Formation Rule", source});
+  }
+
+  function walkWrapperSelection(selection, source = "") {
+    if (!selection || typeof selection !== "object") return;
+    if (isLegionsImperialisDetachmentSelection(selection)) return;
+
+    for (const rule of selection.rules || []) addRule(rule, source);
+    for (const profile of selection.profiles || []) addProfile(profile, source);
+    for (const child of selection.selections || []) walkWrapperSelection(child, source);
+  }
+
+  for (const force of collectRosterForces(root?.forces || [])) {
+    const source = force.name || force.catalogueName || "";
+    for (const rule of force.rules || []) addRule(rule, source);
+    for (const profile of force.profiles || []) addProfile(profile, source);
+    for (const selection of force.selections || []) walkWrapperSelection(selection, source);
+  }
+
+  return dedupeBy(
+    rules,
+    item => normalize((item.category || "") + "|" + item.name + "|" + item.text + "|" + item.source)
+  );
+}
+
 function collectKillTeamOperativeSelections(selections = []) {
   const found = [];
 
@@ -2074,7 +2144,9 @@ function buildRosterFromNewRecruitRoot(root, fileName, importFormat = "json") {
   for (const force of allForces) {
     const selections = metadataGameSystem === "kill-team"
       ? collectKillTeamOperativeSelections(force.selections || [])
-      : (force.selections || []);
+      : metadataGameSystem === "legions-imperialis"
+        ? collectLegionsImperialisDetachmentSelections(force.selections || [])
+        : (force.selections || []);
 
     for (const selection of selections) {
       const unit = parseNewRecruitSelection(selection);
@@ -2100,7 +2172,9 @@ function buildRosterFromNewRecruitRoot(root, fileName, importFormat = "json") {
       ? extractHeresyArmyRules(root)
       : gameSystemKey === "kill-team"
         ? extractKillTeamRules(root)
-        : extractArmyRules(root);
+        : gameSystemKey === "legions-imperialis"
+          ? extractLegionsImperialisFormationRules(root)
+          : extractArmyRules(root);
 
   uniqueUnits.forEach(unit => {
     if (unit?.system === "opr") unit.gameSystemKey = gameSystemKey;
