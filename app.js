@@ -2044,6 +2044,10 @@ function buildRosterFromNewRecruitRoot(root, fileName, importFormat = "json") {
 
   uniqueUnits.forEach(unit => {
     if (unit?.system === "opr") unit.gameSystemKey = gameSystemKey;
+    if (gameSystemKey === "heresy") {
+      unit.system = "heresy";
+      unit.gameSystemKey = "heresy";
+    }
   });
 
   return {
@@ -4176,9 +4180,11 @@ function setVoicePrompt(page = state.currentPage) {
   const prompts = {
     datasheets: isWarfleetsMode()
       ? "Say a ship or squadron name from your Warfleets fleet"
-      : isOprMode()
-        ? "Say a unit name from your " + currentGameName() + " list"
-        : isAosMode()
+      : isHeresyMode()
+        ? "Say a unit name from your Horus Heresy army"
+        : isOprMode()
+          ? "Say a unit name from your " + currentGameName() + " list"
+          : isAosMode()
         ? "Say a unit name, e.g. “Annihilators”"
         : "Say a unit name, e.g. “Death Korps of Krieg”",
     score: "T" + state.scoreTurn + ": say “Player 1 add 5 primary”",
@@ -4652,6 +4658,23 @@ function getUnitBrowserGroup(unit) {
     if (categories.has("medium")) return "Medium Ships";
     if (categories.has("light")) return "Light Ships";
     return "Ships";
+  }
+
+  if (unit?.system === "heresy") {
+    if (categories.has("high command") || hasPrefix("prime high command")) return "High Command";
+    if (categories.has("command") || hasPrefix("prime command")) return "Command";
+    if (categories.has("retinue") || hasPrefix("prime retinue")) return "Retinue";
+    if (categories.has("troops") || categories.has("prime troops")) return "Troops";
+    if (categories.has("elites") || categories.has("prime elites")) return "Elites";
+    if (categories.has("recon") || categories.has("prime recon")) return "Recon";
+    if (categories.has("fast attack") || categories.has("prime fast attack")) return "Fast Attack";
+    if (categories.has("support") || categories.has("prime support")) return "Support";
+    if (categories.has("heavy assault") || categories.has("prime heavy assault")) return "Heavy Assault";
+    if (categories.has("armour") || categories.has("prime armour")) return "Armour";
+    if (categories.has("war engine") || categories.has("war-engine") || categories.has("prime war engine") || categories.has("prime war-engine")) return "War Engines";
+    if (categories.has("transport") || categories.has("heavy transport") || categories.has("prime heavy transport")) return "Transports";
+    if (categories.has("lord of war") || categories.has("prime lord of war") || categories.has("warlord or lord of war")) return "Lords of War";
+    return "Other units";
   }
 
   if (categories.has("character") || categories.has("epic hero") || categories.has("hero") || categories.has("heroes")) return "Characters";
@@ -5785,6 +5808,7 @@ function adjustTurnScore(player, type, delta) {
 function updateGameContextUi(unit = state.selected) {
   const opr = isOprMode();
   const aos = isAosMode();
+  const heresy = isHeresyMode();
   const non40k = state.gameSystem !== "40k";
 
   els.appNav?.classList.toggle("opr-context", non40k);
@@ -5812,21 +5836,23 @@ function updateGameContextUi(unit = state.selected) {
 
   const armyRulesLabel = armyRulesButton?.querySelector("span:last-child");
   if (armyRulesLabel) {
-    armyRulesLabel.textContent = opr ? "Rules" : "Army Rules";
+    armyRulesLabel.textContent = (opr || heresy) ? "Rules" : "Army Rules";
   }
 
   const heading = els.pageArmyRules?.querySelector("h1");
   const copy = els.pageArmyRules?.querySelector(".page-heading > p:last-child");
   const eyebrow = els.pageArmyRules?.querySelector(".eyebrow");
 
-  if (heading) heading.textContent = opr ? "Rules" : "Army Rules";
+  if (heading) heading.textContent = (opr || heresy) ? "Rules" : "Army Rules";
 
   if (eyebrow) {
     eyebrow.textContent = opr
       ? currentGameName().toUpperCase() + " REFERENCE"
-      : aos
-        ? "AGE OF SIGMAR REFERENCE"
-        : "ARMY REFERENCE";
+      : heresy
+        ? "HORUS HERESY REFERENCE"
+        : aos
+          ? "AGE OF SIGMAR REFERENCE"
+          : "ARMY REFERENCE";
   }
 
   if (copy) {
@@ -5834,9 +5860,11 @@ function updateGameContextUi(unit = state.selected) {
       ? isWarfleetsMode()
         ? "Ship rules and systems referenced by the active Warfleets fleet."
         : "Special rules" + (isOprFantasyMode() ? " and spells" : "") + " referenced by the active " + currentGameName() + (isOprQuestMode() ? " campaign." : " list.")
-      : aos
-        ? "Battle traits, spells, prayers and other army-level abilities imported with the active Age of Sigmar list."
-        : "Rules that apply to the selected imported list or whole army.";
+      : heresy
+        ? "Army rules imported with the active Horus Heresy list. Unit-specific wargear, reactions and traits are shown on each unit profile."
+        : aos
+          ? "Battle traits, spells, prayers and other army-level abilities imported with the active Age of Sigmar list."
+          : "Rules that apply to the selected imported list or whole army.";
   }
 }
 
@@ -6832,17 +6860,34 @@ function renderQuickLists() {
 
   const groupOrder = isWarfleetsMode()
     ? ["Heavy Ships","Medium Ships","Light Ships","Ships","Squadrons"]
-    : [
-        "Characters",
-        "Battleline",
-        "Infantry",
-        "Fast / Mounted",
-        "Vehicles",
-        "Monsters",
-        "Transports",
-        "Fortifications",
-        "Other units"
-      ];
+    : isHeresyMode()
+      ? [
+          "High Command",
+          "Command",
+          "Retinue",
+          "Troops",
+          "Elites",
+          "Recon",
+          "Fast Attack",
+          "Support",
+          "Heavy Assault",
+          "Armour",
+          "War Engines",
+          "Transports",
+          "Lords of War",
+          "Other units"
+        ]
+      : [
+          "Characters",
+          "Battleline",
+          "Infantry",
+          "Fast / Mounted",
+          "Vehicles",
+          "Monsters",
+          "Transports",
+          "Fortifications",
+          "Other units"
+        ];
 
   const groups = new Map(groupOrder.map(name => [name, []]));
 
