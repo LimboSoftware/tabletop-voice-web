@@ -5365,9 +5365,11 @@ function renderDetail(unit) {
   updateLinkedUnitButton(sourceUnit);
   updatePinButton();
 
-  const statOrder = unit.system === "kill-team"
-    ? ["apl","move","save","wounds"]
-    : unit.system === "heresy"
+  const statOrder = unit.system === "legions-imperialis"
+    ? ["move","sv","caf","morale","w"]
+    : unit.system === "kill-team"
+      ? ["apl","move","save","wounds"]
+      : unit.system === "heresy"
       ? [
           "m","ws","bs","s","t","w","i","a","ld","cl","wp","in","sav","inv",
           "front armour","side armour","rear armour","front","rear",
@@ -5391,6 +5393,13 @@ function renderDetail(unit) {
     displayStats = [];
   }
 
+  if (
+    unit.system === "legions-imperialis" &&
+    unit.legionsImperialisProfiles?.length > 1
+  ) {
+    displayStats = [];
+  }
+
   els.detailStats?.classList.toggle("hidden", !displayStats.length);
   els.detailStats.innerHTML = displayStats.length
     ? displayStats.map(stat => `
@@ -5401,6 +5410,10 @@ function renderDetail(unit) {
     : "";
 
   const sections = [];
+
+  if (unit.system === "legions-imperialis" && unit.legionsImperialisProfiles?.length > 1) {
+    sections.push(renderLegionsImperialisProfileSection(unit.legionsImperialisProfiles));
+  }
 
   if (unit.system === "heresy" && unit.heresyModelProfiles?.length > 1) {
     sections.push(renderHeresyModelProfileSection(unit.heresyModelProfiles));
@@ -5420,6 +5433,8 @@ function renderDetail(unit) {
 
     if (unit.system === "warfleet") {
       sections.push(renderWarfleetsWeaponSection(unit.profiles, "Weapons"));
+    } else if (unit.system === "legions-imperialis") {
+      sections.push(renderLegionsImperialisWeaponSection(unit.profiles, "Weapons"));
     } else if (unit.system === "kill-team") {
       const ranged = unit.profiles.filter(profile => killTeamWeaponKind(profile) === "ranged");
       const melee = unit.profiles.filter(profile => killTeamWeaponKind(profile) === "melee");
@@ -5456,9 +5471,11 @@ function renderDetail(unit) {
     sections.push(
       (unit.system === "opr" || unit.system === "warfleet")
         ? renderOprAbilitySection(unit.rules, unit.system === "warfleet" ? "Rules & systems" : "Special rules")
-        : unit.system === "kill-team"
-          ? renderOprAbilitySection(unit.rules, "Abilities, actions & equipment")
-          : unit.system === "heresy"
+        : unit.system === "legions-imperialis"
+          ? renderOprAbilitySection(unit.rules, "Special rules")
+          : unit.system === "kill-team"
+            ? renderOprAbilitySection(unit.rules, "Abilities, actions & equipment")
+            : unit.system === "heresy"
             ? renderOprAbilitySection(unit.rules, "Wargear, reactions & rules")
             : unit.system === "aos"
           ? renderAosAbilitySection(unit.rules)
@@ -5599,6 +5616,77 @@ function cleanUniqueRuleText(text = "") {
 
 
 
+
+
+function renderLegionsImperialisProfileSection(profiles = []) {
+  const columns = ["Move","Sv","CAF","Morale","W"];
+  const rows = (profiles || []).map(profile => {
+    const values = new Map(
+      (profile.values || []).map(item => [normalize(item.label), item.value ?? ""])
+    );
+    return {
+      name:profile.name || "Model",
+      values:columns.map(column => values.get(normalize(column)) || "—")
+    };
+  });
+
+  const head = columns.map(column => "<th>" + escapeHtml(column) + "</th>").join("");
+  const body = rows.map(row => {
+    const cells = row.values.map((value,index) =>
+      '<td data-label="' + escapeHtml(columns[index]) + '" class="weapon-number">' +
+      escapeHtml(value) + '</td>'
+    ).join("");
+
+    return '<tr class="weapon-row weapon-stat-row">' +
+      '<td class="weapon-name"><strong>' + escapeHtml(row.name) + '</strong></td>' +
+      cells +
+      '</tr>';
+  }).join("");
+
+  return '<section class="detail-section weapon-section legions-imperialis-profile-section">' +
+    '<div class="section-heading-row"><h3>Detachment profiles</h3>' +
+    '<span class="section-count">' + rows.length + '</span></div>' +
+    '<div class="weapon-table-wrap"><table class="weapon-table compact-weapon-table legions-imperialis-profile-table">' +
+    '<thead><tr><th class="weapon-name-column">Model</th>' + head + '</tr></thead>' +
+    '<tbody>' + body + '</tbody></table></div></section>';
+}
+
+function renderLegionsImperialisWeaponSection(profiles, title = "Weapons") {
+  const columns = ["Range","Dice","To Hit","AP","Traits"];
+  const rows = (profiles || []).map(profile => {
+    const values = new Map(
+      (profile.values || []).map(item => [normalize(item.label), item.value ?? ""])
+    );
+    return {
+      name:profile.name || "Weapon",
+      quantity:Number.isFinite(Number(profile.quantity)) ? Math.max(1, Number(profile.quantity)) : null,
+      values:columns.map(column => values.get(normalize(column)) || "—")
+    };
+  });
+
+  const head = columns.map(column => "<th>" + escapeHtml(column) + "</th>").join("");
+  const body = rows.map(row => {
+    const cells = row.values.map((value,index) =>
+      '<td data-label="' + escapeHtml(columns[index]) + '" class="' +
+      (index === 4 ? "legions-imperialis-traits" : "weapon-number") + '">' +
+      escapeHtml(value) + '</td>'
+    ).join("");
+
+    return '<tr class="weapon-row weapon-stat-row">' +
+      '<td class="weapon-name"><div class="weapon-title-line">' +
+      (row.quantity != null ? '<span class="weapon-quantity">' + row.quantity + '×</span>' : '') +
+      '<strong>' + escapeHtml(row.name) + '</strong></div></td>' +
+      cells +
+      '</tr>';
+  }).join("");
+
+  return '<section class="detail-section weapon-section legions-imperialis-weapon-section">' +
+    '<div class="section-heading-row"><h3>' + escapeHtml(title) + '</h3>' +
+    '<span class="section-count">' + rows.length + '</span></div>' +
+    '<div class="weapon-table-wrap"><table class="weapon-table compact-weapon-table legions-imperialis-weapon-table">' +
+    '<thead><tr><th class="weapon-name-column">Weapon</th>' + head + '</tr></thead>' +
+    '<tbody>' + body + '</tbody></table></div></section>';
+}
 
 function killTeamWeaponKind(profile = {}) {
   const name = String(profile.name || "").trim();
