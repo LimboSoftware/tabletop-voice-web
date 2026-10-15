@@ -6262,7 +6262,7 @@ function hideApp() {
 
 function renderDataSummary() {
   const importedLists = state.rosters.filter(roster =>
-    (roster.source === "new-recruit" || roster.source === "opr") &&
+    isImportedRosterSource(roster) &&
     rosterMatchesSelectedGame(roster)
   );
   const hasFullData = state.gameSystem === "40k" && state.rosters.some(roster => roster.source === "bsdata");
@@ -6284,7 +6284,13 @@ function renderDataSummary() {
     <div class="data-summary-row removable-roster-row">
       <div>
         <strong>${escapeHtml(roster.name)}</strong>
-        <small>${escapeHtml(rosterSourceSummary(roster))} · ${roster.units?.length || 0} units${roster.points != null ? " · " + escapeHtml(roster.points) + " pts" : ""}</small>
+        <small>${escapeHtml(rosterSourceSummary(roster))} · ${roster.units?.length || 0} ${escapeHtml(importedRosterUnitNoun())}${
+          roster.source === "gyrinx" && roster.necromunda?.rating != null
+            ? " · Rating " + escapeHtml(roster.necromunda.rating)
+            : roster.points != null
+              ? " · " + escapeHtml(roster.points) + " pts"
+              : ""
+        }</small>
       </div>
       <button
         class="remove-roster-button"
@@ -6535,11 +6541,23 @@ function renderActiveArmySelector() {
   els.activeArmySelector.querySelector(".active-army-more")?.addEventListener("click", openArmyPicker);
 }
 
+function isImportedRosterSource(roster) {
+  return ["new-recruit","opr","li-community","gyrinx"].includes(roster?.source);
+}
+
+function importedRosterUnitNoun() {
+  if (isWarfleetsMode()) return "ships/squadrons";
+  if (isKillTeamMode()) return "operatives";
+  if (isNecromundaMode()) return "fighters";
+  if (isLegionsImperialisMode()) return "detachments";
+  return "units";
+}
+
 function getImportedRosterEntries() {
   return state.rosters
     .map((roster, index) => ({roster, index}))
     .filter(item =>
-      (item.roster.source === "new-recruit" || item.roster.source === "opr") &&
+      isImportedRosterSource(item.roster) &&
       rosterMatchesSelectedGame(item.roster)
     );
 }
@@ -6548,16 +6566,24 @@ function getUnitBrowserSources() {
   const sources = [];
 
   for (const {roster, index} of getImportedRosterEntries()) {
-    const kind = roster.source === "opr" ? "opr" : "new-recruit";
+    const kind = roster.source === "opr"
+      ? "opr"
+      : roster.source === "gyrinx"
+        ? "gyrinx"
+        : roster.source === "li-community"
+          ? "li-community"
+          : "new-recruit";
+
+    const necromundaRating = roster.source === "gyrinx" && roster.necromunda?.rating != null
+      ? "Rating " + roster.necromunda.rating + " · "
+      : "";
+
     sources.push({
       id:"roster:" + roster.id,
       label:roster.name,
-      subLabel:(roster.points != null ? roster.points + " pts · " : "") +
-        (roster.source === "opr"
-          ? (roster.gameName || oprGameName(roster.gameSystem)) + " · Army Forge"
-          : (roster.sharedFromOpponent ? "Opponent · " : "") +
-            gameSystemDisplayName(inferRosterGameSystem(roster)) +
-            " · New Recruit"),
+      subLabel:necromundaRating +
+        (roster.points != null ? roster.points + " pts · " : "") +
+        rosterSourceSummary(roster),
       kind,
       roster,
       faction:roster.faction || "",
@@ -6596,8 +6622,9 @@ function getUnitBrowserSources() {
   const allEntries = [];
   const seen = new Set();
 
-  // Prefer New Recruit versions where a unit exists in both a list and a whole-army source.
-  const sourceRank = source => (source.kind === "new-recruit" || source.kind === "opr") ? 0 : 1;
+  // Prefer imported-list versions where an entry also exists in a whole-army source.
+  const sourceRank = source =>
+    ["new-recruit","opr","gyrinx","li-community"].includes(source.kind) ? 0 : 1;
   for (const source of [...sources].sort((a,b) => sourceRank(a) - sourceRank(b))) {
     for (const entry of source.entries) {
       const key = entry.unit.system === "warfleet"
@@ -6612,7 +6639,7 @@ function getUnitBrowserSources() {
   return [{
     id:"all",
     label:"All data",
-    subLabel:allEntries.length + (isWarfleetsMode() ? " ships/squadrons" : " units"),
+    subLabel:allEntries.length + " " + importedRosterUnitNoun(),
     kind:"all",
     entries:allEntries
   }, ...sources];
