@@ -4150,12 +4150,50 @@ function dndSpellRecords(root) {
   );
 }
 
-function dndSpellUpcastScaling(definition) {
+function dndSpellModifierKind(modifier) {
+  if (!dndIsRecord(modifier)) return "";
+  const type = normalize(modifier.type || "");
+  const subtype = normalize(modifier.subType || modifier.subtype || "");
+  if (type === "damage") return "damage";
+  if (
+    type === "healing" ||
+    (type === "bonus" && ["hit-points","healing"].includes(subtype))
+  ) return "healing";
+  return "";
+}
+
+function dndSpellModifierFormula(modifier) {
+  return dndDiceExpression(
+    modifier?.die ||
+    modifier?.dice ||
+    modifier?.damage ||
+    modifier
+  );
+}
+
+function dndSpellBaseFormula(definition, kind, castingAbilityModifier = 0) {
+  const matching = (definition?.modifiers || []).filter(modifier =>
+    dndSpellModifierKind(modifier) === kind
+  );
+
+  for (const modifier of matching) {
+    const expression = dndSpellModifierFormula(modifier);
+    if (!expression) continue;
+    if (kind === "healing" && modifier.usePrimaryStat) {
+      const bonus = Number(castingAbilityModifier || 0);
+      return expression + (bonus ? (bonus > 0 ? "+" : "") + bonus : "");
+    }
+    return expression;
+  }
+  return "";
+}
+
+function dndSpellUpcastScaling(definition, kind = "damage") {
   if (!definition?.canCastAtHigherLevel) return [];
 
   const rows = [];
   for (const modifier of definition.modifiers || []) {
-    if (!dndIsRecord(modifier) || normalize(modifier.type) !== "damage") continue;
+    if (dndSpellModifierKind(modifier) !== kind) continue;
     const higher = modifier.atHigherLevels;
     if (!dndIsRecord(higher)) continue;
 
@@ -4170,13 +4208,46 @@ function dndSpellUpcastScaling(definition) {
       rows.push({
         expression,
         interval:Math.max(1, dndNumber(entry.level, 1) || 1),
-        damageType:normalize(
-          modifier.subType ||
-          modifier.friendlySubtypeName ||
-          dndSpellDamageType(definition) ||
-          ""
-        ),
+        baseLevel:Math.max(0, dndNumber(definition.level, 0) || 0),
+        damageType:kind === "damage"
+          ? normalize(
+              modifier.subType ||
+              modifier.friendlySubtypeName ||
+              dndSpellDamageType(definition) ||
+              ""
+            )
+          : "",
+        kind,
         details:String(entry.details || "").trim()
+      });
+    }
+  }
+
+  if (!rows.length) {
+    const text = dndPlainText(
+      definition?.atHigherLevels?.description ||
+      definition?.description ||
+      definition?.snippet ||
+      ""
+    );
+    const label = kind === "healing"
+      ? "(?:healing|hit points? restored|amount healed)"
+      : "damage";
+    const regex = new RegExp(
+      label +
+      "[^.]{0,180}?increases? by\\s+(\\d+d\\d+)" +
+      "[^.]{0,120}?for each (?:spell )?slot level above\\s+(\\d+)(?:st|nd|rd|th)?",
+      "i"
+    );
+    const match = text.match(regex);
+    if (match) {
+      rows.push({
+        expression:match[1],
+        interval:1,
+        baseLevel:Number(match[2]),
+        damageType:kind === "damage" ? dndSpellDamageType(definition) : "",
+        kind,
+        details:"Parsed from D&D Beyond spell text"
       });
     }
   }
@@ -4186,10 +4257,58 @@ function dndSpellUpcastScaling(definition) {
     row => [
       row.expression,
       row.interval,
+      row.baseLevel,
       row.damageType,
+      row.kind,
       normalize(row.details)
     ].join("|")
   );
+}
+
+function dndCantripScaledFormula(definition, baseExpression, characterLevel, kind = "damage") {
+  if (!baseExpression || Number(definition?.level || 0) !== 0) return baseExpression;
+
+  const baseMatch = String(baseExpression).match(/^(\d+)d(\d+)([+-]\d+)?$/i);
+  const dieSides = baseMatch ? Number(baseMatch[2]) : 0;
+  const candidates = [];
+
+  for (const modifier of definition?.modifiers || []) {
+    if (dndSpellModifierKind(modifier) !== kind) continue;
+    const higher = modifier.atHigherLevels;
+    if (!dndIsRecord(higher)) continue;
+    const scaleType = normalize(higher.scaleType || definition.scaleType || "");
+    if (scaleType !== "characterlevel") continue;
+
+    for (const entry of higher.higherLevelDefinitions || []) {
+      const threshold = Math.max(1, dndNumber(entry?.level, 0) || 0);
+      const expression = dndDiceExpression(entry?.dice || entry?.die || entry);
+      if (!threshold || !expression) continue;
+      candidates.push({threshold, expression});
+    }
+  }
+
+  if (!candidates.length) {
+    const text = dndPlainText(definition?.description || definition?.snippet || "");
+    const pairRegex = /(\d+)(?:st|nd|rd|th)?(?:\s+level)?\s*\(([^)]+)\)/gi;
+    let match;
+    while ((match = pairRegex.exec(text))) {
+      const threshold = Number(match[1]);
+      const formulas = [...String(match[2]).matchAll(/(\d+d\d+(?:[+-]\d+)?)/gi)]
+        .map(item => item[1]);
+      const expression = formulas.find(formula => {
+        if (!dieSides) return true;
+        const parsed = formula.match(/^\d+d(\d+)/i);
+        return Number(parsed?.[1] || 0) === dieSides;
+      }) || formulas[0];
+      if (threshold && expression) candidates.push({threshold, expression});
+    }
+  }
+
+  const applicable = candidates
+    .filter(item => item.threshold <= Number(characterLevel || 1))
+    .sort((a,b) => b.threshold - a.threshold);
+
+  return applicable[0]?.expression || baseExpression;
 }
 
 function dndSpellDamageType(definition) {
@@ -4202,25 +4321,31 @@ function dndSpellDamageType(definition) {
   ]);
 
   for (const modifier of definition?.modifiers || []) {
-    if (!dndIsRecord(modifier) || normalize(modifier.type) !== "damage") continue;
+    if (dndSpellModifierKind(modifier) !== "damage") continue;
     const subtype = normalize(modifier.subType || modifier.friendlySubtypeName || "");
     if (known.has(subtype)) return subtype;
   }
   return "";
 }
 
-function dndParseSpells(root, scores, proficiencyBonus) {
+function dndParseSpells(root, scores, proficiencyBonus, characterLevel = 1) {
   return dndSpellRecords(root).map((spell, index) => {
     const definition = dndIsRecord(spell.definition) ? spell.definition : spell;
     const name = String(definition.name || spell.name || "Spell").trim();
     const ability = dndSpellAbility(root, spell, definition, scores);
-    const spellAttack = dndModifier(scores[ability]) + proficiencyBonus;
+    const castingAbilityModifier = dndModifier(scores[ability]);
+    const spellAttack = castingAbilityModifier + proficiencyBonus;
     const level = Math.max(0, dndNumber(definition.level ?? spell.level, 0) || 0);
     const requiresAttackRoll = Boolean(definition.requiresAttackRoll || spell.requiresAttackRoll || definition.attackType);
     const requiresSavingThrow = Boolean(definition.requiresSavingThrow || spell.requiresSavingThrow || definition.saveDcAbilityId);
     const saveAbility = DND_ABILITY_IDS[dndNumber(definition.saveDcAbilityId ?? spell.saveDcAbilityId, 0)] || "";
-    const damage = dndDiceExpression(definition.damageEffect || spell.damageEffect || definition.modifiers);
-    const upcastScaling = dndSpellUpcastScaling(definition);
+
+    const baseDamage = dndSpellBaseFormula(definition, "damage", castingAbilityModifier);
+    const baseHealing = dndSpellBaseFormula(definition, "healing", castingAbilityModifier);
+    const damage = dndCantripScaledFormula(definition, baseDamage, characterLevel, "damage");
+    const healing = dndCantripScaledFormula(definition, baseHealing, characterLevel, "healing");
+    const upcastScaling = dndSpellUpcastScaling(definition, "damage");
+    const upcastHealingScaling = dndSpellUpcastScaling(definition, "healing");
 
     const components = (definition.components || [])
       .map(value => ({1:"V",2:"S",3:"M"})[Number(value)])
@@ -4244,7 +4369,9 @@ function dndParseSpells(root, scores, proficiencyBonus) {
       saveDc:requiresSavingThrow ? 8 + spellAttack : null,
       saveAbility,
       damage,
+      healing,
       upcastScaling,
+      upcastHealingScaling,
       canCastAtHigherLevel:Boolean(definition.canCastAtHigherLevel),
       castAtLevel:dndNumber(spell.castAtLevel, null),
       damageType:dndSpellDamageType(definition),
@@ -4455,7 +4582,7 @@ function parseDndBeyondCharacterPayload(payload, sourceUrl = "") {
 
   const skills = dndParseSkills(root, scores, proficiencyBonus);
   const attacks = dndParseActions(root, scores, proficiencyBonus);
-  const spells = dndParseSpells(root, scores, proficiencyBonus);
+  const spells = dndParseSpells(root, scores, proficiencyBonus, classes.level);
   const spellSlots = dndSpellSlots(root);
   const inventory = dndInventory(root);
   const features = dndFeatureRules(root);
