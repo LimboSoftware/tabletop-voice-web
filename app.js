@@ -3572,6 +3572,36 @@ const DND_ABILITY_LABELS = {
   cha:"CHA"
 };
 
+const DND_ABILITY_NAMES = {
+  str:"strength",
+  dex:"dexterity",
+  con:"constitution",
+  int:"intelligence",
+  wis:"wisdom",
+  cha:"charisma"
+};
+
+const DND_SKILLS = [
+  {key:"acr", name:"Acrobatics", ability:"dex", subType:"acrobatics", valueId:3},
+  {key:"ani", name:"Animal Handling", ability:"wis", subType:"animal-handling", valueId:11},
+  {key:"arc", name:"Arcana", ability:"int", subType:"arcana", valueId:6},
+  {key:"ath", name:"Athletics", ability:"str", subType:"athletics", valueId:2},
+  {key:"dec", name:"Deception", ability:"cha", subType:"deception", valueId:16},
+  {key:"his", name:"History", ability:"int", subType:"history", valueId:7},
+  {key:"ins", name:"Insight", ability:"wis", subType:"insight", valueId:12},
+  {key:"itm", name:"Intimidation", ability:"cha", subType:"intimidation", valueId:17},
+  {key:"inv", name:"Investigation", ability:"int", subType:"investigation", valueId:8},
+  {key:"med", name:"Medicine", ability:"wis", subType:"medicine", valueId:13},
+  {key:"nat", name:"Nature", ability:"int", subType:"nature", valueId:9},
+  {key:"prc", name:"Perception", ability:"wis", subType:"perception", valueId:14},
+  {key:"prf", name:"Performance", ability:"cha", subType:"performance", valueId:18},
+  {key:"per", name:"Persuasion", ability:"cha", subType:"persuasion", valueId:19},
+  {key:"rel", name:"Religion", ability:"int", subType:"religion", valueId:10},
+  {key:"slt", name:"Sleight of Hand", ability:"dex", subType:"sleight-of-hand", valueId:4},
+  {key:"ste", name:"Stealth", ability:"dex", subType:"stealth", valueId:5},
+  {key:"sur", name:"Survival", ability:"wis", subType:"survival", valueId:15}
+];
+
 function dndIsRecord(value) {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
@@ -3662,6 +3692,127 @@ function dndAbilityScores(root) {
   }
 
   return scores;
+}
+
+function dndUnrestrictedModifier(modifier) {
+  return !String(modifier?.restriction || "").trim();
+}
+
+function dndModifierNumericValue(modifier) {
+  return dndNumber(modifier?.value ?? modifier?.fixedValue, 0) || 0;
+}
+
+function dndCustomSkillProficiency(root, skill) {
+  const entry = (root?.characterValues || []).find(value =>
+    Number(value?.typeId) === 26 &&
+    Number(value?.valueId) === Number(skill.valueId) &&
+    value?.value != null
+  );
+  if (!entry) return null;
+  return ({1:0, 2:.5, 3:1, 4:2})[Number(entry.value)] ?? null;
+}
+
+function dndCustomSkillAbility(root, skill) {
+  const entry = (root?.characterValues || []).find(value =>
+    Number(value?.typeId) === 27 &&
+    Number(value?.valueId) === Number(skill.valueId)
+  );
+  return DND_ABILITY_IDS[Number(entry?.value || 0)] || "";
+}
+
+function dndCustomSkillBonus(root, skill) {
+  return (root?.characterValues || [])
+    .filter(value =>
+      [24,25].includes(Number(value?.typeId)) &&
+      Number(value?.valueId) === Number(skill.valueId)
+    )
+    .reduce((sum, value) => sum + (dndNumber(value?.value, 0) || 0), 0);
+}
+
+function dndSkillProficiency(root, skill, ability) {
+  const custom = dndCustomSkillProficiency(root, skill);
+  if (custom != null) {
+    return {rank:custom, roundUp:false};
+  }
+
+  const modifiers = dndBucketEntries(root?.modifiers).map(entry => entry.item);
+  const skillModifiers = modifiers.filter(modifier => {
+    const subtype = normalize(modifier?.subType || modifier?.subtype || "");
+    const friendly = normalize(modifier?.friendlySubtypeName || "");
+    return subtype === skill.subType || friendly === normalize(skill.name);
+  });
+
+  if (skillModifiers.some(modifier => normalize(modifier.type) === "expertise")) {
+    return {rank:2, roundUp:false};
+  }
+  if (skillModifiers.some(modifier => normalize(modifier.type) === "proficiency")) {
+    return {rank:1, roundUp:false};
+  }
+
+  const abilityName = DND_ABILITY_NAMES[ability] || ability;
+  const halfRoundUp = modifiers.some(modifier => {
+    const type = normalize(modifier?.type);
+    const subtype = normalize(modifier?.subType || "");
+    return type === "half-proficiency-round-up" &&
+      (subtype === abilityName + "-ability-checks" || subtype === "ability-checks");
+  });
+  if (halfRoundUp) return {rank:.5, roundUp:true};
+
+  const half = modifiers.some(modifier =>
+    normalize(modifier?.type) === "half-proficiency" &&
+    normalize(modifier?.subType || "") === "ability-checks"
+  );
+  return {rank:half ? .5 : 0, roundUp:false};
+}
+
+function dndSkillMiscBonus(root, skill, ability) {
+  const abilityName = DND_ABILITY_NAMES[ability] || ability;
+  const accepted = new Set([
+    skill.subType,
+    "skill-checks",
+    "ability-checks",
+    abilityName + "-ability-checks"
+  ]);
+
+  const modifierBonus = dndBucketEntries(root?.modifiers)
+    .map(entry => entry.item)
+    .filter(modifier =>
+      normalize(modifier?.type) === "bonus" &&
+      dndUnrestrictedModifier(modifier) &&
+      accepted.has(normalize(modifier?.subType || modifier?.subtype || ""))
+    )
+    .reduce((sum, modifier) => sum + dndModifierNumericValue(modifier), 0);
+
+  return modifierBonus + dndCustomSkillBonus(root, skill);
+}
+
+function dndParseSkills(root, scores, proficiencyBonus) {
+  return DND_SKILLS.map(skill => {
+    const ability = dndCustomSkillAbility(root, skill) || skill.ability;
+    const proficiency = dndSkillProficiency(root, skill, ability);
+    const proficiencyBonusValue = proficiency.rank === .5
+      ? (proficiency.roundUp
+          ? Math.ceil(proficiencyBonus / 2)
+          : Math.floor(proficiencyBonus / 2))
+      : proficiencyBonus * proficiency.rank;
+    const miscBonus = dndSkillMiscBonus(root, skill, ability);
+    const bonus = dndModifier(scores[ability]) + proficiencyBonusValue + miscBonus;
+
+    return {
+      ...skill,
+      ability,
+      bonus,
+      miscBonus,
+      proficiency:proficiency.rank,
+      proficiencyLabel:proficiency.rank >= 2
+        ? "Expertise"
+        : proficiency.rank >= 1
+          ? "Proficient"
+          : proficiency.rank > 0
+            ? "Half proficiency"
+            : ""
+    };
+  });
 }
 
 function dndActivationLabel(value) {
@@ -3999,10 +4150,10 @@ function dndSpellRecords(root) {
   );
 }
 
-function dndSpellUpcastDamage(definition) {
-  if (!definition?.canCastAtHigherLevel) return "";
+function dndSpellUpcastScaling(definition) {
+  if (!definition?.canCastAtHigherLevel) return [];
 
-  const candidates = [];
+  const rows = [];
   for (const modifier of definition.modifiers || []) {
     if (!dndIsRecord(modifier) || normalize(modifier.type) !== "damage") continue;
     const higher = modifier.atHigherLevels;
@@ -4013,21 +4164,32 @@ function dndSpellUpcastDamage(definition) {
 
     for (const entry of higher.higherLevelDefinitions || []) {
       if (!dndIsRecord(entry)) continue;
-      const dice = dndDiceExpression(entry.dice || entry.die || entry);
-      if (dice) candidates.push(dice);
+      const expression = dndDiceExpression(entry.dice || entry.die || entry);
+      if (!expression) continue;
+
+      rows.push({
+        expression,
+        interval:Math.max(1, dndNumber(entry.level, 1) || 1),
+        damageType:normalize(
+          modifier.subType ||
+          modifier.friendlySubtypeName ||
+          dndSpellDamageType(definition) ||
+          ""
+        ),
+        details:String(entry.details || "").trim()
+      });
     }
   }
 
-  const parsed = candidates
-    .map(expression => {
-      const match = String(expression).match(/^(\d+)d(\d+)([+-]\d+)?$/i);
-      return match
-        ? {expression, dice:Number(match[1]), sides:Number(match[2])}
-        : {expression, dice:0, sides:0};
-    })
-    .sort((a,b) => b.dice - a.dice || b.sides - a.sides);
-
-  return parsed[0]?.expression || "";
+  return dedupeBy(
+    rows,
+    row => [
+      row.expression,
+      row.interval,
+      row.damageType,
+      normalize(row.details)
+    ].join("|")
+  );
 }
 
 function dndSpellDamageType(definition) {
@@ -4058,7 +4220,7 @@ function dndParseSpells(root, scores, proficiencyBonus) {
     const requiresSavingThrow = Boolean(definition.requiresSavingThrow || spell.requiresSavingThrow || definition.saveDcAbilityId);
     const saveAbility = DND_ABILITY_IDS[dndNumber(definition.saveDcAbilityId ?? spell.saveDcAbilityId, 0)] || "";
     const damage = dndDiceExpression(definition.damageEffect || spell.damageEffect || definition.modifiers);
-    const upcastDamage = dndSpellUpcastDamage(definition);
+    const upcastScaling = dndSpellUpcastScaling(definition);
 
     const components = (definition.components || [])
       .map(value => ({1:"V",2:"S",3:"M"})[Number(value)])
@@ -4082,7 +4244,7 @@ function dndParseSpells(root, scores, proficiencyBonus) {
       saveDc:requiresSavingThrow ? 8 + spellAttack : null,
       saveAbility,
       damage,
-      upcastDamage,
+      upcastScaling,
       canCastAtHigherLevel:Boolean(definition.canCastAtHigherLevel),
       castAtLevel:dndNumber(spell.castAtLevel, null),
       damageType:dndSpellDamageType(definition),
@@ -4291,6 +4453,7 @@ function parseDndBeyondCharacterPayload(payload, sourceUrl = "") {
     dndNumber(root.race?.weightSpeeds?.normal?.walk, null) ??
     30;
 
+  const skills = dndParseSkills(root, scores, proficiencyBonus);
   const attacks = dndParseActions(root, scores, proficiencyBonus);
   const spells = dndParseSpells(root, scores, proficiencyBonus);
   const spellSlots = dndSpellSlots(root);
@@ -4329,6 +4492,7 @@ function parseDndBeyondCharacterPayload(payload, sourceUrl = "") {
       tempHp,
       ac,
       speed,
+      skills,
       attacks,
       spells,
       spellSlots,
