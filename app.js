@@ -471,7 +471,7 @@ const GAME_PROVIDERS = [
     systems:[
       {id:"40k", name:"Warhammer 40,000", detail:"New Recruit, 40K references, scoring and table tools", available:true},
       {id:"aos", name:"Warhammer Age of Sigmar", detail:"AoS 4th · New Recruit roster support", available:true, beta:true},
-      {id:"heresy", name:"Warhammer: The Horus Heresy", detail:"Planned", available:false},
+      {id:"heresy", name:"Warhammer: The Horus Heresy", detail:"3rd Edition · New Recruit roster support", available:true, beta:true},
       {id:"old-world", name:"Warhammer: The Old World", detail:"Planned", available:false},
       {id:"kill-team", name:"Kill Team", detail:"Planned", available:false},
       {id:"necromunda", name:"Necromunda", detail:"Planned", available:false},
@@ -602,6 +602,10 @@ function isAosMode() {
   return state.gameSystem === "aos";
 }
 
+function isHeresyMode(gameSystem = state.gameSystem) {
+  return gameSystem === "heresy";
+}
+
 function gameProviderForSystem(gameSystem = state.gameSystem) {
   return GAME_SYSTEMS[gameSystem]?.provider || "gw";
 }
@@ -697,6 +701,7 @@ function showEntryModalIfNeeded() {
 function inferUnitGameSystem(unit) {
   if (unit?.gameSystemKey && GAME_SYSTEMS[unit.gameSystemKey]) return unit.gameSystemKey;
   if (unit?.system === "aos") return "aos";
+  if (unit?.system === "heresy") return "heresy";
   if (unit?.system === "opr") return oprGameSystemKey(unit?.gameSystem) || "grimdark";
   if (unit?.system === "40k") return "40k";
 
@@ -737,6 +742,11 @@ function inferRosterGameSystem(roster) {
   ].filter(Boolean).join(" "));
 
   if (metadata.includes("age of sigmar")) return "aos";
+  if (
+    metadata.includes("horus heresy") ||
+    metadata.includes("age of darkness") ||
+    metadata.includes("sys 9fe4 1dc3 b7c2 73cf")
+  ) return "heresy";
   if (metadata.includes("age of fantasy quest")) return "aof-quest";
   if (metadata.includes("age of fantasy regiments")) return "aof-regiments";
   if (metadata.includes("age of fantasy skirmish")) return "aof-skirmish";
@@ -803,11 +813,13 @@ function applyGameSystemUi() {
   const grimdark = isGrimdarkMode();
   const opr = isOprMode();
   const aos = isAosMode();
+  const heresy = isHeresyMode();
   const fortyK = state.gameSystem === "40k";
 
   document.body.classList.toggle("game-grimdark", grimdark);
   document.body.classList.toggle("game-opr", opr);
   document.body.classList.toggle("game-aos", aos);
+  document.body.classList.toggle("game-heresy", heresy);
   document.body.classList.toggle("game-40k", fortyK);
 
   if (els.settingsCurrentGame) {
@@ -875,7 +887,9 @@ function applyGameSystemUi() {
       ? "If you use New Recruit for " + currentGameName() + ", export the roster as JSON, ROS or ROSZ. Army Forge share links are also supported below."
       : aos
         ? "Export your Age of Sigmar 4th edition roster from New Recruit, then choose the JSON, ROS or ROSZ file here."
-        : "Export your Warhammer 40,000 roster from New Recruit, then choose the JSON, ROS, ROSZ or TXT file here.";
+        : heresy
+          ? "Export your Horus Heresy 3rd Edition roster from New Recruit, then choose the JSON, ROS or ROSZ file here."
+          : "Export your Warhammer 40,000 roster from New Recruit, then choose the JSON, ROS, ROSZ or TXT file here.";
   }
   if (els.importButton) {
     els.importButton.textContent = "Choose New Recruit file";
@@ -896,7 +910,9 @@ function applyGameSystemUi() {
           : "Import your " + currentGameName() + " force from Army Forge or New Recruit, then use Tabletop Voice at the table."
       : aos
         ? "Import your Age of Sigmar army from New Recruit, then use Tabletop Voice for warscroll lookup at the table."
-        : "Bring in your New Recruit lists, or load the wider dataset when you need broader 40K lookup at the table.";
+        : heresy
+          ? "Import your Horus Heresy army from New Recruit for profiles, weapons, reactions, wargear and rules at the table."
+          : "Bring in your New Recruit lists, or load the wider dataset when you need broader 40K lookup at the table.";
   }
 
   updateGameContextUi();
@@ -2076,6 +2092,11 @@ function detectNewRecruitGameSystem(root, units = []) {
   );
 
   if (systemName.includes("age of sigmar")) return "aos";
+  if (
+    systemName.includes("horus heresy") ||
+    systemName.includes("age of darkness") ||
+    systemName.includes("sys 9fe4 1dc3 b7c2 73cf")
+  ) return "heresy";
   if (systemName.includes("age of fantasy quest")) return "aof-quest";
   if (systemName.includes("age of fantasy regiments")) return "aof-regiments";
   if (systemName.includes("age of fantasy skirmish")) return "aof-skirmish";
