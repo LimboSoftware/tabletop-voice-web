@@ -32,6 +32,12 @@ const els = {
   oprShareInput: $("oprShareInput"),
   oprImportButton: $("oprImportButton"),
   oprImportStatus: $("oprImportStatus"),
+  liCommunityImportCard: $("liCommunityImportCard"),
+  liCommunityInput: $("liCommunityInput"),
+  liCommunityImportButton: $("liCommunityImportButton"),
+  liCommunityFileButton: $("liCommunityFileButton"),
+  liCommunityFileInput: $("liCommunityFileInput"),
+  liCommunityImportStatus: $("liCommunityImportStatus"),
   clearRoster: $("clearRoster"),
   searchInput: $("searchInput"),
   resultList: $("resultList"),
@@ -205,6 +211,15 @@ function bindEvents() {
   els.fileInput?.addEventListener("change", handleFiles);
   els.fullDataButton?.addEventListener("click", loadFull40kData);
   els.oprImportButton?.addEventListener("click", loadOprArmyForgeList);
+  els.liCommunityImportButton?.addEventListener("click", () => importLiCommunityPayload(els.liCommunityInput?.value || "", "paste"));
+  els.liCommunityFileButton?.addEventListener("click", () => els.liCommunityFileInput?.click());
+  els.liCommunityFileInput?.addEventListener("change", handleLiCommunityFile);
+  els.liCommunityInput?.addEventListener("keydown", event => {
+    if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
+      event.preventDefault();
+      importLiCommunityPayload(els.liCommunityInput?.value || "", "paste");
+    }
+  });
   els.oprShareInput?.addEventListener("keydown", event => {
     const isTextarea = event.currentTarget?.tagName === "TEXTAREA";
     const submit = event.key === "Enter" && (!isTextarea || event.ctrlKey || event.metaKey);
@@ -854,6 +869,7 @@ function applyGameSystemUi() {
   if (els.fullDataImportCard) els.fullDataImportCard.classList.toggle("hidden", !fortyK);
   // Army Forge is the primary current-data source for supported OPR games.
   if (els.oprImportCard) els.oprImportCard.classList.toggle("hidden", !opr);
+  if (els.liCommunityImportCard) els.liCommunityImportCard.classList.toggle("hidden", !legionsImperialis);
 
   if (els.fullDataArmySection) {
     const hasFullData = fortyK && state.rosters.some(roster => roster.source === "bsdata");
@@ -941,7 +957,7 @@ function applyGameSystemUi() {
           : killTeam
             ? "Import your Kill Team from New Recruit for operative profiles, weapons, abilities and team rules at the table."
             : legionsImperialis
-              ? "Import your Legions Imperialis army from New Recruit for detachment profiles, weapons, formation rules and quick lookup at the table."
+              ? "Import your Legions Imperialis army from New Recruit, Legion Builder or Legion Companion for detachment profiles, weapons and formation rules at the table."
               : "Bring in your New Recruit lists, or load the wider dataset when you need broader 40K lookup at the table.";
   }
 
@@ -1752,6 +1768,11 @@ async function loadOprArmyForgeList() {
 function rosterSourceSummary(roster) {
   if (roster?.source === "opr") {
     return "OnePageRules · " + (roster.gameName || oprGameName(roster.gameSystem)) + " · Army Forge";
+  }
+
+  if (roster?.source === "li-community") {
+    return "Legions Imperialis · " + (roster.communitySource || "Community Builder") + " · " +
+      String(roster?.importFormat || "import").toUpperCase();
   }
 
   const game = inferRosterGameSystem(roster);
