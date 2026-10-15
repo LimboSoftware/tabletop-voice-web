@@ -4983,7 +4983,13 @@ function renderDetail(unit) {
   updateLinkedUnitButton(sourceUnit);
   updatePinButton();
 
-  const statOrder = ["m","t","sv","w","ld","oc","insv"];
+  const statOrder = unit.system === "heresy"
+    ? [
+        "m","ws","bs","s","t","w","i","a","ld","cl","wp","in","sav","inv",
+        "front armour","side armour","rear armour","front","rear",
+        "primary","exposed","hp","transport capacity","transport"
+      ]
+    : ["m","t","sv","w","ld","oc","insv"];
   const statMap = new Map((unit.stats || []).map(stat => [normalize(stat.label), stat]));
   let displayStats = statOrder.map(key => statMap.get(key)).filter(Boolean);
 
@@ -5013,6 +5019,10 @@ function renderDetail(unit) {
 
     if (unit.system === "warfleet") {
       sections.push(renderWarfleetsWeaponSection(unit.profiles, "Weapons"));
+    } else if (unit.system === "heresy") {
+      if (rangedWeapons.length) sections.push(renderHeresyWeaponSection(rangedWeapons, "Ranged weapons", "ranged"));
+      if (meleeWeapons.length) sections.push(renderHeresyWeaponSection(meleeWeapons, "Melee weapons", "melee"));
+      if (otherWeapons.length) sections.push(renderHeresyWeaponSection(otherWeapons, "Weapons", "other"));
     } else if (unit.system === "opr") {
       if (rangedWeapons.length) sections.push(renderOprWeaponSection(rangedWeapons, "Ranged weapons"));
       if (meleeWeapons.length) sections.push(renderOprWeaponSection(meleeWeapons, "Melee weapons"));
@@ -5038,7 +5048,9 @@ function renderDetail(unit) {
     sections.push(
       (unit.system === "opr" || unit.system === "warfleet")
         ? renderOprAbilitySection(unit.rules, unit.system === "warfleet" ? "Rules & systems" : "Special rules")
-        : unit.system === "aos"
+        : unit.system === "heresy"
+          ? renderOprAbilitySection(unit.rules, "Wargear, reactions & rules")
+          : unit.system === "aos"
           ? renderAosAbilitySection(unit.rules)
           : renderAbilitySection(unit.rules)
     );
@@ -5172,6 +5184,51 @@ function cleanUniqueRuleText(text = "") {
   return cleanRuleText(text)
     .replace(/\s+/g, " ")
     .trim();
+}
+
+
+function renderHeresyWeaponSection(profiles, title = "Weapons", kind = "ranged") {
+  const melee = kind === "melee";
+  const columns = melee
+    ? ["IM","AM","SM","AP","D","Special Rules","Traits"]
+    : ["R","FP","RS","AP","D","Special Rules","Traits"];
+
+  const rows = (profiles || []).map(profile => {
+    const values = new Map(
+      (profile.values || []).map(item => [normalize(item.label), item.value ?? ""])
+    );
+    return {
+      name:profile.name || "Weapon",
+      quantity:Number.isFinite(Number(profile.quantity)) ? Math.max(1, Number(profile.quantity)) : null,
+      values:columns.map(column => {
+        const value = values.get(normalize(column));
+        return value !== undefined && value !== "" ? value : "—";
+      })
+    };
+  });
+
+  const head = columns.map(column => "<th>" + escapeHtml(column) + "</th>").join("");
+  const body = rows.map(row => {
+    const cells = row.values.map((value, index) =>
+      '<td data-label="' + escapeHtml(columns[index]) + '" class="' +
+      (index >= 5 ? "heresy-weapon-text" : "weapon-number") + '">' +
+      escapeHtml(value) + '</td>'
+    ).join("");
+
+    return '<tr class="weapon-row weapon-stat-row">' +
+      '<td class="weapon-name"><div class="weapon-title-line">' +
+      (row.quantity != null ? '<span class="weapon-quantity">' + row.quantity + '×</span>' : '') +
+      '<strong>' + escapeHtml(row.name) + '</strong></div></td>' +
+      cells +
+      '</tr>';
+  }).join("");
+
+  return '<section class="detail-section weapon-section heresy-weapon-section">' +
+    '<div class="section-heading-row"><h3>' + escapeHtml(title) + '</h3>' +
+    '<span class="section-count">' + rows.length + '</span></div>' +
+    '<div class="weapon-table-wrap"><table class="weapon-table compact-weapon-table heresy-weapon-table">' +
+    '<thead><tr><th class="weapon-name-column">Weapon</th>' + head + '</tr></thead>' +
+    '<tbody>' + body + '</tbody></table></div></section>';
 }
 
 function renderWeaponSection(profiles, title = "Weapons") {
