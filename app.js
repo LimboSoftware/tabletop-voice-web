@@ -2894,7 +2894,13 @@ function parseNewRecruitSelection(selection) {
   return {
     id:selection.id || primaryUnitProfile.id || name,
     name,
-    type:"Unit",
+    type:system === "heresy"
+      ? (heresyComponents.length
+          ? "Titan"
+          : normalize(primaryUnitProfile.typeName) === "profile"
+            ? "Unit"
+            : primaryUnitProfile.typeName || "Unit")
+      : "Unit",
     system,
     categories,
     stats,
@@ -5126,6 +5132,14 @@ function renderDetail(unit) {
       .slice(0, 7);
   }
 
+  if (
+    unit.system === "heresy" &&
+    (unit.heresyModelProfiles?.length > 1 || unit.heresyComponents?.length)
+  ) {
+    displayStats = [];
+  }
+
+  els.detailStats?.classList.toggle("hidden", !displayStats.length);
   els.detailStats.innerHTML = displayStats.length
     ? displayStats.map(stat => `
         <div class="stat">
