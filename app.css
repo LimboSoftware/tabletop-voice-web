@@ -2026,36 +2026,27 @@ body.focus-mode .detail-panel {
 }
 
 .setup-hero {
+  max-width: none;
   margin-bottom: 18px;
+  align-items: flex-start;
 }
 
-.setup-control-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
-  margin-bottom: 14px;
+.setup-hero-copy {
+  max-width: 900px;
 }
 
-.setup-control-card {
+.setup-hero-actions {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 18px;
-}
-
-.setup-control-card h2 {
-  margin: 5px 0;
-}
-
-.setup-control-card p {
-  margin: 0;
-  color: #8f9eaa;
-  line-height: 1.45;
-}
-
-.setup-control-card > button {
   flex: 0 0 auto;
-  min-width: 190px;
+  gap: 8px;
+  margin-left: auto;
+  padding-top: 2px;
+}
+
+.setup-hero-actions .compact {
+  min-height: 36px;
+  padding-inline: 13px;
+  white-space: nowrap;
 }
 
 .setup-import-grid {
@@ -2418,21 +2409,15 @@ body.focus-mode .detail-panel {
 
 /* Compact mobile datasheets: one-row profile + one-row weapons */
 @media (max-width: 760px) {
-  .setup-control-grid,
   .setup-import-grid {
     grid-template-columns: 1fr;
     gap: 10px;
   }
 
-  .setup-control-card {
-    align-items: stretch;
-    flex-direction: column;
-    gap: 12px;
-  }
-
-  .setup-control-card > button {
-    width: 100%;
-    min-width: 0;
+  .setup-hero-actions {
+    justify-content: flex-start;
+    margin: 12px 0 0;
+    padding-top: 0;
   }
 
   .setup-import-card > p {
