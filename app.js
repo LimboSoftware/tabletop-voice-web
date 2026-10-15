@@ -9386,13 +9386,20 @@ function renderQuickLists() {
         <div class="roster-unit-grid">
           ${entries.map(entry => {
             const pts = (entry.unit.stats || []).find(stat => normalize(stat.label) === "pts")?.value;
+            const rating = entry.unit.system === "necromunda"
+              ? (entry.unit.stats || []).find(stat => normalize(stat.label) === "rating")?.value
+              : null;
             return `
               <button class="roster-unit-button" type="button" data-entry-index="${entry.entryIndex}">
                 <span class="roster-unit-copy">
                   <strong>${escapeHtml(entry.unit.name)}</strong>
                   ${source.kind === "all" ? `<small>${escapeHtml(entry.sourceLabel)}</small>` : ""}
                 </span>
-                ${pts != null ? `<small class="roster-unit-points">${escapeHtml(pts)} pts</small>` : ""}
+                ${rating != null
+                  ? `<small class="roster-unit-points">${escapeHtml(rating)}</small>`
+                  : pts != null
+                    ? `<small class="roster-unit-points">${escapeHtml(pts)} pts</small>`
+                    : ""}
               </button>`;
           }).join("")}
         </div>
