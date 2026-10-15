@@ -4207,6 +4207,65 @@ function dndSpellBaseFormula(definition, kind, castingAbilityModifier = 0) {
   return "";
 }
 
+
+function dndSpellDescriptionFormula(definition, kind, castingAbilityModifier = 0) {
+  const fullText = dndPlainText(
+    definition?.description ||
+    definition?.snippet ||
+    ""
+  );
+  if (!fullText) return "";
+
+  // Base-roll detection should not accidentally grab dice that only appear in
+  // the At Higher Levels paragraph.
+  const text = fullText.split(/\bat higher levels?\b/i)[0].trim();
+  if (!text) return "";
+
+  const damageTypes = [
+    "acid","cold","fire","force","lightning","necrotic","poison",
+    "psychic","radiant","thunder","bludgeoning","piercing","slashing"
+  ];
+
+  const candidates = [];
+  const diceRegex = /\b(\d+d\d+(?:\s*[+-]\s*\d+)?)\b/gi;
+  let match;
+
+  while ((match = diceRegex.exec(text))) {
+    const index = Number(match.index || 0);
+    const before = text.slice(Math.max(0, index - 110), index);
+    const after = text.slice(index + match[0].length, Math.min(text.length, index + match[0].length + 150));
+    const context = (before + " " + match[0] + " " + after).toLowerCase();
+    let score = 0;
+
+    if (kind === "healing") {
+      if (/\b(?:heal|healing|heals|restore|restores|restored|regain|regains|recovered?)\b/i.test(context)) score += 6;
+      if (/\bhit points?\b/i.test(context)) score += 5;
+      if (/\btemporary hit points?\b/i.test(context)) score -= 10;
+      if (/\bdamage\b/i.test(context)) score -= 5;
+    } else if (kind === "damage") {
+      if (/\bdamage\b/i.test(context)) score += 7;
+      if (damageTypes.some(type => new RegExp("\\b" + type + "\\b", "i").test(context))) score += 3;
+      if (/\b(?:takes?|deals?|suffers?)\b/i.test(context)) score += 2;
+      if (/\b(?:heal|healing|restore|regain|hit points?)\b/i.test(context)) score -= 6;
+    }
+
+    if (score < 4) continue;
+
+    let expression = match[1].replace(/\s+/g, "");
+    const abilityTail = after.match(/^\s*(?:\+|plus)\s+(?:your\s+)?spellcasting ability modifier\b/i);
+    if (abilityTail && castingAbilityModifier) {
+      expression += castingAbilityModifier > 0
+        ? "+" + castingAbilityModifier
+        : String(castingAbilityModifier);
+    }
+
+    candidates.push({expression, score, index});
+  }
+
+  candidates.sort((a,b) => b.score - a.score || a.index - b.index);
+  return candidates[0]?.expression || "";
+}
+
 function dndSpellUpcastScaling(definition, kind = "damage") {
   if (!definition?.canCastAtHigherLevel) return [];
 
@@ -4359,8 +4418,12 @@ function dndParseSpells(root, scores, proficiencyBonus, characterLevel = 1) {
     const requiresSavingThrow = Boolean(definition.requiresSavingThrow || spell.requiresSavingThrow || definition.saveDcAbilityId);
     const saveAbility = DND_ABILITY_IDS[dndNumber(definition.saveDcAbilityId ?? spell.saveDcAbilityId, 0)] || "";
 
-    const baseDamage = dndSpellBaseFormula(definition, "damage", castingAbilityModifier);
-    const baseHealing = dndSpellBaseFormula(definition, "healing", castingAbilityModifier);
+    const baseDamage =
+      dndSpellBaseFormula(definition, "damage", castingAbilityModifier) ||
+      dndSpellDescriptionFormula(definition, "damage", castingAbilityModifier);
+    const baseHealing =
+      dndSpellBaseFormula(definition, "healing", castingAbilityModifier) ||
+      dndSpellDescriptionFormula(definition, "healing", castingAbilityModifier);
     const damage = dndCantripScaledFormula(definition, baseDamage, characterLevel, "damage");
     const healing = dndCantripScaledFormula(definition, baseHealing, characterLevel, "healing");
     const upcastScaling = dndSpellUpcastScaling(definition, "damage");
@@ -9317,6 +9380,35 @@ function dndRollScalingParts(action, scalingRows, castLevel, fallbackType = "") 
   return parts;
 }
 
+
+function dndCombinedRollExpression(baseExpression, scalingParts = []) {
+  const parse = expression => {
+    const match = String(expression || "").replace(/\s+/g, "").match(/^(\d+)d(\d+)([+-]\d+)?$/i);
+    if (!match) return null;
+    return {
+      count:Number(match[1]),
+      sides:Number(match[2]),
+      bonus:Number(match[3] || 0)
+    };
+  };
+
+  const base = parse(baseExpression);
+  if (!base) return "";
+
+  let count = base.count;
+  let bonus = base.bonus;
+
+  for (const part of scalingParts || []) {
+    const parsed = parse(part.expression);
+    if (!parsed || parsed.sides !== base.sides) return "";
+    const steps = Math.max(1, Number(part.steps || 1));
+    count += parsed.count * steps;
+    bonus += parsed.bonus * steps;
+  }
+
+  return count + "d" + base.sides + (bonus ? (bonus > 0 ? "+" : "") + bonus : "");
+}
+
 function dndUseAction(unit, actionId, requestedCastLevel = null) {
   const action = dndFindAction(unit, actionId);
   if (!action) return;
@@ -9417,9 +9509,12 @@ function dndUseAction(unit, actionId, requestedCastLevel = null) {
         if (!popup.total) {
           popup.eyebrow = action.kind === "spell" ? "SPELL DAMAGE" : "DAMAGE ROLL";
           popup.total = String(total);
+          const combinedExpression = dndCombinedRollExpression(action.damage, upcastParts);
           popup.subtitle = [
-            popup.subtitle,
-            action.damageType ? action.damageType + " damage" : "Damage"
+            combinedExpression
+              ? combinedExpression + (action.damageType ? " " + action.damageType + " damage" : " damage")
+              : (action.damageType ? action.damageType + " damage" : "Damage"),
+            popup.subtitle
           ].filter(Boolean).join(" · ");
         } else {
           popup.breakdown.push(damageLine);
@@ -9476,9 +9571,11 @@ function dndUseAction(unit, actionId, requestedCastLevel = null) {
       if (!popup.total) {
         popup.eyebrow = "HEALING ROLL";
         popup.total = String(total);
-        popup.subtitle = castLevel > 0
-          ? "Cast at level " + castLevel
-          : "Healing";
+        const combinedExpression = dndCombinedRollExpression(action.healing, upcastParts);
+        popup.subtitle = [
+          combinedExpression ? combinedExpression + " healing" : "Healing",
+          castLevel > 0 ? "Cast at level " + castLevel : ""
+        ].filter(Boolean).join(" · ");
       } else {
         popup.breakdown.push(healingLine);
       }
