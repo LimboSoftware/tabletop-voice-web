@@ -2066,6 +2066,10 @@ function buildRosterFromNewRecruitRoot(root, fileName, importFormat = "json") {
       unit.system = "heresy";
       unit.gameSystemKey = "heresy";
     }
+    if (gameSystemKey === "kill-team") {
+      unit.system = "kill-team";
+      unit.gameSystemKey = "kill-team";
+    }
   });
 
   return {
@@ -2695,6 +2699,50 @@ function resolveRosterAttachments(units = []) {
 }
 
 
+
+function isKillTeamOperativeProfile(profile) {
+  if (!profile || typeof profile !== "object") return false;
+  if (normalize(profile.typeName || "") !== "operative") return false;
+
+  const labels = new Set(
+    (profile.characteristics || []).map(item => normalize(item?.name || ""))
+  );
+
+  return labels.has("apl") &&
+    labels.has("move") &&
+    labels.has("save") &&
+    labels.has("wounds");
+}
+
+function isKillTeamRuleProfile(profile) {
+  if (!profile || profile.hidden) return false;
+  return [
+    "abilities",
+    "equipment",
+    "unique actions",
+    "psychic power",
+    "chapter tactics",
+    "markerlight tokens"
+  ].includes(normalize(profile.typeName || ""));
+}
+
+function killTeamRuleProfileToRule(profile) {
+  const fields = (profile?.characteristics || [])
+    .map(item => ({
+      label:String(item?.name || "").trim(),
+      value:cleanRuleText(characteristicValue(item)).trim()
+    }))
+    .filter(item => item.value);
+
+  if (!fields.length) return null;
+
+  return {
+    name:String(profile.name || profile.typeName || "Rule").trim(),
+    text:fields.map(item => item.value).join("\n\n"),
+    category:String(profile.typeName || "Rule")
+  };
+}
+
 function isHeresyUnitProfile(profile) {
   if (!profile || typeof profile !== "object") return false;
   const type = normalize(profile.typeName || "");
@@ -2806,7 +2854,9 @@ function newRecruitSelectionPointTotal(selection) {
 function parseNewRecruitSelection(selection) {
   const allProfiles = collectProfiles(selection);
   const unitProfiles = allProfiles.filter(profile =>
-    profile?.typeName === "Unit" || isHeresyUnitProfile(profile)
+    profile?.typeName === "Unit" ||
+    isHeresyUnitProfile(profile) ||
+    isKillTeamOperativeProfile(profile)
   );
   if (!unitProfiles.length) return null;
 
@@ -2815,6 +2865,7 @@ function parseNewRecruitSelection(selection) {
     unitProfiles[0];
 
   const heresyProfile = isHeresyUnitProfile(primaryUnitProfile);
+  const killTeamProfile = isKillTeamOperativeProfile(primaryUnitProfile);
   const heresyComponents = unitProfiles
     .filter(profile => /^titan\s/i.test(String(profile?.typeName || "")))
     .map(profile => ({
@@ -2854,13 +2905,15 @@ function parseNewRecruitSelection(selection) {
     statLabels.has("save") &&
     statLabels.has("control");
 
-  const system = heresyProfile
-    ? "heresy"
-    : aosProfile
-      ? "aos"
-      : grimdarkProfile
-        ? "opr"
-        : "40k";
+  const system = killTeamProfile
+    ? "kill-team"
+    : heresyProfile
+      ? "heresy"
+      : aosProfile
+        ? "aos"
+        : grimdarkProfile
+          ? "opr"
+          : "40k";
 
   const weapons = mergeWeaponProfiles(
     collectWeaponProfiles(selection).map(({profile, quantity}) => ({
@@ -2889,9 +2942,16 @@ function parseNewRecruitSelection(selection) {
         .filter(Boolean)
     : [];
 
+  const killTeamProfileRules = system === "kill-team"
+    ? allProfiles
+        .filter(isKillTeamRuleProfile)
+        .map(killTeamRuleProfileToRule)
+        .filter(Boolean)
+    : [];
+
   const rules = collectRules(selection);
   const abilities = dedupeBy(
-    [...standardAbilityProfiles, ...aosAbilityProfiles, ...heresyProfileRules, ...rules],
+    [...standardAbilityProfiles, ...aosAbilityProfiles, ...heresyProfileRules, ...killTeamProfileRules, ...rules],
     rule => normalize((rule.category || "") + "|" + rule.name + "|" + rule.text)
   );
 
@@ -2913,13 +2973,15 @@ function parseNewRecruitSelection(selection) {
   return {
     id:selection.id || primaryUnitProfile.id || name,
     name,
-    type:system === "heresy"
-      ? (heresyComponents.length
-          ? "Titan"
-          : normalize(primaryUnitProfile.typeName) === "profile"
-            ? "Unit"
-            : primaryUnitProfile.typeName || "Unit")
-      : "Unit",
+    type:system === "kill-team"
+      ? "Operative"
+      : system === "heresy"
+        ? (heresyComponents.length
+            ? "Titan"
+            : normalize(primaryUnitProfile.typeName) === "profile"
+              ? "Unit"
+              : primaryUnitProfile.typeName || "Unit")
+        : "Unit",
     system,
     categories,
     stats,
@@ -2948,7 +3010,8 @@ function isWeaponProfile(profile) {
     "ranged weapon",
     "ranged weapons",
     "melee weapon",
-    "melee weapons"
+    "melee weapons",
+    "weapons"
   ].includes(type)) return true;
 
   if (type === "weapon" || type.endsWith(" weapon")) {
