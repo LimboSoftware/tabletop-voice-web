@@ -8846,8 +8846,15 @@ function dndActionMeta(action) {
     items.push("DC " + action.saveDc + (action.saveAbility ? " " + String(action.saveAbility).toUpperCase() : "") + " save");
   }
   if (action.damage) items.push(action.damage + (action.damageType ? " " + action.damageType : ""));
-  if (action.kind === "spell" && action.upcastDamage) {
-    items.push("Upcast +" + action.upcastDamage + " per slot level");
+  if (action.kind === "spell" && Array.isArray(action.upcastScaling)) {
+    for (const scaling of action.upcastScaling) {
+      const interval = Math.max(1, Number(scaling.interval || 1));
+      items.push(
+        "Upcast +" + scaling.expression +
+        (scaling.damageType ? " " + scaling.damageType : "") +
+        (interval === 1 ? " per slot level" : " every " + interval + " slot levels")
+      );
+    }
   }
   if (action.concentration) items.push("Concentration");
   if (action.ritual) items.push("Ritual");
@@ -9135,29 +9142,69 @@ function dndUseAction(unit, actionId, requestedCastLevel = null) {
 
   if (action.damage) {
     const baseDamage = dndRollExpression(action.damage);
-    const upcastSteps = action.kind === "spell"
+    const upcastDelta = action.kind === "spell"
       ? Math.max(0, castLevel - Number(action.level || 0))
       : 0;
-    const extraRolls = [];
+    const upcastParts = [];
 
-    if (upcastSteps > 0 && action.upcastDamage) {
-      for (let index = 0; index < upcastSteps; index++) {
-        const extra = dndRollExpression(action.upcastDamage);
-        if (extra) extraRolls.push(extra);
+    for (const scaling of action.upcastScaling || []) {
+      const interval = Math.max(1, Number(scaling.interval || 1));
+      const steps = Math.floor(upcastDelta / interval);
+      if (steps <= 0) continue;
+
+      const rolls = [];
+      for (let index = 0; index < steps; index++) {
+        const roll = dndRollExpression(scaling.expression);
+        if (roll) rolls.push(roll);
       }
+      if (!rolls.length) continue;
+
+      upcastParts.push({
+        expression:scaling.expression,
+        damageType:scaling.damageType || action.damageType || "",
+        steps,
+        total:rolls.reduce((sum, roll) => sum + roll.total, 0),
+        rolls
+      });
     }
 
     if (baseDamage) {
-      const total = baseDamage.total + extraRolls.reduce((sum, roll) => sum + roll.total, 0);
-      const rollParts = [
-        action.damage + "=" + baseDamage.total,
-        ...extraRolls.map(roll => action.upcastDamage + "=" + roll.total)
-      ];
-      details.push(
-        "Damage " + total +
-        " (" + rollParts.join(" + ") + ")" +
-        (action.damageType ? " " + action.damageType : "")
+      const sameDamageType = upcastParts.every(part =>
+        !part.damageType ||
+        !action.damageType ||
+        normalize(part.damageType) === normalize(action.damageType)
       );
+
+      if (sameDamageType) {
+        const extraTotal = upcastParts.reduce((sum, part) => sum + part.total, 0);
+        const total = baseDamage.total + extraTotal;
+        const rollParts = [
+          action.damage + "=" + baseDamage.total,
+          ...upcastParts.map(part =>
+            (part.steps > 1 ? part.steps + "×" : "") +
+            part.expression + "=" + part.total
+          )
+        ];
+
+        details.push(
+          "Damage " + total +
+          " (" + rollParts.join(" + ") + ")" +
+          (action.damageType ? " " + action.damageType : "")
+        );
+      } else {
+        details.push(
+          "Damage " + baseDamage.total +
+          " (" + action.damage + ")" +
+          (action.damageType ? " " + action.damageType : "")
+        );
+        for (const part of upcastParts) {
+          details.push(
+            "Upcast +" + part.total +
+            " (" + (part.steps > 1 ? part.steps + "×" : "") + part.expression + ")" +
+            (part.damageType ? " " + part.damageType : "")
+          );
+        }
+      }
     }
   }
 
