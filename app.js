@@ -4404,6 +4404,8 @@ function saveImportedDndRoster(roster) {
   state.dndFocusedActionId = "";
   state.dndDetailTab = "actions";
   state.dndScrollToFocusedAction = false;
+  state.dndListFilter = "";
+  state.dndListKind = "";
 
   persist();
   renderAll();
@@ -7456,7 +7458,7 @@ function setVoicePrompt(page = state.currentPage) {
         : isNecromundaMode()
           ? "Say a fighter name from your Necromunda gang"
           : isDndMode()
-            ? "Say “attack longsword”, a spell name, or “add hempen rope”"
+            ? "Try “attack longsword”, “cast fireball”, “list fire spells”, or “short rest”"
             : isLegionsImperialisMode()
           ? "Say a detachment name from your Legions Imperialis army"
           : isHeresyMode()
