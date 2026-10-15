@@ -14,6 +14,9 @@ const APP_GAME_ROUTES = new Map([
   ["/kill-team","/kill-team"],
   ["/necromunda","/necromunda"],
   ["/legions-imperialis","/legions-imperialis"],
+  ["/dnd","/dnd"],
+  ["/dnd-5e","/dnd"],
+  ["/dungeons-and-dragons","/dnd"],
   ["/grimdark-future","/grimdark-future"],
   ["/grimdark","/grimdark-future"],
   ["/grimdark-firefight","/grimdark-firefight"],
@@ -284,6 +287,59 @@ async function fetchGyrinxGangPage(rawUrl) {
   });
 }
 
+
+async function fetchDndBeyondCharacter(characterId) {
+  const id = String(characterId || "").trim();
+  if (!/^\d{1,20}$/.test(id)) {
+    return jsonResponse({error:"Invalid D&D Beyond character ID."}, 400);
+  }
+
+  let response;
+  try {
+    response = await fetch(
+      "https://character-service.dndbeyond.com/character/v5/character/" +
+        encodeURIComponent(id) +
+        "?includeCustomItems=true",
+      {
+        headers:{
+          "Accept":"application/json",
+          "User-Agent":"TabletopVoice/1.0 (+https://tabletopvoice.app)"
+        }
+      }
+    );
+  } catch (error) {
+    console.error("D&D Beyond request failed", error);
+    return jsonResponse({error:"Could not reach D&D Beyond."}, 502);
+  }
+
+  const text = await response.text();
+  if (!text || text.length > 8_000_000) {
+    return jsonResponse({error:"D&D Beyond returned an empty or oversized character response."}, 502);
+  }
+
+  let payload;
+  try {
+    payload = JSON.parse(text);
+  } catch {
+    return jsonResponse({error:"D&D Beyond returned an unreadable character response."}, 502);
+  }
+
+  if (!response.ok || payload?.success === false) {
+    const upstreamMessage =
+      payload?.data?.serverMessage ||
+      payload?.message ||
+      (response.status === 404 ? "Character not found." : "");
+
+    return jsonResponse({
+      error:upstreamMessage
+        ? String(upstreamMessage)
+        : "D&D Beyond could not return this character. Make sure the character is Public."
+    }, response.status === 404 ? 404 : 422);
+  }
+
+  return jsonResponse(payload);
+}
+
 function addSecurityHeaders(response) {
   const headers = new Headers(response.headers);
   for (const [name, value] of Object.entries(SECURITY_HEADERS)) {
@@ -317,6 +373,13 @@ export default {
         return jsonResponse({error:"Method not allowed."}, 405);
       }
       return fetchGyrinxGangPage(String(url.searchParams.get("url") || "").trim());
+    }
+
+    if (url.pathname === "/api/dndbeyond-character") {
+      if (request.method !== "GET") {
+        return jsonResponse({error:"Method not allowed."}, 405);
+      }
+      return fetchDndBeyondCharacter(String(url.searchParams.get("id") || "").trim());
     }
 
     if (request.method === "GET" || request.method === "HEAD") {
