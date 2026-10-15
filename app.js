@@ -9375,9 +9375,9 @@ function dndUseAction(unit, actionId, requestedCastLevel = null) {
       (action.kind === "spell" && castLevel > 0 ? " · L" + castLevel : "");
 
     popup.eyebrow = "SPELL SAVE";
-    popup.total = "DC " + action.saveDc;
     popup.subtitle =
-      (action.saveAbility ? String(action.saveAbility).toUpperCase() + " save" : "Saving throw") +
+      "DC " + action.saveDc + " " +
+      (action.saveAbility ? String(action.saveAbility).toUpperCase() + " save" : "saving throw") +
       (castLevel > 0 ? " · cast at level " + castLevel : "");
   }
 
@@ -9415,11 +9415,12 @@ function dndUseAction(unit, actionId, requestedCastLevel = null) {
         details.push(damageLine);
 
         if (!popup.total) {
-          popup.eyebrow = "DAMAGE ROLL";
+          popup.eyebrow = action.kind === "spell" ? "SPELL DAMAGE" : "DAMAGE ROLL";
           popup.total = String(total);
-          popup.subtitle = action.damageType
-            ? action.damageType + " damage"
-            : "Damage";
+          popup.subtitle = [
+            popup.subtitle,
+            action.damageType ? action.damageType + " damage" : "Damage"
+          ].filter(Boolean).join(" · ");
         } else {
           popup.breakdown.push(damageLine);
         }
@@ -9485,8 +9486,13 @@ function dndUseAction(unit, actionId, requestedCastLevel = null) {
   }
 
   if (!popup.total) {
-    popup.total = action.kind === "spell" ? "CAST" : "USED";
-    popup.eyebrow = action.kind === "spell" ? "SPELL CAST" : "ACTION";
+    if (action.saveDc != null) {
+      popup.total = "DC " + action.saveDc;
+      popup.eyebrow = "SPELL SAVE";
+    } else {
+      popup.total = action.kind === "spell" ? "CAST" : "USED";
+      popup.eyebrow = action.kind === "spell" ? "SPELL CAST" : "ACTION";
+    }
   }
 
   runtime.lastRoll = {
