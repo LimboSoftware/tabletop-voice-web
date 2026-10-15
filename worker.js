@@ -6,6 +6,37 @@ const SECURITY_HEADERS = {
   "Content-Security-Policy": "default-src 'self'; script-src 'self' https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://api.github.com https://raw.githubusercontent.com https://0.peerjs.com wss://0.peerjs.com; media-src 'self' blob:; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-src https://e92be93e.sibforms.com; frame-ancestors 'none'; manifest-src 'self'; upgrade-insecure-requests"
 };
 
+const APP_GAME_ROUTES = new Map([
+  ["/40k","/40k"],
+  ["/aos","/aos"],
+  ["/horus-heresy","/horus-heresy"],
+  ["/heresy","/horus-heresy"],
+  ["/kill-team","/kill-team"],
+  ["/necromunda","/necromunda"],
+  ["/legions-imperialis","/legions-imperialis"],
+  ["/grimdark-future","/grimdark-future"],
+  ["/grimdark","/grimdark-future"],
+  ["/grimdark-firefight","/grimdark-firefight"],
+  ["/gff","/grimdark-firefight"],
+  ["/grimdark-star-quest","/grimdark-star-quest"],
+  ["/star-quest","/grimdark-star-quest"],
+  ["/warfleets","/warfleets"],
+  ["/opr-warfleets","/warfleets"],
+  ["/age-of-fantasy","/age-of-fantasy"],
+  ["/aof","/age-of-fantasy"],
+  ["/age-of-fantasy-skirmish","/age-of-fantasy-skirmish"],
+  ["/aof-skirmish","/age-of-fantasy-skirmish"],
+  ["/age-of-fantasy-regiments","/age-of-fantasy-regiments"],
+  ["/aof-regiments","/age-of-fantasy-regiments"],
+  ["/age-of-fantasy-quest","/age-of-fantasy-quest"],
+  ["/aof-quest","/age-of-fantasy-quest"]
+]);
+
+function normalizedAppRoute(pathname = "/") {
+  if (pathname === "/") return "/";
+  return String(pathname || "/").replace(/\/+$/, "") || "/";
+}
+
 const OPR_TTS_URL = "https://army-forge.onepagerules.com/api/tts";
 const OPR_COMMON_RULES_URL = "https://army-forge.onepagerules.com/api/rules/common";
 const OPR_ARMY_BOOKS_URL = "https://army-forge.onepagerules.com/api/army-books";
@@ -286,6 +317,27 @@ export default {
         return jsonResponse({error:"Method not allowed."}, 405);
       }
       return fetchGyrinxGangPage(String(url.searchParams.get("url") || "").trim());
+    }
+
+    if (request.method === "GET" || request.method === "HEAD") {
+      const route = normalizedAppRoute(url.pathname);
+      const canonical = APP_GAME_ROUTES.get(route);
+
+      if (canonical) {
+        if (route !== canonical || url.pathname !== route) {
+          const destination = new URL(request.url);
+          destination.pathname = canonical;
+          return addSecurityHeaders(Response.redirect(destination.toString(), 308));
+        }
+
+        const shellUrl = new URL("/index.html", url);
+        const shellRequest = new Request(shellUrl.toString(), {
+          method:request.method,
+          headers:request.headers
+        });
+        const shell = await env.ASSETS.fetch(shellRequest);
+        return addSecurityHeaders(shell);
+      }
     }
 
     const response = await env.ASSETS.fetch(request);
