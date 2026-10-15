@@ -102,6 +102,20 @@
             <input id="fileInput" type="file" multiple accept=".json,.ros,.rosz,.txt,application/json,text/plain,application/xml,text/xml,application/zip" hidden />
           </section>
 
+          <section id="dndBeyondImportCard" class="tool-card setup-import-card dnd-beyond-import-card hidden">
+            <span class="section-label">D&amp;D BEYOND</span>
+            <h2>Import character</h2>
+            <p>Set the character to <strong>Public</strong> in D&amp;D Beyond, then paste its character link or ID. You can also import saved character-service JSON.</p>
+            <div class="dnd-beyond-import-controls">
+              <input id="dndBeyondInput" type="text" inputmode="url" autocomplete="off" spellcheck="false" placeholder="https://www.dndbeyond.com/characters/12345678" aria-label="D&D Beyond character link or ID" />
+              <button id="dndBeyondImportButton" class="primary-button large setup-main-action" type="button">Import D&amp;D Beyond character</button>
+              <button id="dndBeyondFileButton" class="ghost-button large setup-main-action" type="button">Choose character JSON</button>
+              <input id="dndBeyondFileInput" type="file" accept=".json,application/json" hidden />
+            </div>
+            <small id="dndBeyondImportStatus" class="opr-import-status">Public D&amp;D Beyond characters · JSON fallback supported.</small>
+          </section>
+
+
           <section id="necromundaImportCard" class="tool-card setup-import-card necromunda-import-card hidden">
             <span class="section-label">GYRINX · NECROMUNDA N26</span>
             <h2>Import shared gang</h2>
