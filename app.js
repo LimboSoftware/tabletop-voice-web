@@ -7279,7 +7279,9 @@ function setVoicePrompt(page = state.currentPage) {
         ? "Say an operative name from your Kill Team"
         : isNecromundaMode()
           ? "Say a fighter name from your Necromunda gang"
-          : isLegionsImperialisMode()
+          : isDndMode()
+            ? "Say “attack longsword”, a spell name, or “add hempen rope”"
+            : isLegionsImperialisMode()
           ? "Say a detachment name from your Legions Imperialis army"
           : isHeresyMode()
           ? "Say a unit name from your Horus Heresy army"
@@ -7408,7 +7410,7 @@ function removeImportedRoster(rosterId) {
   for (const key of Object.keys(localStorage)) {
     if (
       key.includes(rosterId) &&
-      (key.startsWith("tv_status_") || key.startsWith("tv_pins_") || key.startsWith("tv_recent_") || key.startsWith("tv_voice_alias"))
+      (key.startsWith("tv_status_") || key.startsWith("tv_pins_") || key.startsWith("tv_recent_") || key.startsWith("tv_voice_alias") || key.startsWith("tv_dnd_state_"))
     ) {
       localStorage.removeItem(key);
     }
@@ -9948,7 +9950,8 @@ function resetGame() {
       key.startsWith("tv_status_") ||
       key.startsWith("tv_destroyed_") ||
       key.startsWith("tv_unit_destroyed_") ||
-      key.startsWith("tv_source_cp_")
+      key.startsWith("tv_source_cp_") ||
+      key.startsWith("tv_dnd_state_")
     ) {
       localStorage.removeItem(key);
     }
