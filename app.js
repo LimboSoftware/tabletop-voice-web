@@ -6489,6 +6489,14 @@ async function getUnitBrowserReferenceData(source) {
     };
   }
 
+  if (source.kind === "dndbeyond") {
+    return {
+      stratagems:[],
+      armyRules:(source.roster?.armyRules || []).filter(rule => rule?.name),
+      note:"Character features imported from D&D Beyond."
+    };
+  }
+
   if (source.kind === "li-community") {
     return {
       stratagems:[],
@@ -9311,6 +9319,7 @@ function updateGameContextUi(unit = state.selected) {
   const killTeam = isKillTeamMode();
   const legionsImperialis = isLegionsImperialisMode();
   const necromunda = isNecromundaMode();
+  const dnd = isDndMode();
   const non40k = state.gameSystem !== "40k";
 
   els.appNav?.classList.toggle("opr-context", non40k);
@@ -9333,9 +9342,11 @@ function updateGameContextUi(unit = state.selected) {
         ? "Operatives"
         : necromunda
           ? "Fighters"
-          : legionsImperialis
-            ? "Detachments"
-            : "Units";
+          : dnd
+            ? "Characters"
+            : legionsImperialis
+              ? "Detachments"
+              : "Units";
   }
 
   const browserEyebrow = els.rosterBrowser?.querySelector(".roster-browser-heading .eyebrow");
@@ -9347,9 +9358,11 @@ function updateGameContextUi(unit = state.selected) {
         ? "KILL TEAM"
         : necromunda
           ? "GANG ROSTER"
-          : legionsImperialis
-            ? "DETACHMENT BROWSER"
-            : "UNIT BROWSER";
+          : dnd
+            ? "CHARACTERS"
+            : legionsImperialis
+              ? "DETACHMENT BROWSER"
+              : "UNIT BROWSER";
   }
   if (browserTitle) {
     browserTitle.textContent = isWarfleetsMode()
@@ -9358,9 +9371,11 @@ function updateGameContextUi(unit = state.selected) {
         ? "Choose an operative."
         : necromunda
           ? "Choose a fighter."
-          : legionsImperialis
-            ? "Choose a detachment."
-            : "Choose a unit.";
+          : dnd
+            ? "Choose a character."
+            : legionsImperialis
+              ? "Choose a detachment."
+              : "Choose a unit.";
   }
   if (els.searchInput) {
     els.searchInput.placeholder = isWarfleetsMode()
@@ -9369,9 +9384,11 @@ function updateGameContextUi(unit = state.selected) {
         ? "Type an operative name…"
         : necromunda
           ? "Type a fighter name…"
-          : legionsImperialis
-            ? "Type a detachment name…"
-            : "Type a unit name…";
+          : dnd
+            ? "Type a character, attack or spell…"
+            : legionsImperialis
+              ? "Type a detachment name…"
+              : "Type a unit name…";
   }
 
   const armyRulesLabel = armyRulesButton?.querySelector("span:last-child");
@@ -9380,11 +9397,13 @@ function updateGameContextUi(unit = state.selected) {
       ? "Team Rules"
       : necromunda
         ? "Gang Rules"
-        : legionsImperialis
-          ? "Formation Rules"
-          : (opr || heresy)
-            ? "Rules"
-            : "Army Rules";
+        : dnd
+          ? "Features"
+          : legionsImperialis
+            ? "Formation Rules"
+            : (opr || heresy)
+              ? "Rules"
+              : "Army Rules";
   }
 
   const heading = els.pageArmyRules?.querySelector("h1");
@@ -9396,11 +9415,13 @@ function updateGameContextUi(unit = state.selected) {
       ? "Team Rules"
       : necromunda
         ? "Gang Rules"
-        : legionsImperialis
-          ? "Formation Rules"
-          : (opr || heresy)
-            ? "Rules"
-            : "Army Rules";
+        : dnd
+          ? "Features"
+          : legionsImperialis
+            ? "Formation Rules"
+            : (opr || heresy)
+              ? "Rules"
+              : "Army Rules";
   }
 
   if (eyebrow) {
@@ -9410,13 +9431,15 @@ function updateGameContextUi(unit = state.selected) {
         ? "KILL TEAM REFERENCE"
         : necromunda
           ? "NECROMUNDA REFERENCE"
-          : legionsImperialis
-            ? "LEGIONS IMPERIALIS REFERENCE"
-            : heresy
-          ? "HORUS HERESY REFERENCE"
-          : aos
-            ? "AGE OF SIGMAR REFERENCE"
-            : "ARMY REFERENCE";
+          : dnd
+            ? "D&D CHARACTER REFERENCE"
+            : legionsImperialis
+              ? "LEGIONS IMPERIALIS REFERENCE"
+              : heresy
+                ? "HORUS HERESY REFERENCE"
+                : aos
+                  ? "AGE OF SIGMAR REFERENCE"
+                  : "ARMY REFERENCE";
   }
 
   if (copy) {
@@ -9428,13 +9451,15 @@ function updateGameContextUi(unit = state.selected) {
         ? "Team-wide abilities, equipment and selected rules imported with the active Kill Team. Operative-specific abilities and unique actions are shown on each operative."
         : necromunda
           ? "Gang-wide rules and current campaign state imported from Gyrinx. Fighter-specific skills, powers, gear, injuries and status are shown on each fighter."
-          : legionsImperialis
-            ? "Formation rules imported with the active Legions Imperialis army. Detachment-specific special rules are shown on each detachment."
-            : heresy
-          ? "Army rules imported with the active Horus Heresy list. Unit-specific wargear, reactions and traits are shown on each unit profile."
-          : aos
-          ? "Battle traits, spells, prayers and other army-level abilities imported with the active Age of Sigmar list."
-          : "Rules that apply to the selected imported list or whole army.";
+          : dnd
+            ? "Species traits, class features and feats imported with the active D&D Beyond character. Attacks, spells, slots and inventory are on the character page."
+            : legionsImperialis
+              ? "Formation rules imported with the active Legions Imperialis army. Detachment-specific special rules are shown on each detachment."
+              : heresy
+                ? "Army rules imported with the active Horus Heresy list. Unit-specific wargear, reactions and traits are shown on each unit profile."
+                : aos
+                  ? "Battle traits, spells, prayers and other army-level abilities imported with the active Age of Sigmar list."
+                  : "Rules that apply to the selected imported list or whole army.";
   }
 }
 
