@@ -477,7 +477,7 @@ const GAME_PROVIDERS = [
       {id:"necromunda", name:"Necromunda", detail:"Planned", available:false},
       {id:"warcry", name:"Warcry", detail:"Planned", available:false},
       {id:"underworlds", name:"Warhammer Underworlds", detail:"Planned", available:false},
-      {id:"legions-imperialis", name:"Legions Imperialis", detail:"Planned", available:false},
+      {id:"legions-imperialis", name:"Legions Imperialis", detail:"New Recruit roster support", available:true, beta:true},
       {id:"adeptus-titanicus", name:"Adeptus Titanicus", detail:"Planned", available:false},
       {id:"blood-bowl", name:"Blood Bowl", detail:"Planned", available:false},
       {id:"middle-earth", name:"Middle-earth Strategy Battle Game", detail:"Planned", available:false},
@@ -610,6 +610,10 @@ function isKillTeamMode(gameSystem = state.gameSystem) {
   return gameSystem === "kill-team";
 }
 
+function isLegionsImperialisMode(gameSystem = state.gameSystem) {
+  return gameSystem === "legions-imperialis";
+}
+
 function gameProviderForSystem(gameSystem = state.gameSystem) {
   return GAME_SYSTEMS[gameSystem]?.provider || "gw";
 }
@@ -707,6 +711,7 @@ function inferUnitGameSystem(unit) {
   if (unit?.system === "aos") return "aos";
   if (unit?.system === "heresy") return "heresy";
   if (unit?.system === "kill-team") return "kill-team";
+  if (unit?.system === "legions-imperialis") return "legions-imperialis";
   if (unit?.system === "opr") return oprGameSystemKey(unit?.gameSystem) || "grimdark";
   if (unit?.system === "40k") return "40k";
 
@@ -751,6 +756,10 @@ function inferRosterGameSystem(roster) {
     metadata.includes("kill team") ||
     metadata.includes("c521 ad27 44df f959")
   ) return "kill-team";
+  if (
+    metadata.includes("legions imperialis") ||
+    metadata.includes("sys 9498 516a 178a 3f4f")
+  ) return "legions-imperialis";
   if (
     metadata.includes("horus heresy") ||
     metadata.includes("age of darkness") ||
@@ -824,6 +833,7 @@ function applyGameSystemUi() {
   const aos = isAosMode();
   const heresy = isHeresyMode();
   const killTeam = isKillTeamMode();
+  const legionsImperialis = isLegionsImperialisMode();
   const fortyK = state.gameSystem === "40k";
 
   document.body.classList.toggle("game-grimdark", grimdark);
@@ -831,6 +841,7 @@ function applyGameSystemUi() {
   document.body.classList.toggle("game-aos", aos);
   document.body.classList.toggle("game-heresy", heresy);
   document.body.classList.toggle("game-kill-team", killTeam);
+  document.body.classList.toggle("game-legions-imperialis", legionsImperialis);
   document.body.classList.toggle("game-40k", fortyK);
 
   if (els.settingsCurrentGame) {
@@ -902,7 +913,9 @@ function applyGameSystemUi() {
           ? "Export your Horus Heresy 3rd Edition roster from New Recruit, then choose the JSON, ROS or ROSZ file here."
           : killTeam
             ? "Export your Kill Team 2024 roster from New Recruit, then choose the JSON, ROS or ROSZ file here."
-            : "Export your Warhammer 40,000 roster from New Recruit, then choose the JSON, ROS, ROSZ or TXT file here.";
+            : legionsImperialis
+              ? "Export your Legions Imperialis roster from New Recruit, then choose the JSON, ROS or ROSZ file here."
+              : "Export your Warhammer 40,000 roster from New Recruit, then choose the JSON, ROS, ROSZ or TXT file here.";
   }
   if (els.importButton) {
     els.importButton.textContent = "Choose New Recruit file";
@@ -927,7 +940,9 @@ function applyGameSystemUi() {
           ? "Import your Horus Heresy army from New Recruit for profiles, weapons, reactions, wargear and rules at the table."
           : killTeam
             ? "Import your Kill Team from New Recruit for operative profiles, weapons, abilities and team rules at the table."
-            : "Bring in your New Recruit lists, or load the wider dataset when you need broader 40K lookup at the table.";
+            : legionsImperialis
+              ? "Import your Legions Imperialis army from New Recruit for detachment profiles, weapons, formation rules and quick lookup at the table."
+              : "Bring in your New Recruit lists, or load the wider dataset when you need broader 40K lookup at the table.";
   }
 
   updateGameContextUi();
@@ -2149,6 +2164,10 @@ function detectNewRecruitGameSystem(root, units = []) {
     systemName.includes("kill team") ||
     systemName.includes("c521 ad27 44df f959")
   ) return "kill-team";
+  if (
+    systemName.includes("legions imperialis") ||
+    systemName.includes("sys 9498 516a 178a 3f4f")
+  ) return "legions-imperialis";
   if (
     systemName.includes("horus heresy") ||
     systemName.includes("age of darkness") ||
