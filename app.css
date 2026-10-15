@@ -5189,12 +5189,34 @@ body.game-opr .opr-import-controls textarea {
 }
 
 .game-system-card {
+  position: relative;
   width: min(880px, 100%);
   padding: clamp(24px, 4vw, 38px);
   border: 1px solid #34414d;
   border-radius: 3px;
   background: #0f151c;
   box-shadow: 0 28px 90px rgba(0,0,0,.52);
+}
+
+.game-system-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 38px;
+  height: 38px;
+  border: 1px solid #35414c;
+  border-radius: 2px;
+  background: #111820;
+  color: #aab6bf;
+  font: inherit;
+  font-size: 1.4rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.game-system-close:hover {
+  border-color: var(--accent-strong);
+  color: var(--text);
 }
 
 .game-system-card h1 {
