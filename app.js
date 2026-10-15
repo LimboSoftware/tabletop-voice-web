@@ -8581,8 +8581,6 @@ function renderDndActions(unit, kind = "all") {
   const runtime = getDndRuntimeState(unit);
   const focused = state.dndFocusedActionId;
   const sortFocused = list => [...list].sort((a,b) => {
-    if (a.id === focused) return -1;
-    if (b.id === focused) return 1;
     if ((a.level ?? 0) !== (b.level ?? 0)) return (a.level ?? 0) - (b.level ?? 0);
     return a.name.localeCompare(b.name);
   });
