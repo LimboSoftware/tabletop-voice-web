@@ -1765,6 +1765,930 @@ async function loadOprArmyForgeList() {
   }
 }
 
+
+let liCommunityReferencePromise = null;
+
+function liCommunityNameKey(value = "") {
+  return normalize(
+    String(value || "")
+      .replace(/\b(detachment|squadron|talon|battery)\b/gi, " ")
+      .replace(/\s+/g, " ")
+  );
+}
+
+async function loadLiCommunityReference() {
+  if (liCommunityReferencePromise) return liCommunityReferencePromise;
+
+  liCommunityReferencePromise = Promise.all([
+    fetch("./li-community-units-weapons.json").then(response => {
+      if (!response.ok) throw new Error("Could not load the Legions unit reference.");
+      return response.json();
+    }),
+    fetch("./li-community-detachments.json").then(response => {
+      if (!response.ok) throw new Error("Could not load the Legions detachment reference.");
+      return response.json();
+    }),
+    fetch("./li-community-formations.json").then(response => {
+      if (!response.ok) throw new Error("Could not load the Legions formation reference.");
+      return response.json();
+    })
+  ]).then(([unitWeaponData, detachmentData, formationData]) => {
+    const units = unitWeaponData.units || [];
+    const weapons = unitWeaponData.weapons || [];
+    const detachments = detachmentData.detachments || [];
+    const formations = formationData.formations || [];
+
+    return {
+      units,
+      weapons,
+      detachments,
+      formations,
+      unitById:new Map(units.map(unit => [String(unit.id), unit])),
+      weaponById:new Map(weapons.map(weapon => [String(weapon.id), weapon])),
+      weaponByName:new Map(weapons.map(weapon => [normalize(weapon.name), weapon])),
+      detachmentById:new Map(detachments.map(detachment => [String(detachment.id), detachment])),
+      detachmentByName:new Map(detachments.map(detachment => [normalize(detachment.name), detachment])),
+      detachmentByLooseName:new Map(detachments.map(detachment => [liCommunityNameKey(detachment.name), detachment])),
+      formationById:new Map(formations.map(formation => [String(formation.id), formation])),
+      formationByName:new Map(formations.map(formation => [normalize(formation.name), formation]))
+    };
+  }).catch(error => {
+    liCommunityReferencePromise = null;
+    throw error;
+  });
+
+  return liCommunityReferencePromise;
+}
+
+function findLiCommunityDetachment(reference, id, name) {
+  const idCandidates = [
+    id,
+    typeof id === "object" ? id?.id : null,
+    typeof id === "object" ? id?.data_id : null
+  ].filter(value => value !== null && value !== undefined && value !== "");
+
+  for (const candidate of idCandidates) {
+    const exact = reference.detachmentById.get(String(candidate));
+    if (exact) return exact;
+  }
+
+  const exactName = reference.detachmentByName.get(normalize(name || ""));
+  if (exactName) return exactName;
+
+  const loose = reference.detachmentByLooseName.get(liCommunityNameKey(name || ""));
+  if (loose) return loose;
+
+  const key = liCommunityNameKey(name || "");
+  if (!key) return null;
+
+  const candidates = reference.detachments.filter(detachment => {
+    const detKey = liCommunityNameKey(detachment.name);
+    return detKey.includes(key) || key.includes(detKey);
+  });
+
+  return candidates.length === 1 ? candidates[0] : null;
+}
+
+function findLiCommunityFormation(reference, id, name) {
+  if (id !== null && id !== undefined && id !== "") {
+    const exact = reference.formationById.get(String(id));
+    if (exact) return exact;
+  }
+
+  const key = normalize(name || "");
+  if (!key) return null;
+
+  const exact = reference.formationByName.get(key);
+  if (exact) return exact;
+
+  const candidates = reference.formations.filter(formation => {
+    const formKey = normalize(formation.name);
+    return formKey.includes(key) || key.includes(formKey);
+  });
+
+  return candidates.length === 1 ? candidates[0] : null;
+}
+
+function liCommunityTraitText(traits = []) {
+  return (traits || []).map(trait => {
+    if (!trait?.name) return "";
+    return trait.value !== null && trait.value !== undefined && trait.value !== ""
+      ? trait.name + " (" + trait.value + ")"
+      : trait.name;
+  }).filter(Boolean).join(", ");
+}
+
+function liCommunityWeaponProfile(weapon) {
+  const profiles = [];
+
+  for (const profile of weapon?.profiles || []) {
+    profiles.push({
+      name:weapon.name || "Weapon",
+      type:"Weapon",
+      system:"legions-imperialis",
+      quantity:1,
+      values:[
+        {label:"Range", value:profile.range ?? "—"},
+        {label:"Dice", value:profile.dice ?? "—"},
+        {
+          label:"To Hit",
+          value:profile.toHit === null || profile.toHit === undefined
+            ? "—"
+            : String(profile.toHit).endsWith("+")
+              ? String(profile.toHit)
+              : String(profile.toHit) + "+"
+        },
+        {
+          label:"AP",
+          value:typeof profile.ap === "number"
+            ? (profile.ap === 0 ? "0" : "-" + profile.ap)
+            : profile.ap ?? "—"
+        },
+        {label:"Traits", value:liCommunityTraitText(profile.traits) || "—"}
+      ]
+    });
+  }
+
+  return profiles;
+}
+
+function liCommunityUnitProfile(unit) {
+  return {
+    name:unit.name || "Model",
+    values:[
+      {label:"Move", value:unit.move ?? "—"},
+      {
+        label:"Sv",
+        value:unit.sv === null || unit.sv === undefined
+          ? "—"
+          : String(unit.sv).endsWith("+")
+            ? String(unit.sv)
+            : String(unit.sv) + "+"
+      },
+      {
+        label:"CAF",
+        value:unit.caf === null || unit.caf === undefined
+          ? "—"
+          : Number(unit.caf) > 0 && !String(unit.caf).startsWith("+")
+            ? "+" + unit.caf
+            : String(unit.caf)
+      },
+      {
+        label:"Morale",
+        value:unit.morale === null || unit.morale === undefined
+          ? "—"
+          : String(unit.morale).endsWith("+")
+            ? String(unit.morale)
+            : String(unit.morale) + "+"
+      },
+      {label:"W", value:unit.w ?? "—"}
+    ]
+  };
+}
+
+function liCommunitySelectionText(value) {
+  if (value === null || value === undefined) return "";
+  if (typeof value === "string" || typeof value === "number") return String(value);
+  if (Array.isArray(value)) {
+    return value.map(liCommunitySelectionText).filter(Boolean).join(", ");
+  }
+
+  const parts = [];
+  for (const [key, item] of Object.entries(value)) {
+    if (["id","slot_id","formation_id","formationId","detachmentId","data_id"].includes(key)) continue;
+    const text = liCommunitySelectionText(item);
+    if (text) parts.push(key + ": " + text);
+  }
+  return parts.join("; ");
+}
+
+function matchLiCommunityWeapon(reference, name) {
+  const key = normalize(String(name || "")
+    .replace(/^(turret|hull|sponson|sponsons|pintle|arm|main|wing)\s*:\s*/i, "")
+    .replace(/\bmounted\b/gi, " ")
+    .replace(/\s+/g, " ")
+  );
+  if (!key || key === "none") return null;
+
+  const exact = reference.weaponByName.get(key);
+  if (exact) return exact;
+
+  const candidates = reference.weapons.filter(weapon => {
+    const weaponKey = normalize(weapon.name.replace(/\bmounted\b/gi, " "));
+    return weaponKey === key || weaponKey.includes(key) || key.includes(weaponKey);
+  });
+
+  return candidates.length === 1 ? candidates[0] : null;
+}
+
+function buildLiCommunityUnit(raw, reference, index) {
+  const refDetachment = findLiCommunityDetachment(reference, raw.id, raw.name);
+  const refUnitIds = dedupeBy(
+    [...(refDetachment?.mainUnit || []), ...(refDetachment?.relatedUnit || [])],
+    value => String(value)
+  );
+
+  const refUnits = refUnitIds
+    .map(id => reference.unitById.get(String(id)))
+    .filter(Boolean);
+
+  const profiles = refUnits.map(liCommunityUnitProfile);
+
+  const weaponIds = new Set(
+    refUnits.flatMap(unit => unit.weapons || []).map(id => String(id))
+  );
+
+  for (const selectedWeapon of raw.selectedWeapons || []) {
+    const match = matchLiCommunityWeapon(reference, selectedWeapon);
+    if (match) weaponIds.add(String(match.id));
+  }
+
+  const weapons = [...weaponIds]
+    .map(id => reference.weaponById.get(String(id)))
+    .filter(Boolean)
+    .flatMap(liCommunityWeaponProfile);
+
+  const rules = [];
+  for (const unit of refUnits) {
+    for (const rule of unit.rules || []) {
+      const ruleName = rule.value !== null && rule.value !== undefined && rule.value !== ""
+        ? rule.name + " (" + rule.value + ")"
+        : rule.name;
+      rules.push({name:ruleName, text:"", category:"Special Rule"});
+    }
+  }
+
+  for (const note of raw.notes || []) {
+    if (!note) continue;
+    rules.push({
+      name:"Selected configuration",
+      text:String(note),
+      category:"Loadout"
+    });
+  }
+
+  const primary = profiles[0]?.values || [];
+  const stats = primary.map(item => ({...item}));
+  if (raw.points !== null && raw.points !== undefined && raw.points !== "") {
+    stats.push({label:"Pts", value:String(raw.points)});
+  }
+
+  const categories = dedupeBy([
+    raw.slotType,
+    ...(refDetachment?.types || []),
+    ...refUnits.map(unit => unit.unitType)
+  ].filter(Boolean), value => normalize(value));
+
+  const name = raw.name || refDetachment?.name || "Detachment";
+
+  return {
+    id:"li-community-" + index + "-" + normalize(name).replace(/\s+/g, "-"),
+    externalId:raw.id ?? null,
+    name,
+    type:"Detachment",
+    system:"legions-imperialis",
+    gameSystemKey:"legions-imperialis",
+    categories,
+    stats,
+    rules:dedupeBy(rules, rule => normalize(rule.category + "|" + rule.name + "|" + rule.text)),
+    profiles:dedupeBy(
+      weapons,
+      profile => normalize(profile.name + "|" + JSON.stringify(profile.values || []))
+    ),
+    legionsImperialisProfiles:profiles,
+    liCommunity:{
+      source:raw.source || "",
+      formation:raw.formationName || "",
+      slotType:raw.slotType || "",
+      size:raw.size ?? null,
+      points:raw.points ?? null,
+      referenceDetachmentId:refDetachment?.id ?? null,
+      notes:raw.notes || []
+    },
+    searchText:normalize([
+      name,
+      raw.formationName,
+      raw.slotType,
+      categories,
+      profiles.map(profile => profile.name),
+      weapons.map(profile => profile.name),
+      rules.map(rule => rule.name),
+      raw.notes
+    ].flat(4).join(" "))
+  };
+}
+
+function liCommunityFormationRules(reference, formations = []) {
+  const rules = [];
+
+  for (const formation of formations || []) {
+    const refFormation = findLiCommunityFormation(
+      reference,
+      formation.dataId ?? formation.data_id ?? formation.id,
+      formation.name
+    );
+    if (!refFormation) continue;
+
+    for (const rule of refFormation.rules || []) {
+      if (!rule?.name || !rule?.text) continue;
+      rules.push({
+        name:rule.name,
+        text:rule.text,
+        category:"Formation Rule",
+        source:formation.nickname
+          ? formation.nickname + " — " + refFormation.name
+          : refFormation.name
+      });
+    }
+  }
+
+  return dedupeBy(
+    rules,
+    rule => normalize(rule.source + "|" + rule.name + "|" + rule.text)
+  );
+}
+
+function liBuilderSlotPoints(list, detachment) {
+  const slotId = detachment.slot_id;
+  const upgrades = (list.upgrades || []).find(entry => entry.slot_id === slotId)?.upgrades || [];
+  const loadouts = (list.loadouts || []).find(entry => entry.slot_id === slotId)?.loadouts || [];
+
+  const upgradePoints = upgrades.reduce((sum, upgrade) =>
+    sum + (Number(upgrade.cost) || 0) +
+      (list.gamemode === "titandeath" ? (Number(upgrade.td_ek) || 0) : 0), 0);
+
+  const loadoutPoints = loadouts.reduce((sum, loadout) => {
+    const perModel = (loadout.weapons || []).reduce((weaponSum, weapon) =>
+      weaponSum + (Number(weapon.cost) || 0), 0);
+    return sum + perModel * (Number(loadout.number) || 0);
+  }, 0);
+
+  return (Number(detachment.cost) || 0) + upgradePoints + loadoutPoints;
+}
+
+function liBuilderSlotSize(list, detachment) {
+  const upgrades = (list.upgrades || []).find(entry => entry.slot_id === detachment.slot_id)?.upgrades || [];
+  return (Number(detachment.size) || 0) +
+    upgrades.reduce((sum, upgrade) => sum + (Number(upgrade.size) || 0), 0);
+}
+
+function liBuilderSlotNotes(list, detachment) {
+  const notes = [];
+  const selectedWeapons = [];
+  const upgrades = (list.upgrades || []).find(entry => entry.slot_id === detachment.slot_id)?.upgrades || [];
+  const loadouts = (list.loadouts || []).find(entry => entry.slot_id === detachment.slot_id)?.loadouts || [];
+
+  for (const upgrade of upgrades) {
+    const count = Number(upgrade.number) || 0;
+    notes.push(
+      (count ? count + " × " : "") +
+      (upgrade.name || "Upgrade") +
+      (Number(upgrade.cost) ? " · " + upgrade.cost + " pts" : "")
+    );
+  }
+
+  for (const loadout of loadouts) {
+    const count = Number(loadout.number) || 0;
+    const weapons = (loadout.weapons || []).map(weapon => {
+      if (weapon.weapon && normalize(weapon.weapon) !== "none") selectedWeapons.push(weapon.weapon);
+      return (weapon.location ? weapon.location + ": " : "") +
+        (weapon.weapon || "") +
+        (Number(weapon.cost) ? " · " + weapon.cost + " pts" : "");
+    }).filter(Boolean);
+
+    if (weapons.length) {
+      notes.push((count ? count + " × " : "") + weapons.join(", "));
+    }
+  }
+
+  return {notes, selectedWeapons};
+}
+
+function normalizeLiBuilderJsonList(rawList, reference, sourceName = "Legion Builder") {
+  const list = rawList || {};
+  const formationMap = new Map(
+    (list.formations || []).map(formation => [String(formation.id), formation])
+  );
+
+  const rawDetachments = [];
+  for (const detachment of list.detachments || []) {
+    if (!detachment || !detachment.id || !detachment.name) continue;
+    const formation = formationMap.get(String(detachment.formation_id)) || {};
+    const config = liBuilderSlotNotes(list, detachment);
+
+    rawDetachments.push({
+      id:detachment.id,
+      name:detachment.name,
+      slotType:detachment.slot_type || "",
+      formationName:formation.name || "",
+      size:liBuilderSlotSize(list, detachment),
+      points:liBuilderSlotPoints(list, detachment),
+      notes:config.notes,
+      selectedWeapons:config.selectedWeapons,
+      source:sourceName
+    });
+  }
+
+  if (!rawDetachments.length) {
+    throw new Error("No Legions Imperialis detachments were found in this JSON export.");
+  }
+
+  const units = rawDetachments.map((detachment, index) =>
+    buildLiCommunityUnit(detachment, reference, index)
+  );
+
+  const formations = (list.formations || [])
+    .filter(formation => formation?.name)
+    .map(formation => ({
+      id:formation.id,
+      dataId:formation.data_id,
+      name:formation.name,
+      nickname:formation.nickname || "",
+      faction:formation.faction || null,
+      subfaction:formation.subfaction || null
+    }));
+
+  const factionCounts = {};
+  for (const unit of units) {
+    const refDetachment = reference.detachmentById.get(String(unit.liCommunity.referenceDetachmentId));
+    if (!refDetachment?.faction) continue;
+    factionCounts[refDetachment.faction] = (factionCounts[refDetachment.faction] || 0) + 1;
+  }
+  const inferredFaction = Object.entries(factionCounts).sort((a,b) => b[1] - a[1])[0]?.[0];
+
+  const totalPoints = rawDetachments.reduce((sum, detachment) =>
+    sum + (Number(detachment.points) || 0), 0);
+
+  return {
+    id:crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random()),
+    name:list.name || sourceName + " list",
+    faction:list.faction || inferredFaction || "Legions Imperialis",
+    source:"li-community",
+    communitySource:sourceName,
+    gameSystemKey:"legions-imperialis",
+    importFormat:sourceName === "Legion Companion" ? "companion-json" : "legionbuilder-json",
+    points:totalPoints || Number(list.points) || null,
+    units,
+    armyRules:liCommunityFormationRules(reference, formations),
+    formations,
+    referenceData:{rules:[], stratagems:[]},
+    importedAt:Date.now()
+  };
+}
+
+function cleanLiCommunityLine(line = "") {
+  return String(line)
+    .replace(/\r/g, "")
+    .replace(/^\s*[-*•]\s*/, "")
+    .replace(/\*\*/g, "")
+    .replace(/__/g, "")
+    .replace(/\u00a0/g, " ")
+    .trim();
+}
+
+function parseLiCommunityText(text, reference) {
+  const rawText = String(text || "").trim();
+  if (!rawText) throw new Error("Paste a Legion Builder or Legion Companion list first.");
+
+  const sourceName = /legion\s*companion/i.test(rawText)
+    ? "Legion Companion"
+    : "Legion Builder";
+
+  const lines = rawText.split("\n");
+  const slotPattern = /^(HQ|CORE|SUPPORT|TRANSPORT|VANGUARD|LIGHT\s+ARMOU?R|BATTLE\s+TANK|HEAVY\s+ARMOU?R|ARTILLERY|BASTION|AIR\s+SUPPORT|KNIGHT|TITAN|DEDICATED)\s*:\s*(.+?)\s*(?:\((\d+)\))?\s*(?:[-–—,]\s*)?(\d+)\s*pts?\b/i;
+
+  let currentFormation = null;
+  let currentDetachment = null;
+  const formations = [];
+  const rawDetachments = [];
+  let rosterName = "";
+  let declaredTotal = null;
+
+  function pushFormation(name) {
+    const cleanName = String(name || "")
+      .replace(/^formation\s*:\s*/i, "")
+      .trim();
+    const refFormation = findLiCommunityFormation(reference, null, cleanName);
+    if (!refFormation) return false;
+
+    currentFormation = {
+      id:"text-formation-" + formations.length,
+      dataId:refFormation.id,
+      name:refFormation.name,
+      nickname:normalize(cleanName) === normalize(refFormation.name) ? "" : cleanName
+    };
+    formations.push(currentFormation);
+    currentDetachment = null;
+    return true;
+  }
+
+  for (const originalLine of lines) {
+    const line = cleanLiCommunityLine(originalLine);
+    if (!line) continue;
+
+    if (/^(compulsory|optional|choice|detachments?|upgrades?|loadouts?)$/i.test(line)) {
+      continue;
+    }
+    if (/^(formation strength|breakpoint)\s*:/i.test(line)) continue;
+
+    const detachmentMatch = line.match(slotPattern);
+    if (detachmentMatch) {
+      const name = detachmentMatch[2].trim();
+      const refDetachment = findLiCommunityDetachment(reference, null, name);
+      currentDetachment = {
+        id:refDetachment?.id ?? null,
+        name:refDetachment?.name || name,
+        slotType:detachmentMatch[1].replace(/\s+/g, " ").trim(),
+        formationName:currentFormation?.name || "",
+        size:detachmentMatch[3] ? Number(detachmentMatch[3]) : null,
+        points:Number(detachmentMatch[4]),
+        notes:[],
+        selectedWeapons:[],
+        source:sourceName
+      };
+      rawDetachments.push(currentDetachment);
+      continue;
+    }
+
+    const pointsLine = line.match(/^(.*?)\s*(?::|,|\s[-–—]\s)\s*(\d+)\s*pts?\s*$/i);
+    if (pointsLine) {
+      const possibleName = pointsLine[1].trim();
+      if (pushFormation(possibleName)) continue;
+
+      if (!rosterName && !/^(total|list total|allies|main faction)/i.test(possibleName)) {
+        rosterName = possibleName;
+        declaredTotal = Number(pointsLine[2]);
+      } else if (/^(total|list total)/i.test(possibleName)) {
+        declaredTotal = Number(pointsLine[2]);
+      }
+      continue;
+    }
+
+    if (/^formation\s*:/i.test(line) && pushFormation(line)) continue;
+
+    if (currentDetachment) {
+      const weaponLine = line.match(/^x?(\d+)\s+([^:]+):\s*(.+?)(?:\s+\d+\s*pts?)?$/i);
+      if (weaponLine) {
+        const weaponText = weaponLine[3].trim();
+        currentDetachment.selectedWeapons.push(
+          ...weaponText.split(/,\s*/).map(value => value.trim()).filter(Boolean)
+        );
+      }
+      currentDetachment.notes.push(line);
+      continue;
+    }
+
+    if (!rosterName &&
+        !/^(gamemode|faction|allegiance|game size|formations|total|allies|generated by)/i.test(line) &&
+        line.length < 100) {
+      rosterName = line;
+    }
+  }
+
+  if (!rawDetachments.length) {
+    throw new Error(
+      "No detachments were found. From Legion Builder copy the List View; from Legion Companion use Export as Text or JSON."
+    );
+  }
+
+  const units = rawDetachments.map((detachment, index) =>
+    buildLiCommunityUnit(detachment, reference, index)
+  );
+
+  const factionCounts = {};
+  for (const raw of rawDetachments) {
+    const refDetachment = findLiCommunityDetachment(reference, raw.id, raw.name);
+    if (!refDetachment?.faction) continue;
+    factionCounts[refDetachment.faction] = (factionCounts[refDetachment.faction] || 0) + 1;
+  }
+  const faction = Object.entries(factionCounts).sort((a,b) => b[1] - a[1])[0]?.[0] || "Legions Imperialis";
+  const summedPoints = rawDetachments.reduce((sum, detachment) => sum + (Number(detachment.points) || 0), 0);
+
+  return {
+    id:crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random()),
+    name:rosterName || sourceName + " list",
+    faction,
+    source:"li-community",
+    communitySource:sourceName,
+    gameSystemKey:"legions-imperialis",
+    importFormat:sourceName === "Legion Companion" ? "companion-text" : "legionbuilder-text",
+    points:declaredTotal || summedPoints || null,
+    units,
+    armyRules:liCommunityFormationRules(reference, formations),
+    formations,
+    referenceData:{rules:[], stratagems:[]},
+    importedAt:Date.now()
+  };
+}
+
+function liCommunityUnwrapJson(value) {
+  let current = value;
+
+  for (let depth = 0; depth < 5; depth++) {
+    if (typeof current === "string") {
+      try {
+        current = JSON.parse(current);
+        continue;
+      } catch {
+        return current;
+      }
+    }
+
+    if (!current || typeof current !== "object" || Array.isArray(current)) return current;
+
+    const directList = Array.isArray(current.formations) && Array.isArray(current.detachments);
+    if (directList) return current;
+
+    const next = ["list","army","roster","data","payload"]
+      .map(key => current[key])
+      .find(item => item && (typeof item === "object" || typeof item === "string"));
+
+    if (!next) return current;
+    current = next;
+  }
+
+  return current;
+}
+
+function liCompanionValue(object, keys, fallback = null) {
+  for (const key of keys) {
+    if (object?.[key] !== undefined && object?.[key] !== null && object?.[key] !== "") {
+      return object[key];
+    }
+  }
+  return fallback;
+}
+
+function normalizeLiCompanionJson(root, reference) {
+  const formations = [];
+  const rawDetachments = [];
+  const seenObjects = new Set();
+
+  function walk(node, context = {}) {
+    if (!node || typeof node !== "object") return;
+    if (seenObjects.has(node)) return;
+    seenObjects.add(node);
+
+    if (Array.isArray(node)) {
+      for (const item of node) walk(item, context);
+      return;
+    }
+
+    const name = liCompanionValue(node, ["name","detachmentName","unitName","title"], "");
+    const possibleId = liCompanionValue(node, ["detachmentId","detachment_id","dataId","data_id","unitId","unit_id","id"], null);
+    const refDetachment = findLiCommunityDetachment(reference, possibleId, name);
+
+    const likelyFormation = name && (
+      /formation/i.test(String(liCompanionValue(node, ["type","kind","entityType"], ""))) ||
+      Array.isArray(node.detachments) ||
+      Array.isArray(node.slots)
+    );
+    const refFormation = likelyFormation
+      ? findLiCommunityFormation(reference, liCompanionValue(node, ["dataId","data_id","formationId","formation_id","id"], null), name)
+      : null;
+
+    let nextContext = context;
+    if (refFormation) {
+      const formation = {
+        id:liCompanionValue(node, ["id","formationId","formation_id"], "companion-formation-" + formations.length),
+        dataId:refFormation.id,
+        name:refFormation.name,
+        nickname:liCompanionValue(node, ["nickname","customName"], "")
+      };
+      formations.push(formation);
+      nextContext = {...context, formationName:refFormation.name};
+    }
+
+    const typeText = normalize(String(liCompanionValue(node, ["type","kind","entityType","slotType","slot_type"], "")));
+    const hasDetachmentSignals =
+      refDetachment &&
+      (
+        /detachment|unit/.test(typeText) ||
+        node.size !== undefined ||
+        node.modelCount !== undefined ||
+        node.models !== undefined ||
+        node.points !== undefined ||
+        node.cost !== undefined ||
+        node.loadout !== undefined ||
+        node.loadouts !== undefined ||
+        node.upgrades !== undefined ||
+        node.weapons !== undefined
+      );
+
+    if (hasDetachmentSignals) {
+      const notes = [];
+      const selectedWeapons = [];
+      const configValues = [
+        node.upgrades,
+        node.loadout,
+        node.loadouts,
+        node.equipment,
+        node.weapons,
+        node.options
+      ].filter(value => value !== undefined && value !== null);
+
+      for (const value of configValues) {
+        const text = liCommunitySelectionText(value);
+        if (text) notes.push(text);
+      }
+
+      function collectWeaponNames(value) {
+        if (!value) return;
+        if (typeof value === "string") {
+          selectedWeapons.push(value);
+          return;
+        }
+        if (Array.isArray(value)) {
+          value.forEach(collectWeaponNames);
+          return;
+        }
+        if (typeof value === "object") {
+          const weaponName = liCompanionValue(value, ["weapon","weaponName","name"], "");
+          if (weaponName && matchLiCommunityWeapon(reference, weaponName)) selectedWeapons.push(weaponName);
+          for (const item of Object.values(value)) {
+            if (item !== weaponName) collectWeaponNames(item);
+          }
+        }
+      }
+      collectWeaponNames(node.weapons);
+      collectWeaponNames(node.loadout);
+      collectWeaponNames(node.loadouts);
+
+      rawDetachments.push({
+        id:refDetachment.id,
+        name:refDetachment.name,
+        slotType:liCompanionValue(node, ["slotType","slot_type","category","role"], refDetachment.types?.[0] || ""),
+        formationName:nextContext.formationName || "",
+        size:Number(liCompanionValue(node, ["size","modelCount","model_count","models","count"], refDetachment.baseSize || 0)) || refDetachment.baseSize || null,
+        points:Number(liCompanionValue(node, ["points","totalPoints","total_points","cost"], refDetachment.baseCost || 0)) || refDetachment.baseCost || null,
+        notes:dedupeBy(notes, note => normalize(note)),
+        selectedWeapons:dedupeBy(selectedWeapons, weapon => normalize(weapon)),
+        source:"Legion Companion"
+      });
+      return;
+    }
+
+    for (const [key, value] of Object.entries(node)) {
+      if (["reference","metadata","rules","weaponProfiles","datasheet"].includes(key)) continue;
+      if (value && typeof value === "object") walk(value, nextContext);
+    }
+  }
+
+  walk(root);
+
+  const uniqueDetachments = dedupeBy(
+    rawDetachments,
+    detachment => [
+      detachment.formationName,
+      detachment.slotType,
+      detachment.name,
+      detachment.size,
+      detachment.points,
+      JSON.stringify(detachment.notes)
+    ].map(normalize).join("|")
+  );
+
+  if (!uniqueDetachments.length) {
+    throw new Error(
+      "This JSON was readable, but I could not identify Legion Companion detachments. Try Legion Companion's LegionBuilder-compatible JSON export or Export as Text."
+    );
+  }
+
+  const units = uniqueDetachments.map((detachment, index) =>
+    buildLiCommunityUnit(detachment, reference, index)
+  );
+  const factionCounts = {};
+  for (const detachment of uniqueDetachments) {
+    const refDetachment = findLiCommunityDetachment(reference, detachment.id, detachment.name);
+    if (!refDetachment?.faction) continue;
+    factionCounts[refDetachment.faction] = (factionCounts[refDetachment.faction] || 0) + 1;
+  }
+
+  return {
+    id:crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random()),
+    name:liCompanionValue(root, ["name","armyName","army_name","title"], "Legion Companion list"),
+    faction:liCompanionValue(root, ["faction","mainFaction","main_faction"],
+      Object.entries(factionCounts).sort((a,b) => b[1] - a[1])[0]?.[0] || "Legions Imperialis"),
+    source:"li-community",
+    communitySource:"Legion Companion",
+    gameSystemKey:"legions-imperialis",
+    importFormat:"companion-json",
+    points:uniqueDetachments.reduce((sum, detachment) => sum + (Number(detachment.points) || 0), 0) || null,
+    units,
+    armyRules:liCommunityFormationRules(reference, formations),
+    formations,
+    referenceData:{rules:[], stratagems:[]},
+    importedAt:Date.now()
+  };
+}
+
+async function parseLiCommunityPayload(payload) {
+  const reference = await loadLiCommunityReference();
+  const text = String(payload || "").trim();
+  if (!text) throw new Error("Paste or choose a Legion Builder / Legion Companion export first.");
+
+  if (/^[\[{]/.test(text)) {
+    let parsed;
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      throw new Error("The JSON export could not be read.");
+    }
+
+    const unwrapped = liCommunityUnwrapJson(parsed);
+    if (unwrapped && Array.isArray(unwrapped.formations) && Array.isArray(unwrapped.detachments)) {
+      const sourceName = /companion/i.test(JSON.stringify(parsed).slice(0, 4000))
+        ? "Legion Companion"
+        : "Legion Builder";
+      return normalizeLiBuilderJsonList(unwrapped, reference, sourceName);
+    }
+
+    return normalizeLiCompanionJson(unwrapped, reference);
+  }
+
+  return parseLiCommunityText(text, reference);
+}
+
+async function importLiCommunityPayload(payload, origin = "paste") {
+  if (!isLegionsImperialisMode()) {
+    toast("Switch to Legions Imperialis before importing this list.");
+    return;
+  }
+
+  const button = els.liCommunityImportButton;
+  if (button) {
+    button.disabled = true;
+    button.textContent = "Importing…";
+  }
+  if (els.liCommunityImportStatus) {
+    els.liCommunityImportStatus.dataset.busy = "1";
+    els.liCommunityImportStatus.textContent = "Reading list and matching detachments…";
+  }
+
+  try {
+    const roster = await parseLiCommunityPayload(payload);
+    const existingIndex = state.rosters.findIndex(existing =>
+      existing.source === "li-community" &&
+      normalize(existing.communitySource) === normalize(roster.communitySource) &&
+      normalize(existing.name) === normalize(roster.name) &&
+      normalize(existing.faction) === normalize(roster.faction)
+    );
+
+    if (existingIndex >= 0) {
+      state.rosters.splice(existingIndex, 1, roster);
+      state.activeRoster = existingIndex;
+    } else {
+      state.rosters.push(roster);
+      state.activeRoster = state.rosters.length - 1;
+    }
+
+    state.unitBrowserSourceId = "roster:" + roster.id;
+    localStorage.setItem("tv_unit_browser_source", state.unitBrowserSourceId);
+    state.selected = null;
+    state.selectedRosterId = null;
+
+    persist();
+    renderAll();
+    switchPage("datasheets", {silent:true});
+
+    if (origin === "paste" && els.liCommunityInput) els.liCommunityInput.value = "";
+    if (els.liCommunityImportStatus) {
+      els.liCommunityImportStatus.dataset.busy = "";
+      els.liCommunityImportStatus.textContent =
+        "Imported " + roster.units.length + " detachments · " +
+        roster.communitySource +
+        (roster.points != null ? " · " + roster.points + " pts" : "");
+    }
+    toast("Imported " + roster.name);
+  } catch (error) {
+    console.error("Legions community import failed", error);
+    if (els.liCommunityImportStatus) {
+      els.liCommunityImportStatus.dataset.busy = "";
+      els.liCommunityImportStatus.textContent =
+        error.message || "Could not import this Legions Imperialis list.";
+    }
+    toast(error.message || "Could not import this Legions Imperialis list.");
+  } finally {
+    if (button) {
+      button.disabled = false;
+      button.textContent = "Import pasted list";
+    }
+  }
+}
+
+async function handleLiCommunityFile(event) {
+  const file = event.target.files?.[0];
+  if (!file) return;
+
+  try {
+    const text = await file.text();
+    await importLiCommunityPayload(text, "file");
+  } finally {
+    event.target.value = "";
+  }
+}
+
+
 function rosterSourceSummary(roster) {
   if (roster?.source === "opr") {
     return "OnePageRules · " + (roster.gameName || oprGameName(roster.gameSystem)) + " · Army Forge";
