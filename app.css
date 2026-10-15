@@ -6054,6 +6054,53 @@ body.game-dnd .stat-grid {
   grid-template-columns: repeat(6, minmax(90px, 1fr));
 }
 
+.dnd-mini-tabs {
+  display: flex;
+  gap: 6px;
+  margin: 0 0 10px;
+  padding: 5px;
+  border: 1px solid #303c46;
+  border-radius: 4px;
+  background: #0c1217;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.dnd-mini-tab {
+  flex: 0 0 auto;
+  min-height: 35px;
+  padding: 0 13px;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  background: transparent;
+  color: #8e9da7;
+  font: inherit;
+  font-size: .75rem;
+  font-weight: 800;
+  letter-spacing: .035em;
+  cursor: pointer;
+}
+
+.dnd-mini-tab:hover {
+  background: #131d24;
+  color: #dbe6eb;
+}
+
+.dnd-mini-tab.active {
+  border-color: #3d6672;
+  background: #15242b;
+  color: #dbf5fa;
+  box-shadow: inset 0 -2px 0 var(--accent-strong);
+}
+
+.dnd-tab-panel.hidden {
+  display: none;
+}
+
+.dnd-tab-panel {
+  min-height: 120px;
+}
+
 .dnd-ability-section .section-heading-row,
 .dnd-economy-section .section-heading-row,
 .dnd-slot-section .section-heading-row,
@@ -6314,6 +6361,15 @@ body.game-dnd .stat-grid {
 
   .dnd-ability-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .dnd-mini-tabs {
+    margin-inline: -2px;
+  }
+
+  .dnd-mini-tab {
+    min-height: 38px;
+    padding-inline: 12px;
   }
 
   .dnd-economy-grid {
