@@ -3007,12 +3007,25 @@ function parseGyrinxDetailRows(cardRoot) {
       if (!label || !value) continue;
 
       const key = normalize(label);
-      if (["skills","rules","powers"].includes(key)) {
+      if ([
+        "skills",
+        "rules",
+        "powers",
+        "psyker",
+        "advancements",
+        "lasting injuries",
+        "lasting injury",
+        "lasting damage"
+      ].includes(key)) {
         const category = key === "skills"
           ? "Skill"
-          : key === "powers"
+          : ["powers","psyker"].includes(key)
             ? "Power"
-            : "Rule";
+            : key === "advancements"
+              ? "Advancement"
+              : key.startsWith("lasting")
+                ? "Injury / Damage"
+                : "Rule";
         for (const name of splitGyrinxNames(value)) {
           rules.push({name, text:"", category});
         }
