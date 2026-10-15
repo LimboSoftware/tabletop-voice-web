@@ -492,7 +492,7 @@ const GAME_PROVIDERS = [
       {id:"necromunda", name:"Necromunda", detail:"Planned", available:false},
       {id:"warcry", name:"Warcry", detail:"Planned", available:false},
       {id:"underworlds", name:"Warhammer Underworlds", detail:"Planned", available:false},
-      {id:"legions-imperialis", name:"Legions Imperialis", detail:"New Recruit · Legion Builder · Legion Companion", available:true, beta:true},
+      {id:"legions-imperialis", name:"Legions Imperialis", detail:"New Recruit · Legion Companion", available:true, beta:true},
       {id:"adeptus-titanicus", name:"Adeptus Titanicus", detail:"Planned", available:false},
       {id:"blood-bowl", name:"Blood Bowl", detail:"Planned", available:false},
       {id:"middle-earth", name:"Middle-earth Strategy Battle Game", detail:"Planned", available:false},
@@ -957,7 +957,7 @@ function applyGameSystemUi() {
           : killTeam
             ? "Import your Kill Team from New Recruit for operative profiles, weapons, abilities and team rules at the table."
             : legionsImperialis
-              ? "Import your Legions Imperialis army from New Recruit, Legion Builder or Legion Companion for detachment profiles, weapons and formation rules at the table."
+              ? "Import your Legions Imperialis army from New Recruit or Legion Companion for detachment profiles, weapons and formation rules at the table."
               : "Bring in your New Recruit lists, or load the wider dataset when you need broader 40K lookup at the table.";
   }
 
@@ -2216,7 +2216,7 @@ function liBuilderSlotNotes(list, detachment) {
   };
 }
 
-function normalizeLiBuilderJsonList(rawList, reference, sourceName = "Legion Builder") {
+function normalizeLiBuilderJsonList(rawList, reference, sourceName = "Legion Companion") {
   const list = rawList || {};
   const formationMap = new Map(
     (list.formations || []).map(formation => [String(formation.id), formation])
@@ -2279,7 +2279,7 @@ function normalizeLiBuilderJsonList(rawList, reference, sourceName = "Legion Bui
     source:"li-community",
     communitySource:sourceName,
     gameSystemKey:"legions-imperialis",
-    importFormat:sourceName === "Legion Companion" ? "companion-json" : "legionbuilder-json",
+    importFormat:"companion-json",
     points:totalPoints || Number(list.points) || null,
     units,
     armyRules:liCommunityFormationRules(reference, formations),
@@ -2301,11 +2301,9 @@ function cleanLiCommunityLine(line = "") {
 
 function parseLiCommunityText(text, reference) {
   const rawText = String(text || "").trim();
-  if (!rawText) throw new Error("Paste a Legion Builder or Legion Companion list first.");
+  if (!rawText) throw new Error("Paste a Legion Companion export first.");
 
-  const sourceName = /legion\s*companion/i.test(rawText)
-    ? "Legion Companion"
-    : "Legion Builder";
+  const sourceName = "Legion Companion";
 
   const lines = rawText.split("\n");
   const slotNamePattern = "(HQ|CORE|SUPPORT|TRANSPORT|VANGUARD|LIGHT\\s+ARMOU?R|BATTLE\\s+TANK|HEAVY\\s+ARMOU?R|ARTILLERY|BASTION|AIR\\s+SUPPORT|KNIGHT|TITAN|DEDICATED)";
@@ -2448,7 +2446,7 @@ function parseLiCommunityText(text, reference) {
 
   if (!rawDetachments.length) {
     throw new Error(
-      "No detachments were found. From Legion Builder copy the List View; from Legion Companion use Export as Text or JSON."
+      "No detachments were found. In Legion Companion, use Export as Text or JSON and import that export here."
     );
   }
 
@@ -2472,7 +2470,7 @@ function parseLiCommunityText(text, reference) {
     source:"li-community",
     communitySource:sourceName,
     gameSystemKey:"legions-imperialis",
-    importFormat:sourceName === "Legion Companion" ? "companion-text" : "legionbuilder-text",
+    importFormat:"companion-text",
     points:declaredTotal || summedPoints || null,
     units,
     armyRules:liCommunityFormationRules(reference, formations),
@@ -2651,7 +2649,7 @@ function normalizeLiCompanionJson(root, reference) {
 
   if (!uniqueDetachments.length) {
     throw new Error(
-      "This JSON was readable, but I could not identify Legion Companion detachments. Try Legion Companion's LegionBuilder-compatible JSON export or Export as Text."
+      "This JSON was readable, but I could not identify Legion Companion detachments. Try a fresh Legion Companion JSON export or Export as Text."
     );
   }
 
@@ -2686,7 +2684,7 @@ function normalizeLiCompanionJson(root, reference) {
 async function parseLiCommunityPayload(payload) {
   const reference = await loadLiCommunityReference();
   const text = String(payload || "").trim();
-  if (!text) throw new Error("Paste or choose a Legion Builder / Legion Companion export first.");
+  if (!text) throw new Error("Paste or choose a Legion Companion export first.");
 
   if (/^[\[{]/.test(text)) {
     let parsed;
@@ -2698,10 +2696,7 @@ async function parseLiCommunityPayload(payload) {
 
     const unwrapped = liCommunityUnwrapJson(parsed);
     if (unwrapped && Array.isArray(unwrapped.formations) && Array.isArray(unwrapped.detachments)) {
-      const sourceName = /companion/i.test(JSON.stringify(parsed).slice(0, 4000))
-        ? "Legion Companion"
-        : "Legion Builder";
-      return normalizeLiBuilderJsonList(unwrapped, reference, sourceName);
+      return normalizeLiBuilderJsonList(unwrapped, reference, "Legion Companion");
     }
 
     return normalizeLiCompanionJson(unwrapped, reference);
