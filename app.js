@@ -4320,6 +4320,11 @@ async function handleDndBeyondJsonFile(event) {
 }
 
 function rosterSourceSummary(roster) {
+  if (roster?.source === "dndbeyond") {
+    return "D&D 5e · D&D Beyond · " +
+      (roster.importFormat === "json" ? "JSON" : "Public character");
+  }
+
   if (roster?.source === "gyrinx") {
     return "Necromunda · Gyrinx · N26";
   }
@@ -7522,7 +7527,7 @@ function getSearchCollections() {
   const collections = [];
 
   state.rosters.forEach((roster, rosterIndex) => {
-    if ((roster.source === "new-recruit" || roster.source === "opr") && rosterMatchesSelectedGame(roster)) {
+    if (["new-recruit","opr","dndbeyond"].includes(roster.source) && rosterMatchesSelectedGame(roster)) {
       collections.push({
         id:"roster:" + roster.id,
         label:roster.name,
@@ -7620,7 +7625,7 @@ function renderActiveArmySelector() {
 }
 
 function isImportedRosterSource(roster) {
-  return ["new-recruit","opr","li-community","gyrinx"].includes(roster?.source);
+  return ["new-recruit","opr","li-community","gyrinx","dndbeyond"].includes(roster?.source);
 }
 
 function importedRosterUnitNoun() {
@@ -7628,6 +7633,7 @@ function importedRosterUnitNoun() {
   if (isKillTeamMode()) return "operatives";
   if (isNecromundaMode()) return "fighters";
   if (isLegionsImperialisMode()) return "detachments";
+  if (isDndMode()) return "characters";
   return "units";
 }
 
@@ -7650,7 +7656,9 @@ function getUnitBrowserSources() {
         ? "gyrinx"
         : roster.source === "li-community"
           ? "li-community"
-          : "new-recruit";
+          : roster.source === "dndbeyond"
+            ? "dndbeyond"
+            : "new-recruit";
 
     const necromundaRating = roster.source === "gyrinx" && roster.necromunda?.rating != null
       ? "Rating " + roster.necromunda.rating + " · "
@@ -7705,7 +7713,7 @@ function getUnitBrowserSources() {
 
   // Prefer imported-list versions where an entry also exists in a whole-army source.
   const sourceRank = source =>
-    ["new-recruit","opr","gyrinx","li-community"].includes(source.kind) ? 0 : 1;
+    ["new-recruit","opr","gyrinx","li-community","dndbeyond"].includes(source.kind) ? 0 : 1;
   for (const source of [...sources].sort((a,b) => sourceRank(a) - sourceRank(b))) {
     for (const entry of source.entries) {
       const key = entry.unit.system === "warfleet"
