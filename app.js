@@ -8605,7 +8605,9 @@ function renderDetail(unit) {
   const necromundaVehicle = unit.system === "necromunda" &&
     (unit.categories || []).some(category => normalize(category) === "vehicle");
 
-  const statOrder = unit.system === "necromunda"
+  const statOrder = unit.system === "dnd"
+    ? ["hp","ac","speed","init","pb","level"]
+    : unit.system === "necromunda"
     ? necromundaVehicle
       ? ["m","fr","front toughness","sd","side toughness","rr","rear toughness","hp","hit points","hnd","handling","cl"]
       : ["m","ws","bs","s","t","w","i","a","ld","cl","wil","int"]
@@ -8652,6 +8654,12 @@ function renderDetail(unit) {
           <strong>${escapeHtml(stat.value)}</strong>
         </div>`).join("")
     : "";
+
+  if (unit.system === "dnd") {
+    els.detailSections.innerHTML = renderDndCharacterSections(unit);
+    bindDndDetailControls(unit);
+    return;
+  }
 
   const sections = [];
 
