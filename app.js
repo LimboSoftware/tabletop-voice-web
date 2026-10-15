@@ -823,7 +823,7 @@ function showEntryModalIfNeeded() {
   const rootChooser = isRootGameChooserPath();
   if (rootChooser || !state.gameSystem || !pickerSeen) {
     els.firstRunModal?.classList.add("hidden");
-    els.gameSystemClose?.classList.toggle("hidden", !state.gameSystem);
+    els.gameSystemClose?.classList.toggle("hidden", rootChooser || !state.gameSystem);
     els.gameSystemModal?.classList.remove("hidden");
     return;
   }
