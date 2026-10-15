@@ -3714,7 +3714,7 @@ function renderUnitBrowserReferences(source, data = null) {
       ${data.note ? `<div class="roster-refresh-note">${escapeHtml(data.note)}</div>` : ""}
       ${(source.kind === "opr" || inferRosterGameSystem(source.roster) !== "40k") ? "" : renderUnitBrowserReferenceSection("Stratagems", data.stratagems, "stratagem")}
       ${renderUnitBrowserReferenceSection(
-        (source.kind === "opr" || inferRosterGameSystem(source.roster) === "grimdark") ? "Rules" : "Army Rules",
+        (source.kind === "opr" || ["grimdark","heresy"].includes(inferRosterGameSystem(source.roster))) ? "Rules" : "Army Rules",
         data.armyRules,
         "rule"
       )}
@@ -5075,7 +5075,8 @@ function renderDetail(unit) {
     ? [
         "m","ws","bs","s","t","w","i","a","ld","cl","wp","in","sav","inv",
         "front armour","side armour","rear armour","front","rear",
-        "primary","exposed","hp","transport capacity","transport"
+        "primary armour","exposed armour","primary","exposed","hp",
+        "transport capacity","transport","access points"
       ]
     : ["m","t","sv","w","ld","oc","insv"];
   const statMap = new Map((unit.stats || []).map(stat => [normalize(stat.label), stat]));
@@ -5096,6 +5097,10 @@ function renderDetail(unit) {
     : "";
 
   const sections = [];
+
+  if (unit.system === "heresy" && unit.heresyComponents?.length) {
+    sections.push(renderHeresyComponentSection(unit.heresyComponents));
+  }
 
   if (unit.profiles?.length) {
     const rangedWeapons = unit.profiles.filter(profile => normalize(profile.type || "").includes("ranged"));
@@ -5274,6 +5279,42 @@ function cleanUniqueRuleText(text = "") {
     .trim();
 }
 
+
+
+function renderHeresyComponentSection(components = []) {
+  if (!components.length) return "";
+
+  const columns = ["M","BS","Primary Armour","Exposed Armour","HP","Transport Capacity"];
+  const rows = components.map(component => {
+    const values = new Map(
+      (component.values || []).map(item => [normalize(item.label), item.value ?? ""])
+    );
+    return {
+      name:component.name || component.type || "Component",
+      values:columns.map(column => values.get(normalize(column)) || "—")
+    };
+  });
+
+  const head = columns.map(column => "<th>" + escapeHtml(column) + "</th>").join("");
+  const body = rows.map(row => {
+    const cells = row.values.map((value, index) =>
+      '<td data-label="' + escapeHtml(columns[index]) + '" class="weapon-number">' +
+      escapeHtml(value) + '</td>'
+    ).join("");
+
+    return '<tr class="weapon-row weapon-stat-row">' +
+      '<td class="weapon-name"><strong>' + escapeHtml(row.name) + '</strong></td>' +
+      cells +
+      '</tr>';
+  }).join("");
+
+  return '<section class="detail-section weapon-section heresy-component-section">' +
+    '<div class="section-heading-row"><h3>Titan structure</h3>' +
+    '<span class="section-count">' + rows.length + '</span></div>' +
+    '<div class="weapon-table-wrap"><table class="weapon-table compact-weapon-table heresy-component-table">' +
+    '<thead><tr><th class="weapon-name-column">Section</th>' + head + '</tr></thead>' +
+    '<tbody>' + body + '</tbody></table></div></section>';
+}
 
 function renderHeresyWeaponSection(profiles, title = "Weapons", kind = "ranged") {
   const melee = kind === "melee";
