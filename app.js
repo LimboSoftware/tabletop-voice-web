@@ -2764,6 +2764,26 @@ function heresyRuleProfileToRule(profile) {
   };
 }
 
+
+function newRecruitSelectionPointTotal(selection) {
+  let total = 0;
+
+  function walk(node) {
+    if (!node || typeof node !== "object") return;
+
+    for (const cost of node.costs || []) {
+      if (!isPointsCostName(cost?.name)) continue;
+      const value = Number(cost?.value);
+      if (Number.isFinite(value)) total += value;
+    }
+
+    for (const child of node.selections || []) walk(child);
+  }
+
+  walk(selection);
+  return total;
+}
+
 function parseNewRecruitSelection(selection) {
   const allProfiles = collectProfiles(selection);
   const unitProfiles = allProfiles.filter(profile =>
@@ -2856,8 +2876,11 @@ function parseNewRecruitSelection(selection) {
     rule => normalize((rule.category || "") + "|" + rule.name + "|" + rule.text)
   );
 
-  const pts = (selection.costs || []).find(cost => isPointsCostName(cost.name))?.value;
-  if (pts != null) stats.push({label:"Pts", value:String(pts)});
+  const directPts = (selection.costs || []).find(cost => isPointsCostName(cost.name))?.value;
+  const pts = system === "heresy"
+    ? newRecruitSelectionPointTotal(selection)
+    : directPts;
+  if (pts != null && Number(pts) !== 0) stats.push({label:"Pts", value:String(pts)});
 
   const name = selection.name || primaryUnitProfile.name || "Unit";
   const categories = dedupeBy(
