@@ -2786,6 +2786,19 @@ function parseNewRecruitSelection(selection) {
       })).filter(item => item.label && item.value !== "")
     }));
 
+  const heresyModelProfiles = heresyProfile
+    ? unitProfiles
+        .filter(profile => !/^titan\s/i.test(String(profile?.typeName || "")))
+        .map(profile => ({
+          name:String(profile.name || selection.name || "Model").trim(),
+          type:String(profile.typeName || ""),
+          values:(profile.characteristics || []).map(characteristic => ({
+            label:characteristic.name || "",
+            value:characteristicValue(characteristic)
+          })).filter(item => item.label && item.value !== "")
+        }))
+    : [];
+
   const stats = (primaryUnitProfile.characteristics || []).map(characteristic => ({
     label:characteristic.name || "",
     value:characteristicValue(characteristic)
@@ -2864,6 +2877,7 @@ function parseNewRecruitSelection(selection) {
     rules:abilities,
     profiles:weapons,
     heresyComponents,
+    heresyModelProfiles,
     selectionIds:collectSelectionIds(selection),
     incomingAssociations:normalizeUnitAssociations(selection.incomingAssociations || []),
     outgoingAssociations:normalizeUnitAssociations(selection.associations || []),
@@ -5098,6 +5112,10 @@ function renderDetail(unit) {
 
   const sections = [];
 
+  if (unit.system === "heresy" && unit.heresyModelProfiles?.length > 1) {
+    sections.push(renderHeresyModelProfileSection(unit.heresyModelProfiles));
+  }
+
   if (unit.system === "heresy" && unit.heresyComponents?.length) {
     sections.push(renderHeresyComponentSection(unit.heresyComponents));
   }
@@ -5280,6 +5298,46 @@ function cleanUniqueRuleText(text = "") {
 }
 
 
+
+
+function renderHeresyModelProfileSection(profiles = []) {
+  if (profiles.length < 2) return "";
+
+  const order = [
+    "M","WS","BS","S","T","W","I","A","LD","CL","WP","IN","SAV","INV",
+    "Front Armour","Side Armour","Rear Armour","Front","Rear","HP"
+  ];
+
+  const maps = profiles.map(profile => new Map(
+    (profile.values || []).map(item => [normalize(item.label), item.value ?? ""])
+  ));
+  const columns = order.filter(column =>
+    maps.some(values => values.has(normalize(column)))
+  );
+
+  const head = columns.map(column => "<th>" + escapeHtml(column) + "</th>").join("");
+  const body = profiles.map((profile, rowIndex) => {
+    const values = maps[rowIndex];
+    const type = values.get("type") || "";
+    const cells = columns.map(column =>
+      '<td data-label="' + escapeHtml(column) + '" class="weapon-number">' +
+      escapeHtml(values.get(normalize(column)) || "—") + '</td>'
+    ).join("");
+
+    return '<tr class="weapon-row weapon-stat-row">' +
+      '<td class="weapon-name"><strong>' + escapeHtml(profile.name) + '</strong>' +
+      (type ? '<small>' + escapeHtml(type) + '</small>' : '') + '</td>' +
+      cells +
+      '</tr>';
+  }).join("");
+
+  return '<section class="detail-section weapon-section heresy-profile-section">' +
+    '<div class="section-heading-row"><h3>Model profiles</h3>' +
+    '<span class="section-count">' + profiles.length + '</span></div>' +
+    '<div class="weapon-table-wrap"><table class="weapon-table compact-weapon-table heresy-profile-table">' +
+    '<thead><tr><th class="weapon-name-column">Model</th>' + head + '</tr></thead>' +
+    '<tbody>' + body + '</tbody></table></div></section>';
+}
 
 function renderHeresyComponentSection(components = []) {
   if (!components.length) return "";
