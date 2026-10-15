@@ -8842,50 +8842,123 @@ function dndFindAction(unit, actionId) {
     .find(action => String(action.id) === String(actionId)) || null;
 }
 
-function dndUseAction(unit, actionId) {
+function dndUseAction(unit, actionId, requestedCastLevel = null) {
   const action = dndFindAction(unit, actionId);
   if (!action) return;
   const runtime = getDndRuntimeState(unit);
+  let castLevel = action.kind === "spell" ? Number(action.level || 0) : 0;
 
   if (action.kind === "spell" && action.level > 0 && action.usesSpellSlot !== false) {
-    const eligible = (unit.dnd?.spellSlots || [])
-      .filter(slot => slot.level >= action.level && dndRemainingSlots(unit, runtime, slot) > 0)
-      .sort((a,b) => a.level - b.level);
-    const slot = eligible[0];
-    if (!slot) {
-      toast("No level " + action.level + "+ spell slot is available.");
+    const minimum = Math.max(Number(action.level || 1), Number(action.castAtLevel || 0));
+    const desired = Math.max(minimum, Number(requestedCastLevel || minimum));
+    const slot = (unit.dnd?.spellSlots || []).find(item => item.level === desired);
+
+    if (!slot || dndRemainingSlots(unit, runtime, slot) <= 0) {
+      toast("No level " + desired + " spell slot is available.");
       return;
     }
+
     runtime.slots[String(slot.level)] = dndSlotUsed(unit, runtime, slot) + 1;
+    castLevel = slot.level;
   }
 
   const economyKey = dndActionEconomyKey(action);
   if (economyKey) runtime.economy[economyKey] = true;
 
-  let summary = action.kind === "spell" ? "Cast " + action.name : action.name;
+  let summary = action.kind === "spell"
+    ? "Cast " + action.name + (castLevel > 0 ? " · L" + castLevel : "")
+    : action.name;
   const details = [];
+
+  if (action.kind === "spell" && castLevel > 0) {
+    details.push("Cast at level " + castLevel);
+  }
+
   if (action.toHit != null) {
     const d20 = dndRollDie(20);
     const total = d20 + Number(action.toHit || 0);
-    summary = "Attack roll " + total;
+    summary = "Attack roll " + total +
+      (action.kind === "spell" && castLevel > 0 ? " · L" + castLevel : "");
     details.push("d20 " + d20 + " " + dndSigned(action.toHit));
   } else if (action.saveDc != null) {
-    summary = "DC " + action.saveDc + (action.saveAbility ? " " + String(action.saveAbility).toUpperCase() : "") + " save";
+    summary = "DC " + action.saveDc +
+      (action.saveAbility ? " " + String(action.saveAbility).toUpperCase() : "") +
+      " save" +
+      (action.kind === "spell" && castLevel > 0 ? " · L" + castLevel : "");
   }
+
   if (action.damage) {
-    const damage = dndRollExpression(action.damage);
-    if (damage) {
-      details.push("Damage " + damage.total + " (" + damage.rolls.join("+") +
-        (damage.bonus ? (damage.bonus > 0 ? "+" : "") + damage.bonus : "") + ")" +
-        (action.damageType ? " " + action.damageType : ""));
+    const baseDamage = dndRollExpression(action.damage);
+    const upcastSteps = action.kind === "spell"
+      ? Math.max(0, castLevel - Number(action.level || 0))
+      : 0;
+    const extraRolls = [];
+
+    if (upcastSteps > 0 && action.upcastDamage) {
+      for (let index = 0; index < upcastSteps; index++) {
+        const extra = dndRollExpression(action.upcastDamage);
+        if (extra) extraRolls.push(extra);
+      }
+    }
+
+    if (baseDamage) {
+      const total = baseDamage.total + extraRolls.reduce((sum, roll) => sum + roll.total, 0);
+      const rollParts = [
+        action.damage + "=" + baseDamage.total,
+        ...extraRolls.map(roll => action.upcastDamage + "=" + roll.total)
+      ];
+      details.push(
+        "Damage " + total +
+        " (" + rollParts.join(" + ") + ")" +
+        (action.damageType ? " " + action.damageType : "")
+      );
     }
   }
-  runtime.lastRoll = {actionId:action.id, summary, detail:details.join(" · "), at:Date.now()};
+
+  runtime.lastRoll = {
+    actionId:action.id,
+    castLevel,
+    summary,
+    detail:details.join(" · "),
+    at:Date.now()
+  };
   saveDndRuntimeState(unit, runtime);
   state.dndFocusedActionId = action.id;
   state.dndDetailTab = action.kind === "spell" ? "spells" : "actions";
+  state.dndListFilter = "";
+  state.dndListKind = "";
   playDndActionSound(action.kind);
   renderDetail(unit);
+}
+
+function dndApplyRest(unit, type) {
+  const runtime = getDndRuntimeState(unit);
+  runtime.economy = {action:false, bonus:false, reaction:false};
+  runtime.lastRoll = null;
+
+  if (type === "long") {
+    for (const slot of unit?.dnd?.spellSlots || []) {
+      runtime.slots[String(slot.level)] = 0;
+    }
+    saveDndRuntimeState(unit, runtime);
+    renderDetail(unit);
+    toast("Long rest — spell slots restored");
+    return;
+  }
+
+  let restoredPactLevels = 0;
+  for (const slot of unit?.dnd?.spellSlots || []) {
+    const pools = slot.pools || [];
+    if (pools.includes("pact") && !pools.includes("spell")) {
+      runtime.slots[String(slot.level)] = 0;
+      restoredPactLevels++;
+    }
+  }
+  saveDndRuntimeState(unit, runtime);
+  renderDetail(unit);
+  toast(restoredPactLevels
+    ? "Short rest — pact slots restored"
+    : "Short rest");
 }
 
 function bindDndDetailControls(unit = state.selected) {
@@ -8895,6 +8968,8 @@ function bindDndDetailControls(unit = state.selected) {
     button.addEventListener("click", () => {
       const tab = button.dataset.dndTab;
       state.dndDetailTab = tab;
+      state.dndListFilter = "";
+      state.dndListKind = "";
 
       els.detailSections.querySelectorAll("[data-dnd-tab]").forEach(tabButton => {
         const active = tabButton.dataset.dndTab === tab;
@@ -8921,9 +8996,26 @@ function bindDndDetailControls(unit = state.selected) {
   els.detailSections.querySelector("[data-dnd-reset-turn]")?.addEventListener("click", () => {
     const runtime = getDndRuntimeState(unit);
     runtime.economy = {action:false, bonus:false, reaction:false};
+    runtime.lastRoll = null;
     saveDndRuntimeState(unit, runtime);
     renderDetail(unit);
     toast("New turn — action economy reset");
+  });
+
+  els.detailSections.querySelector("[data-dnd-short-rest]")?.addEventListener("click", () => {
+    dndApplyRest(unit, "short");
+  });
+
+  els.detailSections.querySelector("[data-dnd-long-rest]")?.addEventListener("click", () => {
+    dndApplyRest(unit, "long");
+  });
+
+  els.detailSections.querySelectorAll("[data-dnd-clear-list]").forEach(button => {
+    button.addEventListener("click", () => {
+      state.dndListFilter = "";
+      state.dndListKind = "";
+      renderDetail(unit);
+    });
   });
 
   els.detailSections.querySelectorAll("[data-dnd-slot-use]").forEach(button => {
@@ -8953,7 +9045,11 @@ function bindDndDetailControls(unit = state.selected) {
   });
 
   els.detailSections.querySelectorAll("[data-dnd-use-action]").forEach(button => {
-    button.addEventListener("click", () => dndUseAction(unit, button.dataset.dndUseAction));
+    button.addEventListener("click", () => {
+      const card = button.closest("[data-dnd-action-card]");
+      const castLevel = Number(card?.querySelector("[data-dnd-cast-level]")?.value || 0) || null;
+      dndUseAction(unit, button.dataset.dndUseAction, castLevel);
+    });
   });
 
   const addItem = () => {
