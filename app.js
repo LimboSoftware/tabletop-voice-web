@@ -4103,11 +4103,14 @@ function parseDndBeyondCharacterPayload(payload, sourceUrl = "") {
   const proficiencyBonus = dndProficiencyBonus(classes.level);
   const ac = dndArmorClass(root, scores);
   const overrideHp = dndNumber(root.overrideHitPoints, 0) || 0;
+  const constitutionHp = dndModifier(scores.con) * classes.level;
   const maxHp = Math.max(
     1,
     overrideHp > 0
       ? overrideHp
-      : (dndNumber(root.baseHitPoints, 1) || 1) + (dndNumber(root.bonusHitPoints, 0) || 0)
+      : (dndNumber(root.baseHitPoints, 1) || 1) +
+        constitutionHp +
+        (dndNumber(root.bonusHitPoints, 0) || 0)
   );
   const removedHp = Math.max(0, dndNumber(root.removedHitPoints, 0) || 0);
   const tempHp = Math.max(0, dndNumber(root.temporaryHitPoints, 0) || 0);
@@ -4196,7 +4199,7 @@ function extractDndBeyondCharacterId(value = "") {
 
   try {
     const url = new URL(text);
-    if (!["dndbeyond.com","www.dndbeyond.com"].includes(url.hostname.toLowerCase())) return "";
+    if (!["dndbeyond.com","www.dndbeyond.com","ddb.ac","www.ddb.ac"].includes(url.hostname.toLowerCase())) return "";
     const match = url.pathname.match(/\/characters\/(\d{1,20})(?:\/|$)/i);
     return match?.[1] || "";
   } catch {
