@@ -6813,3 +6813,26 @@ body.game-dnd .stat-grid {
     flex: 1 1 150px;
   }
 }
+
+
+/* Warhammer: The Old World */
+.old-world-unit-meta {
+  margin-top: .25rem;
+}
+
+.old-world-weapon-table .old-world-weapon-text {
+  min-width: 11rem;
+  white-space: normal;
+  line-height: 1.35;
+}
+
+.old-world-spell-card .dnd-action-meta {
+  margin: .5rem 0 .75rem;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 720px) {
+  .old-world-weapon-table .old-world-weapon-text {
+    min-width: 0;
+  }
+}
