@@ -6747,3 +6747,69 @@ body.game-dnd .stat-grid {
     flex-direction: column;
   }
 }
+
+
+/* Unit nickname editor */
+.nickname-toggle.active {
+  border-color: rgba(86, 214, 164, .72);
+}
+
+.nickname-card {
+  width: min(520px, calc(100vw - 28px));
+}
+
+.nickname-field {
+  display: grid;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+.nickname-field > span {
+  font-size: .78rem;
+  font-weight: 800;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  opacity: .72;
+}
+
+.nickname-field input {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 48px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel-strong, var(--panel));
+  color: inherit;
+  padding: 0 14px;
+  font: inherit;
+  font-size: 1rem;
+}
+
+.nickname-field input:focus {
+  outline: 2px solid rgba(105, 176, 255, .38);
+  outline-offset: 1px;
+}
+
+.nickname-help {
+  margin: 10px 0 0;
+  opacity: .72;
+  line-height: 1.45;
+}
+
+.nickname-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 18px;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 620px) {
+  .unit-top-statuses {
+    flex-wrap: wrap;
+  }
+
+  .nickname-actions > button {
+    flex: 1 1 150px;
+  }
+}
