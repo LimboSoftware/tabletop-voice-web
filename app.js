@@ -71,6 +71,13 @@ const els = {
   backToRosterButton: $("backToRosterButton"),
   battleShockToggle: $("battleShockToggle"),
   oncePerGameToggle: $("oncePerGameToggle"),
+  unitNicknameButton: $("unitNicknameButton"),
+  unitNicknameModal: $("unitNicknameModal"),
+  unitNicknameClose: $("unitNicknameClose"),
+  unitNicknameUnitName: $("unitNicknameUnitName"),
+  unitNicknameInput: $("unitNicknameInput"),
+  unitNicknameClear: $("unitNicknameClear"),
+  unitNicknameSave: $("unitNicknameSave"),
   voiceSearchWrap: $("voiceSearchWrap"),
   activeArmySelector: $("activeArmySelector"),
   quickLists: $("quickLists"),
@@ -310,6 +317,22 @@ function bindEvents() {
   els.backToRosterButton?.addEventListener("click", handleDatasheetBack);
   els.battleShockToggle?.addEventListener("click", () => toggleStatus("Battle-shocked"));
   els.oncePerGameToggle?.addEventListener("click", () => toggleStatus("Once-per-game used"));
+  els.unitNicknameButton?.addEventListener("click", openUnitNicknameModal);
+  els.unitNicknameClose?.addEventListener("click", closeUnitNicknameModal);
+  els.unitNicknameSave?.addEventListener("click", saveUnitNicknameFromModal);
+  els.unitNicknameClear?.addEventListener("click", clearUnitNicknameFromModal);
+  els.unitNicknameInput?.addEventListener("keydown", event => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      saveUnitNicknameFromModal();
+    } else if (event.key === "Escape") {
+      event.preventDefault();
+      closeUnitNicknameModal();
+    }
+  });
+  els.unitNicknameModal?.addEventListener("click", event => {
+    if (event.target === els.unitNicknameModal) closeUnitNicknameModal();
+  });
   els.pinButton.addEventListener("click", toggleSelectedPin);
   els.cpDown?.addEventListener("click", () => adjustCP(-1));
   els.cpUp?.addEventListener("click", () => adjustCP(1));
@@ -8479,7 +8502,7 @@ function renderResults(query = "") {
 
   for (const collection of collections) {
     for (const unit of collection.units || []) {
-      const score = scoreMatch(unit, q);
+      const score = scoreMatch(unit, q, collection.roster);
       if (score > 0) results.push({
         unit,
         roster:collection.roster,
@@ -8496,12 +8519,13 @@ function renderResults(query = "") {
 
   els.resultList.innerHTML = "";
   results.slice(0, 80).forEach(result => {
-    const {unit, rosterIndex, scopeLabel} = result;
+    const {unit, roster, rosterIndex, scopeLabel} = result;
+    const nickname = getUnitNickname(unit, roster);
     const button = document.createElement("button");
     button.className = "result-item" + (state.selected?.id === unit.id && state.activeRoster === rosterIndex ? " active" : "");
     button.innerHTML = `
       <strong>${escapeHtml(unit.name)}</strong>
-      <small>${escapeHtml(unit.type || "Unit")} · <span class="result-roster">${escapeHtml(scopeLabel)}</span></small>`;
+      <small>${nickname ? "Nickname: " + escapeHtml(nickname) + " · " : ""}${escapeHtml(unit.type || "Unit")} · <span class="result-roster">${escapeHtml(scopeLabel)}</span></small>`;
     button.addEventListener("click", () => selectUnitFromRoster(unit, rosterIndex));
     els.resultList.appendChild(button);
   });
@@ -8513,13 +8537,20 @@ function renderResults(query = "") {
   }
 }
 
-function scoreMatch(unit, q) {
+function scoreMatch(unit, q, roster = null) {
   const name = normalize(unit.name);
+  const nickname = normalize(getUnitNickname(unit, roster));
+
+  if (nickname === q) return 120;
+  if (nickname && nickname.startsWith(q)) return 95;
+  if (nickname && nickname.includes(q)) return 85;
   if (name === q) return 100;
   if (name.startsWith(q)) return 80;
   if (name.includes(q)) return 65;
+
   const words = q.split(" ");
-  const hits = words.filter(w => unit.searchText.includes(w)).length;
+  const searchable = [unit.searchText || "", nickname].filter(Boolean).join(" ");
+  const hits = words.filter(w => searchable.includes(w)).length;
   return hits ? 20 + hits * 10 : 0;
 }
 
@@ -9969,6 +10000,86 @@ function renderDetail(unit) {
   bindDynamicDetailControls();
 }
 
+function unitRosterContext(unit = state.selected) {
+  if (!unit) return null;
+
+  if (state.selectedRosterId) {
+    const exact = state.rosters.find(roster =>
+      roster.id === state.selectedRosterId &&
+      (roster.units || []).some(candidate => candidate.id === unit.id)
+    );
+    if (exact) return exact;
+  }
+
+  const active = state.rosters[state.activeRoster];
+  if (active && (active.units || []).some(candidate => candidate.id === unit.id)) return active;
+
+  return state.rosters.find(roster =>
+    (roster.units || []).some(candidate => candidate.id === unit.id)
+  ) || null;
+}
+
+function unitNicknameKey(rosterId, unitId) {
+  return "tv_unit_nickname_" + rosterId + "_" + unitId;
+}
+
+function getUnitNickname(unit = state.selected, roster = null) {
+  if (!unit) return "";
+  const context = roster || unitRosterContext(unit);
+  if (!context?.id) return "";
+  return String(localStorage.getItem(unitNicknameKey(context.id, unit.id)) || "").trim();
+}
+
+function setUnitNickname(unit, nickname, roster = null) {
+  if (!unit) return "";
+  const context = roster || unitRosterContext(unit);
+  if (!context?.id) return "";
+
+  const cleaned = String(nickname || "").replace(/\s+/g, " ").trim().slice(0, 48);
+  const key = unitNicknameKey(context.id, unit.id);
+
+  if (cleaned) localStorage.setItem(key, cleaned);
+  else localStorage.removeItem(key);
+
+  return cleaned;
+}
+
+function openUnitNicknameModal() {
+  if (!state.selected || !els.unitNicknameModal || !els.unitNicknameInput) return;
+  const nickname = getUnitNickname(state.selected);
+  els.unitNicknameUnitName.textContent = state.selected.name || "Unit";
+  els.unitNicknameInput.value = nickname;
+  els.unitNicknameModal.classList.remove("hidden");
+  requestAnimationFrame(() => {
+    els.unitNicknameInput.focus();
+    els.unitNicknameInput.select();
+  });
+}
+
+function closeUnitNicknameModal() {
+  els.unitNicknameModal?.classList.add("hidden");
+}
+
+function saveUnitNicknameFromModal() {
+  if (!state.selected || !els.unitNicknameInput) return;
+  const nickname = setUnitNickname(state.selected, els.unitNicknameInput.value);
+  closeUnitNicknameModal();
+  updateUnitTopStatuses(state.selected);
+  if (nickname) toast("Nickname saved: " + nickname);
+  else toast("Nickname cleared");
+  if (normalize(els.searchInput?.value || "")) renderResults(els.searchInput.value);
+}
+
+function clearUnitNicknameFromModal() {
+  if (!state.selected) return;
+  setUnitNickname(state.selected, "");
+  if (els.unitNicknameInput) els.unitNicknameInput.value = "";
+  closeUnitNicknameModal();
+  updateUnitTopStatuses(state.selected);
+  if (normalize(els.searchInput?.value || "")) renderResults(els.searchInput.value);
+  toast("Nickname cleared");
+}
+
 const STATUS_OPTIONS = ["Battle-shocked","Once-per-game used"];
 
 function statusKey(unit = state.selected) {
@@ -10022,6 +10133,16 @@ function updateUnitTopStatuses(unit = state.selected) {
     els.oncePerGameToggle.classList.toggle("active", onceUsed);
     els.oncePerGameToggle.setAttribute("aria-pressed", onceUsed ? "true" : "false");
     els.oncePerGameToggle.textContent = "Once-per-game used";
+  }
+
+  if (els.unitNicknameButton) {
+    const nickname = unit ? getUnitNickname(unit) : "";
+    els.unitNicknameButton.classList.toggle("hidden", !unit);
+    els.unitNicknameButton.classList.toggle("active", Boolean(nickname));
+    els.unitNicknameButton.textContent = nickname ? "Nickname: " + nickname : "Nickname";
+    els.unitNicknameButton.title = nickname
+      ? "Voice/search nickname: " + nickname
+      : "Add a quick nickname for voice and text search";
   }
 }
 
@@ -11727,8 +11848,9 @@ function rankVoiceCandidates(alternatives) {
   for (const collection of getSearchCollections()) {
     const {roster, rosterIndex} = collection;
     for (const unit of collection.units || []) {
+      const nickname = getUnitNickname(unit, roster);
       const aliases = getVoiceAliases(roster.id, unit.id);
-      const candidates = [unit.name, ...aliases];
+      const candidates = [unit.name, ...(nickname ? [nickname] : []), ...aliases];
       let bestScore = 0;
       let bestTranscript = alternatives[0]?.transcript || "";
       let matchedAlias = false;
@@ -12043,7 +12165,11 @@ function chooseBestVoiceMatch(input) {
     return;
   }
 
-  const primaryTopScore = scoreVoicePhrase(primary, top.unit.name);
+  const topNickname = getUnitNickname(top.unit, top.roster);
+  const primaryTopScore = Math.max(
+    scoreVoicePhrase(primary, top.unit.name),
+    topNickname ? scoreVoicePhrase(primary, topNickname) : 0
+  );
   const strongSoundMatch =
     speechCompact(primary).length >= 6 &&
     (prefixCoverage(primary, top.unit.name) >= .90 ||
@@ -12058,7 +12184,7 @@ function chooseBestVoiceMatch(input) {
   if (decisive) {
     closeVoiceShortlist();
     selectUnitFromRoster(top.unit, top.rosterIndex);
-    if (els.voiceHint) els.voiceHint.textContent = top.unit.name;
+    if (els.voiceHint) els.voiceHint.textContent = getUnitNickname(top.unit, top.roster) || top.unit.name;
     return;
   }
 
