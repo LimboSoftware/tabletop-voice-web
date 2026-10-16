@@ -609,7 +609,7 @@ const GAME_PROVIDERS = [
     id:"other",
     name:"Other",
     systems:[
-      {id:"trench-crusade", name:"Trench Crusade", detail:"Planned", available:false}
+      {id:"trench-crusade", name:"Trench Crusade", detail:"New Recruit warband support", available:true, beta:true}
     ]
   }
 ];
@@ -634,6 +634,7 @@ const GAME_SYSTEM_ROUTES = {
   necromunda:"/necromunda",
   "legions-imperialis":"/legions-imperialis",
   "dnd-5e":"/dnd",
+  "trench-crusade":"/trench-crusade",
   grimdark:"/grimdark-future",
   "grimdark-firefight":"/grimdark-firefight",
   "opr-star-quest":"/grimdark-star-quest",
@@ -812,6 +813,10 @@ function isDndMode(gameSystem = state.gameSystem) {
   return gameSystem === "dnd-5e";
 }
 
+function isTrenchCrusadeMode(gameSystem = state.gameSystem) {
+  return gameSystem === "trench-crusade";
+}
+
 function gameProviderForSystem(gameSystem = state.gameSystem) {
   return GAME_SYSTEMS[gameSystem]?.provider || "gw";
 }
@@ -923,6 +928,7 @@ function inferUnitGameSystem(unit) {
   if (unit?.system === "legions-imperialis") return "legions-imperialis";
   if (unit?.system === "necromunda") return "necromunda";
   if (unit?.system === "dnd") return "dnd-5e";
+  if (unit?.system === "trench-crusade") return "trench-crusade";
   if (unit?.system === "opr") return oprGameSystemKey(unit?.gameSystem) || "grimdark";
   if (unit?.system === "40k") return "40k";
 
@@ -941,6 +947,12 @@ function inferUnitGameSystem(unit) {
     ["m","ws","bs","s","t","w","i","a","ld"].every(label => labels.has(label))
   ) {
     return "old-world";
+  }
+
+  if (
+    ["movement","ranged","melee","armour","base"].every(label => labels.has(label))
+  ) {
+    return "trench-crusade";
   }
 
   if (labels.has("quality") && (labels.has("defense") || labels.has("defence"))) {
@@ -977,6 +989,10 @@ function inferRosterGameSystem(roster) {
     metadata.includes("sys 31d1 bf57 53ea ad55")
   ) return "old-world";
   if (
+    metadata.includes("trench crusade") ||
+    metadata.includes("sys 4f3d c5c9 7df1 ad01")
+  ) return "trench-crusade";
+  if (
     metadata.includes("kill team") ||
     metadata.includes("c521 ad27 44df f959")
   ) return "kill-team";
@@ -997,7 +1013,7 @@ function inferRosterGameSystem(roster) {
   if (metadata.includes("grimdark future firefight")) return "grimdark-firefight";
   if (metadata.includes("grimdark future")) return "grimdark";
 
-  const counts = {aos:0, "old-world":0, grimdark:0, "40k":0};
+  const counts = {aos:0, "old-world":0, "trench-crusade":0, grimdark:0, "40k":0};
   for (const unit of roster.units || []) {
     const system = inferUnitGameSystem(unit);
     if (counts[system] != null) counts[system]++;
@@ -5433,6 +5449,10 @@ function detectNewRecruitGameSystem(root, units = []) {
     systemName.includes("sys 31d1 bf57 53ea ad55")
   ) return "old-world";
   if (
+    systemName.includes("trench crusade") ||
+    systemName.includes("sys 4f3d c5c9 7df1 ad01")
+  ) return "trench-crusade";
+  if (
     systemName.includes("kill team") ||
     systemName.includes("c521 ad27 44df f959")
   ) return "kill-team";
@@ -5458,7 +5478,7 @@ function detectNewRecruitGameSystem(root, units = []) {
     systemName === "40k"
   ) return "40k";
 
-  const counts = {aos:0, "old-world":0, grimdark:0, "40k":0};
+  const counts = {aos:0, "old-world":0, "trench-crusade":0, grimdark:0, "40k":0};
   for (const unit of units) {
     const system = inferUnitGameSystem(unit);
     if (counts[system] != null) counts[system]++;
