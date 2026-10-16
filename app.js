@@ -1081,6 +1081,7 @@ function applyGameSystemUi() {
   const legionsImperialis = isLegionsImperialisMode();
   const necromunda = isNecromundaMode();
   const dnd = isDndMode();
+  const trenchCrusade = isTrenchCrusadeMode();
   const fortyK = state.gameSystem === "40k";
 
   document.body.classList.toggle("game-grimdark", grimdark);
@@ -1092,6 +1093,7 @@ function applyGameSystemUi() {
   document.body.classList.toggle("game-legions-imperialis", legionsImperialis);
   document.body.classList.toggle("game-necromunda", necromunda);
   document.body.classList.toggle("game-dnd", dnd);
+  document.body.classList.toggle("game-trench-crusade", trenchCrusade);
   document.body.classList.toggle("game-40k", fortyK);
   document.title = state.gameSystem
     ? currentGameName() + " | Tabletop Voice"
@@ -1175,6 +1177,8 @@ function applyGameSystemUi() {
           ? "Export your Horus Heresy 3rd Edition roster from New Recruit, then choose the JSON, ROS or ROSZ file here."
           : oldWorld
             ? "Export your Warhammer: The Old World roster from New Recruit, then choose the JSON, ROS or ROSZ file here."
+          : trenchCrusade
+            ? "Export your Trench Crusade warband from New Recruit, then choose the JSON, ROS or ROSZ file here."
           : killTeam
             ? "Export your Kill Team 2024 roster from New Recruit, then choose the JSON, ROS or ROSZ file here."
             : legionsImperialis
@@ -1192,7 +1196,11 @@ function applyGameSystemUi() {
 
   const setupHeroTitle = els.welcome?.querySelector(".setup-hero h1");
   if (setupHeroTitle) {
-    setupHeroTitle.textContent = dnd ? "Load your character." : "Load your army.";
+    setupHeroTitle.textContent = dnd
+      ? "Load your character."
+      : trenchCrusade
+        ? "Load your warband."
+        : "Load your army.";
   }
 
   const setupHero = els.welcome?.querySelector(".setup-hero .lede");
@@ -1209,6 +1217,8 @@ function applyGameSystemUi() {
           ? "Import your Horus Heresy army from New Recruit for profiles, weapons, reactions, wargear and rules at the table."
           : oldWorld
             ? "Import your Old World army from New Recruit for model profiles, weapons, special rules and spells at the table."
+          : trenchCrusade
+            ? "Import your Trench Crusade warband from New Recruit for model profiles, weapons, Battlekit, abilities and rules at the table."
           : killTeam
             ? "Import your Kill Team from New Recruit for operative profiles, weapons, abilities and team rules at the table."
             : legionsImperialis
@@ -8527,6 +8537,7 @@ function importedRosterUnitNoun() {
   if (isNecromundaMode()) return "fighters";
   if (isLegionsImperialisMode()) return "detachments";
   if (isDndMode()) return "characters";
+  if (isTrenchCrusadeMode()) return "models";
   return "units";
 }
 
@@ -11552,6 +11563,7 @@ function updateGameContextUi(unit = state.selected) {
   const legionsImperialis = isLegionsImperialisMode();
   const necromunda = isNecromundaMode();
   const dnd = isDndMode();
+  const trenchCrusade = isTrenchCrusadeMode();
   const non40k = state.gameSystem !== "40k";
 
   els.appNav?.classList.toggle("opr-context", non40k);
@@ -11574,6 +11586,8 @@ function updateGameContextUi(unit = state.selected) {
         ? "Operatives"
         : necromunda
           ? "Fighters"
+          : trenchCrusade
+            ? "Models"
           : dnd
             ? "Characters"
             : legionsImperialis
@@ -11590,6 +11604,8 @@ function updateGameContextUi(unit = state.selected) {
         ? "KILL TEAM"
         : necromunda
           ? "GANG ROSTER"
+          : trenchCrusade
+            ? "WARBAND"
           : dnd
             ? "CHARACTERS"
             : legionsImperialis
@@ -11603,6 +11619,8 @@ function updateGameContextUi(unit = state.selected) {
         ? "Choose an operative."
         : necromunda
           ? "Choose a fighter."
+          : trenchCrusade
+            ? "Choose a model."
           : dnd
             ? "Choose a character."
             : legionsImperialis
@@ -11616,6 +11634,8 @@ function updateGameContextUi(unit = state.selected) {
         ? "Type an operative name…"
         : necromunda
           ? "Type a fighter name…"
+          : trenchCrusade
+            ? "Type a model, weapon or Battlekit name…"
           : dnd
             ? "Type a character, attack or spell…"
             : legionsImperialis
@@ -11629,6 +11649,8 @@ function updateGameContextUi(unit = state.selected) {
       ? "Team Rules"
       : necromunda
         ? "Gang Rules"
+        : trenchCrusade
+          ? "Warband Rules"
         : dnd
           ? "Features"
           : legionsImperialis
@@ -11647,6 +11669,8 @@ function updateGameContextUi(unit = state.selected) {
       ? "Team Rules"
       : necromunda
         ? "Gang Rules"
+        : trenchCrusade
+          ? "Warband Rules"
         : dnd
           ? "Features"
           : legionsImperialis
@@ -11665,6 +11689,8 @@ function updateGameContextUi(unit = state.selected) {
           ? "NECROMUNDA REFERENCE"
           : dnd
             ? "D&D CHARACTER REFERENCE"
+            : trenchCrusade
+              ? "TRENCH CRUSADE REFERENCE"
             : legionsImperialis
               ? "LEGIONS IMPERIALIS REFERENCE"
               : heresy
@@ -11685,6 +11711,8 @@ function updateGameContextUi(unit = state.selected) {
         ? "Team-wide abilities, equipment and selected rules imported with the active Kill Team. Operative-specific abilities and unique actions are shown on each operative."
         : necromunda
           ? "Gang-wide rules and current campaign state imported from Gyrinx. Fighter-specific skills, powers, gear, injuries and status are shown on each fighter."
+          : trenchCrusade
+            ? "Warband-wide rules imported with the active Trench Crusade list. Model abilities, weapons, Battlekit and keywords are shown on each model."
           : dnd
             ? "Species traits, class features and feats imported with the active D&D Beyond character. Attacks, spells, slots and inventory are on the character page."
             : legionsImperialis
