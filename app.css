@@ -2026,7 +2026,60 @@ body.focus-mode .detail-panel {
 }
 
 .setup-hero {
+  max-width: none;
   margin-bottom: 18px;
+  align-items: flex-start;
+}
+
+.setup-hero-copy {
+  max-width: 900px;
+}
+
+.setup-hero-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 8px;
+  margin-left: auto;
+  padding-top: 2px;
+}
+
+.setup-hero-actions .compact {
+  min-height: 34px;
+  padding-inline: 12px;
+  white-space: nowrap;
+}
+
+.setup-system-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  min-height: 46px;
+  margin-bottom: 14px;
+  padding: 8px 10px 8px 14px;
+  border: 1px solid #2c3944;
+  border-left: 3px solid var(--accent-strong);
+  background: #10171e;
+}
+
+.setup-system-strip-copy {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.setup-system-strip-copy strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: .9rem;
+}
+
+.setup-system-strip > button {
+  flex: 0 0 auto;
+  min-height: 32px;
+  padding-inline: 11px;
 }
 
 .setup-import-grid {
@@ -2392,6 +2445,35 @@ body.focus-mode .detail-panel {
   .setup-import-grid {
     grid-template-columns: 1fr;
     gap: 10px;
+  }
+
+  .setup-system-strip {
+    gap: 8px;
+    min-height: 44px;
+    padding: 7px 8px 7px 10px;
+  }
+
+  .setup-system-strip-copy {
+    gap: 7px;
+  }
+
+  .setup-system-strip-copy .section-label {
+    display: none;
+  }
+
+  .setup-system-strip-copy strong {
+    font-size: .82rem;
+  }
+
+  .setup-system-strip > button {
+    padding-inline: 9px;
+    font-size: .72rem;
+  }
+
+  .setup-hero-actions {
+    justify-content: flex-start;
+    margin: 12px 0 0;
+    padding-top: 0;
   }
 
   .setup-import-card > p {
@@ -5019,5 +5101,1738 @@ body {
 
   .talk-button {
     border-radius: 2px;
+  }
+}
+
+
+/* === OnePageRules / Army Forge adapter === */
+.opr-import-card {
+  margin-top: 0;
+}
+
+.opr-import-card > p {
+  color: #94a3b5;
+  line-height: 1.5;
+  min-height: 46px;
+  margin: 8px 0 16px;
+}
+
+.opr-import-controls {
+  display: grid;
+  gap: 8px;
+  margin-top: auto;
+}
+
+.opr-import-controls input,
+.opr-import-controls textarea {
+  width: 100%;
+  min-width: 0;
+  min-height: 50px;
+  padding: 12px;
+  border: 1px solid #354350;
+  border-radius: 3px;
+  outline: 0;
+  background: #0b1015;
+  color: #edf3f6;
+  font: inherit;
+  font-size: 16px;
+}
+
+.opr-import-controls textarea {
+  min-height: 92px;
+  resize: vertical;
+  line-height: 1.4;
+}
+
+body.game-opr .opr-import-controls textarea {
+  min-height: 118px;
+}
+
+.opr-import-controls input:focus,
+.opr-import-controls textarea:focus {
+  border-color: var(--accent-strong);
+  box-shadow: 0 0 0 2px rgba(57,184,213,.12);
+}
+
+.opr-import-status {
+  display: block;
+  margin-top: 10px;
+  color: #7f8e9a;
+  line-height: 1.45;
+}
+
+.opr-weapon-table {
+  min-width: 620px;
+}
+
+.opr-weapon-table th:nth-child(2),
+.opr-weapon-table td:nth-child(2) {
+  width: 110px;
+}
+
+.opr-weapon-table th:nth-child(3),
+.opr-weapon-table td:nth-child(3) {
+  width: 80px;
+}
+
+.opr-weapon-special {
+  min-width: 220px;
+  text-align: left !important;
+  color: #c4d1d8 !important;
+  line-height: 1.4;
+}
+
+@media (max-width: 760px) {
+  .opr-import-controls .primary-button {
+    width: 100%;
+  }
+
+  .opr-weapon-table {
+    min-width: 0;
+  }
+
+  .opr-weapon-table .opr-weapon-special {
+    grid-column: 1 / -1;
+    min-width: 0;
+    padding-top: 9px;
+    border-top: 1px solid #25303f !important;
+  }
+}
+
+.setup-loaded-lists {
+  margin-top: 12px;
+  padding: 12px 0 2px;
+  border-top: 1px solid #26313b;
+}
+
+.setup-loaded-lists .data-roster-summary {
+  margin-top: 8px;
+  margin-bottom: 0;
+}
+
+@media (min-width: 761px) {
+  .app-nav.opr-context {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+}
+
+
+/* === Game system chooser / settings === */
+.game-system-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 110;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(4,7,11,.88);
+  backdrop-filter: blur(12px);
+}
+
+.game-system-card {
+  position: relative;
+  width: min(880px, 100%);
+  padding: clamp(24px, 4vw, 38px);
+  border: 1px solid #34414d;
+  border-radius: 3px;
+  background: #0f151c;
+  box-shadow: 0 28px 90px rgba(0,0,0,.52);
+}
+
+.game-system-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 38px;
+  height: 38px;
+  border: 1px solid #35414c;
+  border-radius: 2px;
+  background: #111820;
+  color: #aab6bf;
+  font: inherit;
+  font-size: 1.4rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.game-system-close:hover {
+  border-color: var(--accent-strong);
+  color: var(--text);
+}
+
+.game-system-card h1 {
+  margin: 6px 0 8px;
+  font-size: clamp(2rem, 5vw, 3.6rem);
+  letter-spacing: -.035em;
+}
+
+.game-system-intro {
+  max-width: 680px;
+  margin: 0;
+  color: #9aa8b4;
+  line-height: 1.55;
+}
+
+.game-system-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0,1fr));
+  gap: 10px;
+  margin-top: 24px;
+}
+
+.game-system-option {
+  position: relative;
+  min-height: 142px;
+  padding: 18px;
+  text-align: left;
+  border: 1px solid #34414d;
+  border-radius: 3px;
+  background: #121a22;
+  color: var(--text);
+}
+
+button.game-system-option {
+  cursor: pointer;
+}
+
+button.game-system-option:hover {
+  border-color: var(--accent-strong);
+  background: #16232c;
+}
+
+.game-system-option.selected {
+  border-color: var(--accent-strong);
+  box-shadow: inset 4px 0 0 var(--accent-strong);
+  background: #15222b;
+}
+
+.game-system-option strong {
+  display: block;
+  margin-top: 20px;
+  font-size: 1.12rem;
+}
+
+.game-system-option small {
+  display: block;
+  margin-top: 7px;
+  color: #8f9eaa;
+  line-height: 1.45;
+}
+
+.game-system-option.disabled {
+  opacity: .48;
+  background: #0d1217;
+}
+
+.game-system-status {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  padding: 3px 6px;
+  border: 1px solid #3c4650;
+  border-radius: 2px;
+  color: #8996a1;
+  font-size: .57rem;
+  font-weight: 900;
+  letter-spacing: .09em;
+}
+
+.game-system-status.live {
+  border-color: #33778a;
+  color: #86d9ea;
+}
+
+.settings-game-card {
+  max-width: 900px;
+}
+
+.settings-current-game {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #29343e;
+}
+
+.settings-current-game strong {
+  font-size: 1.04rem;
+}
+
+.settings-game-grid {
+  margin-top: 14px;
+}
+
+@media (max-width: 680px) {
+  .game-system-modal {
+    align-items: end;
+    padding: 8px;
+  }
+
+  .game-system-card {
+    max-height: calc(100dvh - 16px);
+    overflow-y: auto;
+    padding: 20px 14px 14px;
+  }
+
+  .game-system-grid {
+    grid-template-columns: 1fr;
+    gap: 7px;
+    margin-top: 18px;
+  }
+
+  .game-system-option {
+    min-height: 112px;
+    padding: 14px;
+  }
+
+  .game-system-option strong {
+    margin-top: 16px;
+  }
+}
+
+
+/* === Provider catalogue === */
+.game-system-card {
+  max-height: calc(100dvh - 40px);
+  overflow-y: auto;
+}
+
+.game-catalogue {
+  margin-top: 22px;
+}
+
+.game-provider-tabs {
+  display: flex;
+  gap: 0;
+  overflow-x: auto;
+  border-bottom: 1px solid #35414c;
+  scrollbar-width: thin;
+}
+
+.game-provider-tab {
+  flex: 0 0 auto;
+  min-height: 44px;
+  padding: 0 17px;
+  border: 0;
+  border-right: 1px solid #26313a;
+  border-radius: 0;
+  background: #0d1319;
+  color: #83919d;
+  font: inherit;
+  font-size: .72rem;
+  font-weight: 850;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.game-provider-tab:hover {
+  background: #151e26;
+  color: #dce7ec;
+}
+
+.game-provider-tab.active {
+  box-shadow: inset 0 -3px 0 var(--accent-strong);
+  background: #17232c;
+  color: #dff8ff;
+}
+
+.game-provider-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px;
+  margin-top: 17px;
+}
+
+.game-provider-heading small {
+  color: #72818d;
+  font-size: .68rem;
+}
+
+.settings-game-card {
+  max-width: 1120px;
+}
+
+.settings-game-catalogue {
+  margin-top: 14px;
+}
+
+.settings-game-catalogue .game-system-grid {
+  grid-template-columns: repeat(3, minmax(0,1fr));
+}
+
+/* === Age of Sigmar warscroll presentation === */
+.aos-weapon-table {
+  min-width: 940px;
+}
+
+.aos-weapon-ability {
+  min-width: 180px;
+  text-align: left !important;
+  color: #c4d1d8 !important;
+  line-height: 1.35;
+}
+
+.aos-ability-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.aos-ability-heading h4 {
+  margin: 0;
+}
+
+.aos-ability-heading > span {
+  flex: 0 0 auto;
+  padding: 3px 7px;
+  border: 1px solid #3b5360;
+  border-radius: 2px;
+  color: #8fd3e3;
+  font-size: .61rem;
+  font-weight: 850;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.aos-ability-fields {
+  display: grid;
+  gap: 0;
+  border-top: 1px solid #27323c;
+}
+
+.aos-ability-field {
+  display: grid;
+  grid-template-columns: 135px minmax(0,1fr);
+  gap: 14px;
+  padding: 10px 0;
+  border-bottom: 1px solid #27323c;
+}
+
+.aos-ability-field:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.aos-ability-field > strong {
+  color: #81929f;
+  font-size: .68rem;
+  letter-spacing: .055em;
+  text-transform: uppercase;
+}
+
+.aos-ability-field .ability-text {
+  max-width: none;
+  font-size: .9rem;
+  line-height: 1.5;
+}
+
+@media (max-width: 760px) {
+  .game-system-modal {
+    align-items: stretch;
+  }
+
+  .game-system-card {
+    max-height: calc(100dvh - 16px);
+  }
+
+  .game-provider-tabs {
+    margin-inline: -14px;
+    padding-inline: 14px;
+  }
+
+  .game-provider-tab {
+    min-height: 42px;
+    padding-inline: 13px;
+    font-size: .65rem;
+  }
+
+  .game-provider-heading {
+    margin-top: 14px;
+  }
+
+  .settings-game-catalogue .game-system-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .aos-weapon-table {
+    min-width: 0;
+  }
+
+  .aos-weapon-table .aos-weapon-ability {
+    grid-column: 1 / -1;
+    min-width: 0;
+    padding-top: 9px !important;
+    border-top: 1px solid #25303f !important;
+    font-size: .75rem !important;
+    line-height: 1.35 !important;
+  }
+
+  .aos-ability-heading {
+    gap: 8px;
+  }
+
+  .aos-ability-field {
+    grid-template-columns: 1fr;
+    gap: 5px;
+  }
+
+  .aos-ability-field .ability-text {
+    font-size: .84rem;
+  }
+}
+
+
+/* === System-specific setup widths === */
+body.game-aos .setup-import-grid {
+  grid-template-columns: minmax(0, 830px);
+}
+
+body.game-aos .setup-import-card {
+  width: 100%;
+}
+
+@media (max-width: 760px) {
+  body.game-aos .setup-import-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+
+/* === Grimdark Future: Warfleets === */
+.warfleets-weapon-table {
+  min-width: 760px;
+}
+
+.warfleets-weapon-table th:nth-child(2),
+.warfleets-weapon-table td:nth-child(2) {
+  width: 82px;
+}
+
+.warfleets-weapon-table th:nth-child(3),
+.warfleets-weapon-table td:nth-child(3) {
+  width: 100px;
+}
+
+.warfleets-weapon-table th:nth-child(4),
+.warfleets-weapon-table td:nth-child(4),
+.warfleets-weapon-table th:nth-child(5),
+.warfleets-weapon-table td:nth-child(5) {
+  width: 70px;
+}
+
+.warfleet-facing {
+  text-align: center !important;
+  font-weight: 800;
+  letter-spacing: .06em;
+}
+
+@media (max-width: 760px) {
+  .warfleets-weapon-table {
+    min-width: 0;
+  }
+
+  .warfleets-weapon-table .opr-weapon-special {
+    grid-column: 1 / -1;
+    min-width: 0;
+    padding-top: 9px;
+    border-top: 1px solid #25303f !important;
+  }
+}
+
+
+/* === Horus Heresy 3rd Edition === */
+body.game-heresy .setup-import-grid {
+  grid-template-columns: minmax(0, 830px);
+}
+
+body.game-heresy .setup-import-card {
+  width: 100%;
+}
+
+.heresy-weapon-table {
+  min-width: 980px;
+}
+
+.heresy-weapon-table th:nth-last-child(-n+2),
+.heresy-weapon-table td:nth-last-child(-n+2) {
+  min-width: 190px;
+  text-align: left;
+}
+
+.heresy-weapon-text {
+  color: #c4d1d8 !important;
+  line-height: 1.4;
+}
+
+@media (max-width: 760px) {
+  body.game-heresy .setup-import-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .heresy-weapon-table {
+    min-width: 0;
+  }
+
+  .heresy-weapon-table .heresy-weapon-text {
+    grid-column: 1 / -1;
+    min-width: 0;
+    padding-top: 9px;
+    border-top: 1px solid #25303f !important;
+  }
+}
+
+
+.heresy-profile-table {
+  min-width: 1180px;
+}
+
+.heresy-component-table {
+  min-width: 820px;
+}
+
+.heresy-component-table th:not(:first-child),
+.heresy-component-table td:not(:first-child) {
+  min-width: 92px;
+}
+
+@media (max-width: 760px) {
+  .heresy-profile-table,
+  .heresy-component-table {
+    min-width: 760px;
+  }
+}
+
+
+/* === Kill Team 2024 === */
+body.game-kill-team .setup-import-grid {
+  grid-template-columns: minmax(0, 830px);
+}
+
+body.game-kill-team .setup-import-card {
+  width: 100%;
+}
+
+.kill-team-weapon-table {
+  min-width: 760px;
+}
+
+.kill-team-weapon-table th:nth-child(2),
+.kill-team-weapon-table td:nth-child(2),
+.kill-team-weapon-table th:nth-child(3),
+.kill-team-weapon-table td:nth-child(3),
+.kill-team-weapon-table th:nth-child(4),
+.kill-team-weapon-table td:nth-child(4) {
+  width: 90px;
+}
+
+.kill-team-weapon-table th:last-child,
+.kill-team-weapon-table td:last-child {
+  min-width: 300px;
+  text-align: left;
+}
+
+.kill-team-weapon-rules {
+  color: #c4d1d8 !important;
+  line-height: 1.4;
+}
+
+body.game-kill-team .stat-grid {
+  grid-template-columns: repeat(4, minmax(100px, 1fr));
+}
+
+@media (max-width: 760px) {
+  body.game-kill-team .setup-import-grid {
+    grid-template-columns: 1fr;
+  }
+
+  body.game-kill-team .stat-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .kill-team-weapon-table {
+    min-width: 0;
+  }
+
+  .kill-team-weapon-table .kill-team-weapon-rules {
+    grid-column: 1 / -1;
+    min-width: 0;
+    padding-top: 9px;
+    border-top: 1px solid #25303f !important;
+  }
+}
+
+
+/* === Legions Imperialis === */
+body.game-legions-imperialis .setup-import-grid {
+  grid-template-columns: minmax(0, 830px);
+}
+
+body.game-legions-imperialis .setup-import-card {
+  width: 100%;
+}
+
+body.game-legions-imperialis .stat-grid {
+  grid-template-columns: repeat(5, minmax(92px, 1fr));
+}
+
+.legions-imperialis-profile-table,
+.legions-imperialis-weapon-table {
+  min-width: 760px;
+}
+
+.legions-imperialis-profile-table th:not(:first-child),
+.legions-imperialis-profile-table td:not(:first-child) {
+  width: 100px;
+}
+
+.legions-imperialis-weapon-table th:nth-child(2),
+.legions-imperialis-weapon-table td:nth-child(2),
+.legions-imperialis-weapon-table th:nth-child(3),
+.legions-imperialis-weapon-table td:nth-child(3),
+.legions-imperialis-weapon-table th:nth-child(4),
+.legions-imperialis-weapon-table td:nth-child(4),
+.legions-imperialis-weapon-table th:nth-child(5),
+.legions-imperialis-weapon-table td:nth-child(5) {
+  width: 92px;
+}
+
+.legions-imperialis-weapon-table th:last-child,
+.legions-imperialis-weapon-table td:last-child {
+  min-width: 260px;
+  text-align: left;
+}
+
+.legions-imperialis-traits {
+  color: #c4d1d8 !important;
+  line-height: 1.4;
+}
+
+@media (max-width: 760px) {
+  body.game-legions-imperialis .setup-import-grid {
+    grid-template-columns: 1fr;
+  }
+
+  body.game-legions-imperialis .stat-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .legions-imperialis-profile-table,
+  .legions-imperialis-weapon-table {
+    min-width: 0;
+  }
+
+  .legions-imperialis-weapon-table .legions-imperialis-traits {
+    grid-column: 1 / -1;
+    min-width: 0;
+    padding-top: 9px;
+    border-top: 1px solid #25303f !important;
+  }
+}
+
+
+/* === Legions Imperialis community imports === */
+.li-community-import-controls {
+  display: grid;
+  gap: 10px;
+}
+
+.li-community-import-controls textarea {
+  width: 100%;
+  min-width: 0;
+  min-height: 150px;
+  padding: 12px;
+  border: 1px solid #354350;
+  border-radius: 3px;
+  outline: 0;
+  resize: vertical;
+  background: #0b1015;
+  color: #edf3f6;
+  font: inherit;
+  font-size: 15px;
+  line-height: 1.4;
+}
+
+.li-community-import-controls textarea:focus {
+  border-color: var(--accent-strong);
+  box-shadow: 0 0 0 2px rgba(57,184,213,.12);
+}
+
+.li-community-import-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 10px;
+}
+
+@media (max-width: 620px) {
+  .li-community-import-actions {
+    grid-template-columns: 1fr;
+  }
+}
+
+
+/* === Necromunda N26 === */
+body.game-necromunda .setup-import-grid {
+  grid-template-columns: minmax(0, 830px);
+}
+
+body.game-necromunda .setup-import-card {
+  width: 100%;
+}
+
+.necromunda-import-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: stretch;
+}
+
+.necromunda-import-controls input {
+  width: 100%;
+  min-width: 0;
+  min-height: 50px;
+  padding: 0 12px;
+  border: 1px solid #354350;
+  border-radius: 3px;
+  outline: 0;
+  background: #0b1015;
+  color: #edf3f6;
+  font: inherit;
+  font-size: 16px;
+}
+
+.necromunda-import-controls input:focus {
+  border-color: var(--accent-strong);
+  box-shadow: 0 0 0 2px rgba(57,184,213,.12);
+}
+
+body.game-necromunda .stat-grid {
+  grid-template-columns: repeat(6, minmax(82px, 1fr));
+}
+
+body.game-necromunda .stat {
+  padding: 11px;
+}
+
+.necromunda-campaign-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px;
+}
+
+.necromunda-campaign-row {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-2);
+  padding: 10px 12px;
+}
+
+.necromunda-campaign-row span {
+  color: var(--muted);
+  font-size: .76rem;
+}
+
+.necromunda-campaign-row strong {
+  min-width: 0;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.necromunda-weapon-table {
+  min-width: 860px;
+}
+
+.necromunda-weapon-table th:nth-child(2),
+.necromunda-weapon-table td:nth-child(2),
+.necromunda-weapon-table th:nth-child(3),
+.necromunda-weapon-table td:nth-child(3),
+.necromunda-weapon-table th:nth-child(4),
+.necromunda-weapon-table td:nth-child(4),
+.necromunda-weapon-table th:nth-child(5),
+.necromunda-weapon-table td:nth-child(5),
+.necromunda-weapon-table th:nth-child(6),
+.necromunda-weapon-table td:nth-child(6) {
+  width: 72px;
+}
+
+.necromunda-weapon-table th:last-child,
+.necromunda-weapon-table td:last-child {
+  min-width: 260px;
+  text-align: left;
+}
+
+.necromunda-weapon-traits {
+  color: #c4d1d8 !important;
+  line-height: 1.4;
+}
+
+@media (max-width: 760px) {
+  body.game-necromunda .setup-import-grid,
+  .necromunda-import-controls {
+    grid-template-columns: 1fr;
+  }
+
+  body.game-necromunda .stat-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 7px;
+  }
+
+  body.game-necromunda .stat {
+    padding: 9px;
+  }
+
+  .necromunda-weapon-table {
+    min-width: 0;
+  }
+
+  .necromunda-weapon-table .necromunda-weapon-traits {
+    grid-column: 1 / -1;
+    min-width: 0;
+    padding-top: 9px;
+    border-top: 1px solid #25303f !important;
+  }
+}
+
+@media (max-width: 440px) {
+  body.game-necromunda .stat-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+
+.dnd-roll-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 160;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgba(3,6,10,.9);
+  backdrop-filter: blur(14px);
+}
+
+.dnd-roll-card {
+  position: relative;
+  width: min(720px, 100%);
+  min-height: min(620px, 78vh);
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 14px;
+  padding: clamp(34px, 7vw, 72px);
+  border: 1px solid #43606c;
+  border-radius: 5px;
+  background:
+    radial-gradient(circle at 50% 35%, rgba(57,184,213,.12), transparent 42%),
+    linear-gradient(180deg, #111a21, #0a0f14);
+  box-shadow: 0 36px 120px rgba(0,0,0,.72);
+  text-align: center;
+  overflow: hidden;
+}
+
+.dnd-roll-card::before,
+.dnd-roll-card::after {
+  content: "";
+  position: absolute;
+  inset: 12px;
+  border: 1px solid rgba(92,202,224,.12);
+  pointer-events: none;
+}
+
+.dnd-roll-card::after {
+  inset: 22px;
+  border-color: rgba(255,255,255,.04);
+}
+
+.dnd-roll-modal.celebrate .dnd-roll-card {
+  animation: dndRollReveal .32s cubic-bezier(.2,.9,.2,1);
+}
+
+@keyframes dndRollReveal {
+  from {
+    opacity: 0;
+    transform: scale(.86);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.dnd-roll-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  z-index: 2;
+  width: 40px;
+  height: 40px;
+  border: 1px solid #3b4c58;
+  border-radius: 3px;
+  background: #10171d;
+  color: #a8b8c1;
+  font: inherit;
+  font-size: 1.45rem;
+  cursor: pointer;
+}
+
+.dnd-roll-eyebrow {
+  position: relative;
+  z-index: 1;
+  color: #70d3e7;
+  font-size: .72rem;
+  font-weight: 900;
+  letter-spacing: .18em;
+}
+
+.dnd-roll-card h2 {
+  position: relative;
+  z-index: 1;
+  max-width: 580px;
+  margin: 0;
+  font-size: clamp(1.5rem, 4vw, 2.5rem);
+  line-height: 1.08;
+}
+
+.dnd-roll-total {
+  position: relative;
+  z-index: 1;
+  margin: 4px 0;
+  font-size: clamp(5.5rem, 18vw, 11rem);
+  font-weight: 950;
+  line-height: .85;
+  letter-spacing: -.065em;
+  color: #f5fdff;
+  text-shadow:
+    0 0 28px rgba(81,206,231,.2),
+    0 5px 0 rgba(0,0,0,.34);
+}
+
+.dnd-roll-subtitle {
+  position: relative;
+  z-index: 1;
+  color: #b8c9d1;
+  font-size: clamp(.9rem, 2.5vw, 1.15rem);
+  font-weight: 750;
+}
+
+.dnd-roll-breakdown {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  gap: 5px;
+  max-width: 620px;
+  color: #91a8b3;
+  font-size: .84rem;
+  line-height: 1.4;
+}
+
+.dnd-roll-done {
+  position: relative;
+  z-index: 1;
+  min-width: 190px;
+  margin-top: 8px;
+}
+
+@media (max-width: 760px) {
+  .dnd-roll-card {
+    min-height: min(560px, 82vh);
+    padding: 34px 20px;
+  }
+
+  .dnd-roll-total {
+    font-size: clamp(5rem, 30vw, 8.5rem);
+  }
+}
+
+/* === D&D 5e / D&D Beyond === */
+body.game-dnd .setup-import-grid {
+  grid-template-columns: minmax(0, 830px);
+}
+
+body.game-dnd .setup-import-card {
+  width: 100%;
+}
+
+.dnd-beyond-import-controls {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  align-items: stretch;
+}
+
+.dnd-beyond-import-controls > input {
+  grid-column: 1 / -1;
+}
+
+.dnd-beyond-import-controls input,
+.dnd-inventory-add input {
+  width: 100%;
+  min-width: 0;
+  min-height: 46px;
+  padding: 0 12px;
+  border: 1px solid #354350;
+  border-radius: 3px;
+  outline: 0;
+  background: #0b1015;
+  color: #edf3f6;
+  font: inherit;
+  font-size: 16px;
+}
+
+.dnd-beyond-import-controls input:focus,
+.dnd-inventory-add input:focus {
+  border-color: var(--accent-strong);
+  box-shadow: 0 0 0 2px rgba(57,184,213,.12);
+}
+
+body.game-dnd .stat-grid {
+  grid-template-columns: repeat(6, minmax(90px, 1fr));
+}
+
+.dnd-rest-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin: 0 0 10px;
+  padding: 9px 10px 9px 12px;
+  border: 1px solid #303c46;
+  border-left: 3px solid var(--accent-strong);
+  border-radius: 3px;
+  background: #0f171d;
+}
+
+.dnd-rest-bar > div:first-child {
+  display: grid;
+  gap: 1px;
+}
+
+.dnd-rest-bar > div:first-child span {
+  color: #758894;
+  font-size: .6rem;
+  font-weight: 850;
+  letter-spacing: .1em;
+}
+
+.dnd-rest-bar > div:first-child strong {
+  font-size: .82rem;
+}
+
+.dnd-rest-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.dnd-action-controls {
+  display: flex;
+  align-items: flex-end;
+  gap: 7px;
+}
+
+.dnd-cast-level {
+  display: grid;
+  gap: 3px;
+}
+
+.dnd-cast-level > span {
+  color: #8295a2;
+  font-size: .57rem;
+  font-weight: 850;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.dnd-cast-level select {
+  min-height: 32px;
+  padding: 0 26px 0 8px;
+  border: 1px solid #3a4a56;
+  border-radius: 3px;
+  background: #0d151b;
+  color: #e2ebef;
+  font: inherit;
+  font-size: .72rem;
+}
+
+.dnd-list-filter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 0 0 9px;
+  padding: 7px 8px 7px 10px;
+  border: 1px solid #31414c;
+  background: #111c23;
+  color: #92a5b0;
+  font-size: .72rem;
+}
+
+.dnd-list-filter strong {
+  color: #d9eef3;
+}
+
+.dnd-mini-tabs {
+  display: flex;
+  gap: 6px;
+  margin: 0 0 10px;
+  padding: 5px;
+  border: 1px solid #303c46;
+  border-radius: 4px;
+  background: #0c1217;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.dnd-mini-tab {
+  flex: 0 0 auto;
+  min-height: 35px;
+  padding: 0 13px;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  background: transparent;
+  color: #8e9da7;
+  font: inherit;
+  font-size: .75rem;
+  font-weight: 800;
+  letter-spacing: .035em;
+  cursor: pointer;
+}
+
+.dnd-mini-tab:hover {
+  background: #131d24;
+  color: #dbe6eb;
+}
+
+.dnd-mini-tab.active {
+  border-color: #3d6672;
+  background: #15242b;
+  color: #dbf5fa;
+  box-shadow: inset 0 -2px 0 var(--accent-strong);
+}
+
+.dnd-tab-panel.hidden {
+  display: none;
+}
+
+.dnd-tab-panel {
+  min-height: 120px;
+}
+
+.dnd-ability-section .section-heading-row,
+.dnd-economy-section .section-heading-row,
+.dnd-slot-section .section-heading-row,
+.dnd-actions-section .section-heading-row,
+.dnd-inventory-section .section-heading-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.dnd-ability-section .section-heading-row h3,
+.dnd-economy-section .section-heading-row h3,
+.dnd-slot-section .section-heading-row h3,
+.dnd-actions-section .section-heading-row h3,
+.dnd-inventory-section .section-heading-row h3 {
+  margin: 0;
+}
+
+.dnd-actions-section .section-count,
+.dnd-inventory-section .section-count {
+  color: #80909b;
+  font-size: .7rem;
+  font-weight: 800;
+}
+
+.dnd-ability-grid,
+.dnd-economy-grid,
+.dnd-slot-grid {
+  display: grid;
+  gap: 8px;
+}
+
+.dnd-skills-section .section-heading-row small,
+.dnd-ability-section .section-heading-row small {
+  color: #7f919c;
+  font-size: .68rem;
+}
+
+.dnd-skill-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.dnd-skill-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  min-height: 52px;
+  padding: 8px 10px;
+  border: 1px solid #33414d;
+  border-radius: 3px;
+  background: #101820;
+  color: #dbe5ea;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+
+.dnd-skill-row:hover,
+.dnd-ability:hover {
+  border-color: #46606d;
+  background: #14212a;
+}
+
+.dnd-skill-row > div {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.dnd-skill-row > div strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: .78rem;
+}
+
+.dnd-skill-row > div small {
+  color: #7e909c;
+  font-size: .61rem;
+  letter-spacing: .035em;
+  text-transform: uppercase;
+}
+
+.dnd-skill-row > span {
+  color: #cfeef4;
+  font-size: .9rem;
+  font-weight: 850;
+}
+
+.dnd-skill-row em,
+.dnd-ability em {
+  position: absolute;
+  right: 5px;
+  top: 4px;
+  min-width: 21px;
+  padding: 2px 4px;
+  border-radius: 999px;
+  background: var(--accent-strong);
+  color: #071014;
+  font-size: .6rem;
+  font-style: normal;
+  font-weight: 900;
+  text-align: center;
+}
+
+.dnd-skill-row.rolled,
+.dnd-ability.rolled {
+  border-color: var(--accent-strong);
+  box-shadow: inset 0 0 0 1px rgba(57,184,213,.12);
+}
+
+.dnd-check-result {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 8px;
+  padding: 8px 10px;
+  border-left: 3px solid var(--accent-strong);
+  background: #14222a;
+}
+
+.dnd-check-result small {
+  color: #91a7b1;
+}
+
+
+.dnd-ability-grid {
+  grid-template-columns: repeat(6, minmax(80px, 1fr));
+}
+
+.dnd-ability {
+  position: relative;
+  display: grid;
+  place-items: center;
+  gap: 2px;
+  min-height: 82px;
+  border: 1px solid #34414d;
+  border-radius: 3px;
+  background: #101820;
+  color: #dbe5ea;
+  padding: 10px;
+  font: inherit;
+  cursor: pointer;
+}
+
+.dnd-ability span,
+.dnd-slot-card > span {
+  color: #8494a2;
+  font-size: .67rem;
+  font-weight: 850;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.dnd-ability strong {
+  font-size: 1.2rem;
+}
+
+.dnd-ability small {
+  color: #9bc7d2;
+  font-weight: 800;
+}
+
+.dnd-economy-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.dnd-economy-button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 48px;
+  padding: 0 13px;
+  border: 1px solid #354350;
+  border-radius: 3px;
+  background: #111920;
+  color: #dce5ea;
+  font: inherit;
+  cursor: pointer;
+}
+
+.dnd-economy-button strong {
+  color: #78d2e5;
+  font-size: .67rem;
+  letter-spacing: .08em;
+}
+
+.dnd-economy-button.used {
+  opacity: .62;
+  background: #191518;
+}
+
+.dnd-economy-button.used strong {
+  color: #e7959d;
+}
+
+.dnd-slot-grid {
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+}
+
+.dnd-slot-card {
+  display: grid;
+  gap: 7px;
+  border: 1px solid #34414d;
+  background: #101820;
+  padding: 10px 12px;
+}
+
+.dnd-slot-card > strong {
+  font-size: 1.2rem;
+}
+
+.dnd-slot-card > div {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 5px;
+}
+
+.dnd-slot-card button,
+.dnd-inventory-quantity button {
+  min-height: 32px;
+  border: 1px solid #394957;
+  background: #131d25;
+  color: #e7eef1;
+  font: inherit;
+  cursor: pointer;
+}
+
+.dnd-action-list,
+.dnd-inventory-list {
+  display: grid;
+  gap: 8px;
+}
+
+.dnd-action-card {
+  border: 1px solid #33414c;
+  border-left: 3px solid #425564;
+  background: #10171e;
+  padding: 14px;
+}
+
+.dnd-action-card.focused {
+  border-color: var(--accent-strong);
+  border-left-width: 4px;
+  box-shadow: 0 0 0 1px rgba(57,184,213,.12);
+}
+
+.dnd-action-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.dnd-action-heading span {
+  color: #8295a2;
+  font-size: .62rem;
+  font-weight: 850;
+  letter-spacing: .1em;
+}
+
+.dnd-action-heading h4 {
+  margin: 3px 0 0;
+  font-size: 1rem;
+}
+
+.dnd-action-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 10px;
+}
+
+.dnd-action-meta span {
+  padding: 4px 7px;
+  border: 1px solid #354652;
+  background: #14202a;
+  color: #b9c8d0;
+  font-size: .69rem;
+}
+
+.dnd-action-description {
+  margin-top: 11px;
+  color: #aebbc3;
+  font-size: .86rem;
+  line-height: 1.48;
+}
+
+.dnd-derived-note {
+  display: block;
+  margin-top: 8px;
+  color: #788895;
+}
+
+.dnd-roll-result {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-top: 12px;
+  padding: 9px 10px;
+  border-left: 3px solid var(--accent-strong);
+  background: #14222a;
+}
+
+.dnd-roll-result strong {
+  color: #e8f8fb;
+}
+
+.dnd-roll-result small {
+  color: #9ab1bb;
+}
+
+.dnd-inventory-add {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.dnd-inventory-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  min-height: 48px;
+  border-bottom: 1px solid #29343e;
+  padding: 7px 0;
+}
+
+.dnd-inventory-row > div:first-child {
+  display: grid;
+  gap: 2px;
+}
+
+.dnd-inventory-row small {
+  color: #82919c;
+}
+
+.dnd-inventory-quantity {
+  display: grid;
+  grid-template-columns: 34px 34px 34px;
+  align-items: center;
+  text-align: center;
+}
+
+@media (max-width: 760px) {
+  body.game-dnd .setup-import-grid,
+  .dnd-beyond-import-controls {
+    grid-template-columns: 1fr;
+  }
+
+  body.game-dnd .stat-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .dnd-ability-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .dnd-skill-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .dnd-rest-bar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .dnd-rest-actions {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .dnd-rest-actions .ghost-button {
+    padding-inline: 7px;
+    font-size: .68rem;
+  }
+
+  .dnd-mini-tabs {
+    margin-inline: -2px;
+  }
+
+  .dnd-mini-tab {
+    min-height: 38px;
+    padding-inline: 12px;
+  }
+
+  .dnd-economy-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .dnd-action-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .dnd-action-controls {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .dnd-cast-level select,
+  .dnd-action-heading .primary-button {
+    width: 100%;
+  }
+
+  .dnd-roll-result,
+  .dnd-inventory-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}
+
+
+/* Unit nickname editor */
+.nickname-toggle.active {
+  border-color: rgba(86, 214, 164, .72);
+}
+
+.nickname-card {
+  width: min(520px, calc(100vw - 28px));
+}
+
+.nickname-field {
+  display: grid;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+.nickname-field > span {
+  font-size: .78rem;
+  font-weight: 800;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  opacity: .72;
+}
+
+.nickname-field input {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 48px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel-strong, var(--panel));
+  color: inherit;
+  padding: 0 14px;
+  font: inherit;
+  font-size: 1rem;
+}
+
+.nickname-field input:focus {
+  outline: 2px solid rgba(105, 176, 255, .38);
+  outline-offset: 1px;
+}
+
+.nickname-help {
+  margin: 10px 0 0;
+  opacity: .72;
+  line-height: 1.45;
+}
+
+.nickname-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 18px;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 620px) {
+  .unit-top-statuses {
+    flex-wrap: wrap;
+  }
+
+  .nickname-actions > button {
+    flex: 1 1 150px;
+  }
+}
+
+
+/* Warhammer: The Old World */
+.old-world-unit-meta {
+  margin-top: .25rem;
+}
+
+.old-world-weapon-table .old-world-weapon-text {
+  min-width: 11rem;
+  white-space: normal;
+  line-height: 1.35;
+}
+
+.old-world-spell-card .dnd-action-meta {
+  margin: .5rem 0 .75rem;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 720px) {
+  .old-world-weapon-table .old-world-weapon-text {
+    min-width: 0;
   }
 }

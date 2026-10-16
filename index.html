@@ -4,24 +4,46 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
   <meta name="theme-color" content="#111318" />
-  <meta name="description" content="Tabletop Voice — voice-first roster reference for tabletop games." />
+  <meta name="description" content="Tabletop Voice — voice-first army and roster reference for tabletop games." />
   <meta name="referrer" content="no-referrer" />
-  <link rel="manifest" href="manifest.webmanifest" />
-  <link rel="icon" href="icon.svg" type="image/svg+xml" />
-  <link rel="stylesheet" href="app.css" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="/app.css" />
   <title>Tabletop Voice</title>
 </head>
 <body>
   <div class="app-shell">
-    <div id="firstRunModal" class="first-run-modal hidden" role="dialog" aria-modal="true" aria-labelledby="firstRunTitle">
+        <div id="gameSystemModal" class="game-system-modal hidden" role="dialog" aria-modal="true" aria-labelledby="gameSystemTitle">
+      <div class="game-system-card">
+        <button id="gameSystemClose" class="game-system-close hidden" type="button" aria-label="Keep current game">×</button>
+        <p class="eyebrow">TABLETOP VOICE</p>
+        <h1 id="gameSystemTitle">Choose your game</h1>
+        <p class="game-system-intro">Pick a publisher, then choose the game you're playing. Available systems are active now; the rest show where Tabletop Voice is heading.</p>
+        <div id="gameSystemCatalogue" class="game-catalogue" data-game-catalogue="chooser"></div>
+      </div>
+    </div>
+
+<div id="firstRunModal" class="first-run-modal hidden" role="dialog" aria-modal="true" aria-labelledby="firstRunTitle">
       <div class="first-run-card beta-notice-card">
         <p class="eyebrow">PLAYER-BUILT TABLETOP TOOL</p>
         <h2 id="firstRunTitle">Welcome to Tabletop Voice</h2>
-        <p class="first-run-intro">Tabletop Voice is an independent companion app. It does not ship with Warhammer 40,000 rules, datasheets, codex text or artwork. Game content is shown only after you choose to load it from your own roster files or supported community-maintained web data.</p>
-        <p class="first-run-note"><strong>Unofficial:</strong> Tabletop Voice is not affiliated with, endorsed by or sponsored by Games Workshop. Warhammer and related names and marks belong to their respective owners. Always use official publications for authoritative rules, and only import data you are permitted to use.</p>
+        <p class="first-run-intro">Tabletop Voice is an independent companion app. It does not bundle paid rulebooks, codex text or game artwork. Game data is shown only after you choose to load it from your own roster files or a supported game service.</p>
+        <p class="first-run-note"><strong>Unofficial:</strong> Tabletop Voice is an independent project and is not affiliated with or endorsed by Games Workshop, OnePageRules, Wizards of the Coast, D&amp;D Beyond or other game publishers and services. Game names and related marks belong to their respective owners. Always use the publisher's current rules as the authoritative source.</p>
         <p class="first-run-note">This is a free public beta, so features, layouts and data handling may change while the app is being tested.</p>
         <p class="first-run-note"><a href="./privacy.html" target="_blank" rel="noopener noreferrer">Privacy &amp; data use</a></p>
         <button id="firstRunContinue" class="primary-button large" type="button">Continue to Setup</button>
+      </div>
+    </div>
+
+    <div id="dndRollModal" class="dnd-roll-modal hidden" role="dialog" aria-modal="true" aria-labelledby="dndRollTitle">
+      <div class="dnd-roll-card">
+        <button id="dndRollClose" class="dnd-roll-close" type="button" aria-label="Close roll result">×</button>
+        <span id="dndRollEyebrow" class="dnd-roll-eyebrow">ROLL RESULT</span>
+        <h2 id="dndRollTitle">Check</h2>
+        <div id="dndRollTotal" class="dnd-roll-total">20</div>
+        <div id="dndRollSubtitle" class="dnd-roll-subtitle"></div>
+        <div id="dndRollBreakdown" class="dnd-roll-breakdown"></div>
+        <button id="dndRollDone" class="primary-button large dnd-roll-done" type="button">Done</button>
       </div>
     </div>
 
@@ -55,7 +77,8 @@
           <button type="button" data-page-target="share">⇄ Share Lists</button>
           <a class="nav-more-link" href="./roster-transfer/">▦ Phone QR Transfer</a>
           <button type="button" data-page-target="updates">✉ Get updates</button>
-          <button type="button" data-page-target="guide">⚙ Guide</button>
+          <button type="button" data-page-target="settings">⚙ Settings</button>
+          <button type="button" data-page-target="guide">▤ Guide</button>
           <a class="nav-more-link" href="./privacy.html" target="_blank" rel="noopener noreferrer">ⓘ Privacy &amp; About</a>
         </div>
       </div>
@@ -64,30 +87,96 @@
     <main class="app-main">
       <section id="welcome" class="app-page data-page" data-page="setup">
         <div class="page-hero compact-hero setup-hero">
-          <div>
+          <div class="setup-hero-copy">
             <p class="eyebrow">GAME SETUP</p>
             <h1>Load your army.</h1>
             <p class="lede">Bring in your New Recruit lists, or load the wider dataset when you need broader lookup at the table.</p>
           </div>
+          <div class="setup-hero-actions" aria-label="Setup actions">
+            <button id="resetGameButton" class="ghost-button compact" type="button">Reset game</button>
+          </div>
+        </div>
+
+        <div class="setup-system-strip">
+          <div class="setup-system-strip-copy">
+            <span class="section-label">GAME SYSTEM</span>
+            <strong id="setupCurrentGame">Choose a game</strong>
+          </div>
+          <button id="setupChangeGameButton" class="ghost-button compact" type="button">Change game system</button>
         </div>
 
         <div class="setup-import-grid">
-          <section class="tool-card setup-import-card">
-            <span class="section-label">NEW RECRUIT LISTS</span>
-            <h2>Import your lists</h2>
-            <p>Import multiple New Recruit JSON, ROS, ROSZ or TXT exports for the armies in your game.</p>
-            <button id="importButton" class="primary-button large setup-main-action" type="button">Import New Recruit lists</button>
+          <section id="newRecruitImportCard" class="tool-card setup-import-card">
+            <span id="newRecruitImportLabel" class="section-label">NEW RECRUIT</span>
+            <h2 id="newRecruitImportTitle">Import list</h2>
+            <p id="newRecruitImportCopy">Export your roster from New Recruit, then choose the JSON, ROS, ROSZ or TXT file here.</p>
+            <button id="importButton" class="primary-button large setup-main-action" type="button">Choose New Recruit file</button>
             <input id="fileInput" type="file" multiple accept=".json,.ros,.rosz,.txt,application/json,text/plain,application/xml,text/xml,application/zip" hidden />
-            <div id="dataRosterSummary" class="data-roster-summary">No New Recruit lists loaded yet.</div>
           </section>
 
-          <section class="tool-card setup-import-card">
+          <section id="dndBeyondImportCard" class="tool-card setup-import-card dnd-beyond-import-card hidden">
+            <span class="section-label">D&amp;D BEYOND</span>
+            <h2>Import character</h2>
+            <p>Set the character to <strong>Public</strong> in D&amp;D Beyond, then paste its character link or ID. You can also import saved character-service JSON.</p>
+            <div class="dnd-beyond-import-controls">
+              <input id="dndBeyondInput" type="text" inputmode="url" autocomplete="off" spellcheck="false" placeholder="https://www.dndbeyond.com/characters/12345678" aria-label="D&D Beyond character link or ID" />
+              <button id="dndBeyondImportButton" class="primary-button large setup-main-action" type="button">Import D&amp;D Beyond character</button>
+              <button id="dndBeyondFileButton" class="ghost-button large setup-main-action" type="button">Choose character JSON</button>
+              <input id="dndBeyondFileInput" type="file" accept=".json,application/json" hidden />
+            </div>
+            <small id="dndBeyondImportStatus" class="opr-import-status">Public D&amp;D Beyond characters · beta import via D&amp;D Beyond's unofficial character endpoint · JSON fallback supported.</small>
+          </section>
+
+
+          <section id="necromundaImportCard" class="tool-card setup-import-card necromunda-import-card hidden">
+            <span class="section-label">GYRINX · NECROMUNDA N26</span>
+            <h2>Import shared gang</h2>
+            <p>In Gyrinx, open your gang and use <strong>Share</strong>. Paste the public gang link here and Tabletop Voice will build fighter cards from the live roster.</p>
+            <div class="necromunda-import-controls">
+              <input id="necromundaShareInput" type="url" inputmode="url" autocomplete="off" spellcheck="false" placeholder="https://gyrinx.app/n26/gangs/…" aria-label="Gyrinx shared gang link" />
+              <button id="necromundaImportButton" class="primary-button large setup-main-action" type="button">Import Gyrinx gang</button>
+            </div>
+            <small id="necromundaImportStatus" class="opr-import-status">Current Necromunda N26 gangs · public Gyrinx share link.</small>
+          </section>
+
+          <section id="liCommunityImportCard" class="tool-card setup-import-card li-community-import-card hidden">
+            <span class="section-label">LEGION COMPANION</span>
+            <h2>Import community list</h2>
+            <p>In Legion Companion, use its text or JSON export. Paste the export here, or choose the exported file.</p>
+            <div class="li-community-import-controls">
+              <textarea id="liCommunityInput" rows="7" autocomplete="off" spellcheck="false" placeholder="Paste Legion Companion text / JSON export…" aria-label="Legion Companion export"></textarea>
+              <div class="li-community-import-actions">
+                <button id="liCommunityImportButton" class="primary-button large setup-main-action" type="button">Import pasted list</button>
+                <button id="liCommunityFileButton" class="ghost-button large setup-main-action" type="button">Choose JSON / TXT</button>
+              </div>
+              <input id="liCommunityFileInput" type="file" accept=".json,.txt,application/json,text/plain" hidden />
+            </div>
+            <small id="liCommunityImportStatus" class="opr-import-status">Supports Legion Companion text and JSON exports.</small>
+          </section>
+
+          <section id="fullDataImportCard" class="tool-card setup-import-card">
             <span class="section-label">ALL ARMIES</span>
             <h2>Full datasheet lookup</h2>
             <p>Import the wider community-maintained 40K dataset, then choose which armies should be included in search.</p>
             <button id="fullDataButton" class="ghost-button large setup-main-action" type="button">Import all armies</button>
           </section>
+
+          <section id="oprImportCard" class="tool-card setup-import-card opr-import-card">
+            <span class="section-label">ARMY FORGE</span>
+            <h2>Import shared list</h2>
+            <p>In Army Forge choose <strong>Share as Link</strong>, then paste that shared roster link below.</p>
+            <div class="opr-import-controls">
+              <textarea id="oprShareInput" rows="5" autocomplete="off" spellcheck="false" placeholder="Paste Army Forge share link…" aria-label="Army Forge shared list link"></textarea>
+              <button id="oprImportButton" class="primary-button large setup-main-action" type="button">Import Army Forge list</button>
+            </div>
+            <small id="oprImportStatus" class="opr-import-status">Grimdark Future and Grimdark Future: Firefight</small>
+          </section>
         </div>
+
+        <section class="setup-loaded-lists">
+          <span class="section-label">LOADED LISTS</span>
+          <div id="dataRosterSummary" class="data-roster-summary">No imported lists loaded yet.</div>
+        </section>
 
         <section id="fullDataArmySection" class="tool-card full-data-army-section hidden">
           <div class="army-section-copy">
@@ -136,6 +225,7 @@
               <div id="unitTopStatuses" class="unit-top-statuses">
                 <button id="battleShockToggle" class="ghost-button compact unit-status-toggle battle-shock-toggle" type="button">Battle-shocked</button>
                 <button id="oncePerGameToggle" class="ghost-button compact unit-status-toggle" type="button">Once-per-game used</button>
+                <button id="unitNicknameButton" class="ghost-button compact unit-status-toggle nickname-toggle" type="button">Nickname</button>
               </div>
             </div>
             <div class="detail-heading">
@@ -394,20 +484,36 @@
         </section>
       </section>
 
-      <section id="pageSetup" class="app-page hidden utility-page" data-page="guide">
+            <section id="pageSettings" class="app-page hidden utility-page settings-page" data-page="settings">
+        <div class="page-heading">
+          <p class="eyebrow">SETTINGS</p>
+          <h1>Game system</h1>
+          <p>Switching systems changes the imports, references and game-specific tools shown by Tabletop Voice. Your loaded lists stay stored on this device.</p>
+        </div>
+
+        <section class="tool-card settings-game-card">
+          <div class="settings-current-game">
+            <span class="section-label">CURRENT GAME</span>
+            <strong id="settingsCurrentGame">Not selected</strong>
+          </div>
+          <div id="settingsGameSystemCatalogue" class="game-catalogue settings-game-catalogue" data-game-catalogue="settings"></div>
+        </section>
+      </section>
+
+<section id="pageSetup" class="app-page hidden utility-page" data-page="guide">
         <div class="page-heading">
           <p class="eyebrow">GUIDE</p>
           <h1>Using Tabletop Voice</h1>
           <p>A quick guide to loading data and getting around the app.</p>
         </div>
         <div class="setup-grid">
-          <button class="setup-step" type="button" data-page-target="setup"><span>1</span><strong>Load your lists</strong><small>Import New Recruit JSON, ROS, ROSZ or TXT files. You can also load the wider community dataset for broader lookup.</small></button>
-          <button class="setup-step" type="button" data-page-target="datasheets"><span>2</span><strong>Open Units</strong><small>Pick a list, tap a unit, or search by name. Hold the mic button to use voice lookup.</small></button>
-          <button class="setup-step" type="button" data-page-target="datasheets"><span>3</span><strong>Switch attached units</strong><small>When New Recruit links a bodyguard, Leader or Support unit, use the Attached button beside Focus and Pin to cycle between them.</small></button>
-          <button class="setup-step" type="button" data-page-target="strats"><span>4</span><strong>Use army references</strong><small>Strats and Army Rules follow the currently selected imported list, including its selected detachment where data is available.</small></button>
-          <button class="setup-step" type="button" data-page-target="rules"><span>5</span><strong>Load core rules</strong><small>Core rules are not built into the app. Open Core Rules and load the current community reference when you need it.</small></button>
-          <button class="setup-step" type="button" data-page-target="score"><span>6</span><strong>Score and roll</strong><small>Use Score during the game, and Dice for quick rolls, targets and rerolls.</small></button>
-          <button class="setup-step" type="button" data-page-target="share"><span>7</span><strong>Move or share lists</strong><small>Use Share Lists between two running copies of the app, or Phone QR Transfer to move roster files from a PC to your phone.</small></button>
+          <button class="setup-step" type="button" data-page-target="setup"><span>1</span><strong>Load your list</strong><small>Choose the game system first, then import using the roster source available for that game.</small></button>
+          <button class="setup-step" type="button" data-page-target="datasheets"><span>2</span><strong>Open Units</strong><small>Pick a list, tap a unit, or search by name to open its table-side reference.</small></button>
+          <button class="setup-step" type="button" data-page-target="datasheets"><span>3</span><strong>Use voice lookup</strong><small>Hold the mic button and say the unit you want instead of searching manually.</small></button>
+          <button class="setup-step" type="button" data-page-target="army-rules"><span>4</span><strong>Check list rules</strong><small>Where the roster contains army-level rules, spells, prayers or other references, they appear with the active list.</small></button>
+          <button class="setup-step" type="button" data-page-target="dice"><span>5</span><strong>Roll dice</strong><small>Use the built-in dice page for quick rolls, targets and rerolls at the table.</small></button>
+          <button class="setup-step" type="button" data-page-target="share"><span>6</span><strong>Move or share lists</strong><small>Share a loaded list between copies of Tabletop Voice, or use Phone QR Transfer to move roster files from PC to phone.</small></button>
+          <button class="setup-step" type="button" data-page-target="settings"><span>7</span><strong>Change game</strong><small>Open Settings at any time to switch systems without deleting lists you loaded for another game.</small></button>
         </div>
       </section>
     </main>
@@ -449,6 +555,28 @@
       </div>
     </div>
 
+    <div id="unitNicknameModal" class="voice-shortlist-modal hidden" role="dialog" aria-modal="true" aria-labelledby="unitNicknameTitle">
+      <div class="voice-shortlist-card nickname-card">
+        <div class="voice-shortlist-heading">
+          <div>
+            <p class="eyebrow">VOICE NICKNAME</p>
+            <h2 id="unitNicknameTitle">Give this unit a quick name</h2>
+            <p id="unitNicknameUnitName" class="voice-heard"></p>
+          </div>
+          <button id="unitNicknameClose" class="icon-button" type="button" aria-label="Close nickname editor">×</button>
+        </div>
+        <label class="nickname-field">
+          <span>Nickname</span>
+          <input id="unitNicknameInput" type="text" maxlength="48" autocomplete="off" placeholder="e.g. Bob, Tank, Wizard…" />
+        </label>
+        <p class="nickname-help">You can type or say this nickname to find the unit. Its original datasheet name stays unchanged.</p>
+        <div class="nickname-actions">
+          <button id="unitNicknameClear" class="ghost-button compact" type="button">Clear nickname</button>
+          <button id="unitNicknameSave" class="primary-button compact" type="button">Save nickname</button>
+        </div>
+      </div>
+    </div>
+
     <div id="voiceShortlistModal" class="voice-shortlist-modal hidden" role="dialog" aria-modal="true" aria-labelledby="voiceShortlistTitle">
       <div class="voice-shortlist-card">
         <div class="voice-shortlist-heading">
@@ -471,6 +599,6 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.5/peerjs.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js" integrity="sha512-CNgIRecGo7nphbeZ04Sc13ka07paqdeTu0WR1IM4kNcpmBAUSHSQX0FslNhTDadL4O5SAGapGt4FodqL8My0mA==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-  <script src="app.js"></script>
+  <script src="/app.js"></script>
 </body>
 </html>

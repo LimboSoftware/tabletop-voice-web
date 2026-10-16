@@ -1,16 +1,19 @@
-const CACHE = "tabletop-voice-beta-v30";
+const CACHE = "tabletop-voice-beta-v58";
 const ASSETS = [
-  "./",
-  "./index.html",
-  "./app.css",
-  "./app.js",
-  "./manifest.webmanifest",
-  "./icon.svg",
-  "./privacy.html",
-  "./roster-transfer/",
-  "./roster-transfer/index.html",
-  "./roster-transfer/style.css",
-  "./roster-transfer/app.js"
+  "/",
+  "/index.html",
+  "/app.css",
+  "/app.js",
+  "/li-community-units-weapons.json",
+  "/li-community-detachments.json",
+  "/li-community-formations.json",
+  "/manifest.webmanifest",
+  "/icon.svg",
+  "/privacy.html",
+  "/roster-transfer/",
+  "/roster-transfer/index.html",
+  "/roster-transfer/style.css",
+  "/roster-transfer/app.js"
 ];
 
 self.addEventListener("install", event => {
@@ -38,7 +41,7 @@ self.addEventListener("fetch", event => {
   if (url.origin !== self.location.origin) return;
   if (url.search) {
     if (request.mode === "navigate") {
-      event.respondWith(fetch(request).catch(() => caches.match("./index.html")));
+      event.respondWith(fetch(request).catch(() => caches.match("/index.html")));
     }
     return;
   }
@@ -46,7 +49,7 @@ self.addEventListener("fetch", event => {
   if (request.mode === "navigate") {
     event.respondWith(
       fetch(request).catch(() =>
-        caches.match(request).then(hit => hit || caches.match("./index.html"))
+        caches.match(request).then(hit => hit || caches.match("/index.html"))
       )
     );
     return;

@@ -4,6 +4,7 @@ const state = {
   selected: null,
   selectedRosterId: null,
   mode: localStorage.getItem("tv_mode") || "mobile",
+  gameSystem: localStorage.getItem("tv_game_system") || "",
   currentPage: "setup",
   listening: false,
   recognition: null,
@@ -18,7 +19,13 @@ const state = {
   sharePeer: null,
   shareConnection: null,
   shareScanner: null,
-  pendingSharedRoster: null
+  pendingSharedRoster: null,
+  dndFocusedActionId: "",
+  dndDetailTab: "actions",
+  dndScrollToFocusedAction: false,
+  dndListFilter: "",
+  dndListKind: "",
+  dndAudioContext: null
 };
 
 const $ = (id) => document.getElementById(id);
@@ -28,6 +35,33 @@ const els = {
   fileInput: $("fileInput"),
   importButton: $("importButton"),
   fullDataButton: $("fullDataButton"),
+  oprShareInput: $("oprShareInput"),
+  oprImportButton: $("oprImportButton"),
+  oprImportStatus: $("oprImportStatus"),
+  liCommunityImportCard: $("liCommunityImportCard"),
+  liCommunityInput: $("liCommunityInput"),
+  liCommunityImportButton: $("liCommunityImportButton"),
+  liCommunityFileButton: $("liCommunityFileButton"),
+  liCommunityFileInput: $("liCommunityFileInput"),
+  liCommunityImportStatus: $("liCommunityImportStatus"),
+  necromundaImportCard: $("necromundaImportCard"),
+  necromundaShareInput: $("necromundaShareInput"),
+  necromundaImportButton: $("necromundaImportButton"),
+  necromundaImportStatus: $("necromundaImportStatus"),
+  dndBeyondImportCard: $("dndBeyondImportCard"),
+  dndBeyondInput: $("dndBeyondInput"),
+  dndBeyondImportButton: $("dndBeyondImportButton"),
+  dndBeyondFileButton: $("dndBeyondFileButton"),
+  dndBeyondFileInput: $("dndBeyondFileInput"),
+  dndBeyondImportStatus: $("dndBeyondImportStatus"),
+  dndRollModal: $("dndRollModal"),
+  dndRollClose: $("dndRollClose"),
+  dndRollDone: $("dndRollDone"),
+  dndRollEyebrow: $("dndRollEyebrow"),
+  dndRollTitle: $("dndRollTitle"),
+  dndRollTotal: $("dndRollTotal"),
+  dndRollSubtitle: $("dndRollSubtitle"),
+  dndRollBreakdown: $("dndRollBreakdown"),
   clearRoster: $("clearRoster"),
   searchInput: $("searchInput"),
   resultList: $("resultList"),
@@ -37,6 +71,13 @@ const els = {
   backToRosterButton: $("backToRosterButton"),
   battleShockToggle: $("battleShockToggle"),
   oncePerGameToggle: $("oncePerGameToggle"),
+  unitNicknameButton: $("unitNicknameButton"),
+  unitNicknameModal: $("unitNicknameModal"),
+  unitNicknameClose: $("unitNicknameClose"),
+  unitNicknameUnitName: $("unitNicknameUnitName"),
+  unitNicknameInput: $("unitNicknameInput"),
+  unitNicknameClear: $("unitNicknameClear"),
+  unitNicknameSave: $("unitNicknameSave"),
   voiceSearchWrap: $("voiceSearchWrap"),
   activeArmySelector: $("activeArmySelector"),
   quickLists: $("quickLists"),
@@ -79,6 +120,18 @@ const els = {
   pageRules: $("pageRules"),
   pageShare: $("pageShare"),
   pageUpdates: $("pageUpdates"),
+  pageSettings: $("pageSettings"),
+  gameSystemModal: $("gameSystemModal"),
+  gameSystemClose: $("gameSystemClose"),
+  gameSystemCatalogue: $("gameSystemCatalogue"),
+  settingsGameSystemCatalogue: $("settingsGameSystemCatalogue"),
+  settingsCurrentGame: $("settingsCurrentGame"),
+  newRecruitImportCard: $("newRecruitImportCard"),
+  newRecruitImportLabel: $("newRecruitImportLabel"),
+  newRecruitImportTitle: $("newRecruitImportTitle"),
+  newRecruitImportCopy: $("newRecruitImportCopy"),
+  fullDataImportCard: $("fullDataImportCard"),
+  oprImportCard: $("oprImportCard"),
   stratSourceTabs: $("stratSourceTabs"),
   stratPageContent: $("stratPageContent"),
   armyRuleSourceTabs: $("armyRuleSourceTabs"),
@@ -131,6 +184,9 @@ const els = {
   coreRulesImportButton: $("coreRulesImportButton"),
   coreRulesImportStatus: $("coreRulesImportStatus"),
   setupChooseArmies: $("setupChooseArmies"),
+  setupCurrentGame: $("setupCurrentGame"),
+  setupChangeGameButton: $("setupChangeGameButton"),
+  resetGameButton: $("resetGameButton"),
   resetMatchButton: $("resetMatchButton"),
   toast: $("toast"),
   firstRunModal: $("firstRunModal"),
@@ -156,25 +212,29 @@ async function enforcePortraitOrientation() {
 function boot() {
   applyMode();
   enforcePortraitOrientation();
+  renderGameSystemCatalogues();
   bindEvents();
-  showFirstRunIfNeeded();
   setupSpeech();
 
   try {
     restore();
+    applyGameSystemRoute();
+    applyGameSystemUi();
     renderAll();
     renderMatchTools();
     restoreSetupChecks();
     switchPage(state.currentPage, {silent:true});
     handleShareUrlOnBoot();
     handlePendingRosterTransferOnBoot();
+    showEntryModalIfNeeded();
   } catch (error) {
     console.error("Tabletop Voice startup render failed", error);
     toast("Some saved data could not be rendered. Controls are still available.");
     switchPage("setup", {silent:true});
+    showEntryModalIfNeeded();
   }
 
-  if ("serviceWorker" in navigator) navigator.serviceWorker.register("./sw.js").catch(() => {});
+  if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
 }
 
 function bindEvents() {
@@ -186,6 +246,65 @@ function bindEvents() {
   els.importButton?.addEventListener("click", () => els.fileInput.click());
   els.fileInput?.addEventListener("change", handleFiles);
   els.fullDataButton?.addEventListener("click", loadFull40kData);
+  els.oprImportButton?.addEventListener("click", loadOprArmyForgeList);
+  els.liCommunityImportButton?.addEventListener("click", () => importLiCommunityPayload(els.liCommunityInput?.value || "", "paste"));
+  els.liCommunityFileButton?.addEventListener("click", () => els.liCommunityFileInput?.click());
+  els.liCommunityFileInput?.addEventListener("change", handleLiCommunityFile);
+  els.necromundaImportButton?.addEventListener("click", loadGyrinxGang);
+  els.dndBeyondImportButton?.addEventListener("click", loadDndBeyondCharacter);
+  els.dndBeyondFileButton?.addEventListener("click", () => els.dndBeyondFileInput?.click());
+  els.dndBeyondFileInput?.addEventListener("change", handleDndBeyondJsonFile);
+  els.dndBeyondInput?.addEventListener("keydown", event => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      loadDndBeyondCharacter();
+    }
+  });
+  const closeDndRoll = () => els.dndRollModal?.classList.add("hidden");
+  els.dndRollClose?.addEventListener("click", closeDndRoll);
+  els.dndRollDone?.addEventListener("click", closeDndRoll);
+  els.dndRollModal?.addEventListener("click", event => {
+    if (event.target === els.dndRollModal) closeDndRoll();
+  });
+  document.addEventListener("keydown", event => {
+    if (event.key === "Escape" && !els.dndRollModal?.classList.contains("hidden")) {
+      closeDndRoll();
+    }
+  });
+  els.necromundaShareInput?.addEventListener("keydown", event => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      loadGyrinxGang();
+    }
+  });
+  els.liCommunityInput?.addEventListener("keydown", event => {
+    if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
+      event.preventDefault();
+      importLiCommunityPayload(els.liCommunityInput?.value || "", "paste");
+    }
+  });
+  els.oprShareInput?.addEventListener("keydown", event => {
+    const isTextarea = event.currentTarget?.tagName === "TEXTAREA";
+    const submit = event.key === "Enter" && (!isTextarea || event.ctrlKey || event.metaKey);
+    if (submit) {
+      event.preventDefault();
+      loadOprArmyForgeList();
+    }
+  });
+  document.addEventListener("click", event => {
+    const providerTab = event.target.closest("[data-game-provider-tab]");
+    if (providerTab) {
+      const catalogue = providerTab.closest(".game-catalogue");
+      if (catalogue) setGameCatalogueProvider(catalogue, providerTab.dataset.gameProviderTab);
+      return;
+    }
+
+    const gameChoice = event.target.closest("[data-game-system-choice]");
+    if (gameChoice && !gameChoice.disabled) {
+      const fromChooser = Boolean(gameChoice.closest("#gameSystemModal"));
+      setGameSystem(gameChoice.dataset.gameSystemChoice, {fromChooser});
+    }
+  });
   els.clearRoster.addEventListener("click", clearRosters);
   els.searchInput.addEventListener("input", () => {
     state.selected = null;
@@ -198,6 +317,22 @@ function bindEvents() {
   els.backToRosterButton?.addEventListener("click", handleDatasheetBack);
   els.battleShockToggle?.addEventListener("click", () => toggleStatus("Battle-shocked"));
   els.oncePerGameToggle?.addEventListener("click", () => toggleStatus("Once-per-game used"));
+  els.unitNicknameButton?.addEventListener("click", openUnitNicknameModal);
+  els.unitNicknameClose?.addEventListener("click", closeUnitNicknameModal);
+  els.unitNicknameSave?.addEventListener("click", saveUnitNicknameFromModal);
+  els.unitNicknameClear?.addEventListener("click", clearUnitNicknameFromModal);
+  els.unitNicknameInput?.addEventListener("keydown", event => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      saveUnitNicknameFromModal();
+    } else if (event.key === "Escape") {
+      event.preventDefault();
+      closeUnitNicknameModal();
+    }
+  });
+  els.unitNicknameModal?.addEventListener("click", event => {
+    if (event.target === els.unitNicknameModal) closeUnitNicknameModal();
+  });
   els.pinButton.addEventListener("click", toggleSelectedPin);
   els.cpDown?.addEventListener("click", () => adjustCP(-1));
   els.cpUp?.addEventListener("click", () => adjustCP(1));
@@ -254,6 +389,12 @@ function bindEvents() {
     if (value) connectOpponentShareLink(value);
   });
   els.setupChooseArmies?.addEventListener("click", openArmyPicker);
+  els.setupChangeGameButton?.addEventListener("click", openGameSystemChooser);
+  els.gameSystemClose?.addEventListener("click", () => {
+    if (!state.gameSystem) return;
+    els.gameSystemModal?.classList.add("hidden");
+  });
+  els.resetGameButton?.addEventListener("click", resetGame);
   els.resetMatchButton?.addEventListener("click", resetMatchState);
   document.querySelectorAll("[data-setup-check]").forEach(input => {
     input.addEventListener("change", persistSetupChecks);
@@ -371,6 +512,14 @@ async function handlePendingRosterTransferOnBoot() {
       });
 
       const roster = await parseRosterUpload(file);
+      const importedGame = inferRosterGameSystem(roster);
+
+      if (state.gameSystem && importedGame !== state.gameSystem) {
+        throw new Error(
+          "This looks like a " + gameSystemDisplayName(importedGame) +
+          " list. Switch game system in Settings before importing it."
+        );
+      }
 
       const existingIndex = state.rosters.findIndex(existing =>
         existing.source === "new-recruit" &&
@@ -415,6 +564,649 @@ async function handlePendingRosterTransferOnBoot() {
   }
 }
 
+const GAME_PROVIDERS = [
+  {
+    id:"gw",
+    name:"Games Workshop",
+    systems:[
+      {id:"40k", name:"Warhammer 40,000", detail:"New Recruit, 40K references, scoring and table tools", available:true},
+      {id:"aos", name:"Warhammer Age of Sigmar", detail:"AoS 4th · New Recruit roster support", available:true, beta:true},
+      {id:"heresy", name:"Warhammer: The Horus Heresy", detail:"3rd Edition · New Recruit roster support", available:true, beta:true},
+      {id:"old-world", name:"Warhammer: The Old World", detail:"New Recruit roster support", available:true, beta:true},
+      {id:"kill-team", name:"Kill Team", detail:"2024 · New Recruit roster support", available:true, beta:true},
+      {id:"necromunda", name:"Necromunda", detail:"N26 · Gyrinx shared gang", available:true, beta:true},
+      {id:"warcry", name:"Warcry", detail:"Planned", available:false},
+      {id:"underworlds", name:"Warhammer Underworlds", detail:"Planned", available:false},
+      {id:"legions-imperialis", name:"Legions Imperialis", detail:"New Recruit · Legion Companion", available:true, beta:true},
+      {id:"adeptus-titanicus", name:"Adeptus Titanicus", detail:"Planned", available:false},
+      {id:"blood-bowl", name:"Blood Bowl", detail:"Planned", available:false},
+      {id:"middle-earth", name:"Middle-earth Strategy Battle Game", detail:"Planned", available:false},
+      {id:"warhammer-quest", name:"Warhammer Quest", detail:"Planned", available:false}
+    ]
+  },
+  {
+    id:"opr",
+    name:"OnePageRules",
+    systems:[
+      {id:"grimdark", name:"Grimdark Future", detail:"Army Forge + New Recruit", available:true},
+      {id:"grimdark-firefight", name:"Grimdark Future: Firefight", detail:"Army Forge + New Recruit", available:true},
+      {id:"opr-star-quest", name:"Grimdark Future: Star Quest", detail:"Army Forge quest/campaign import", available:true, beta:true},
+      {id:"opr-warfleets", name:"Grimdark Future: Warfleets", detail:"Army Forge · Share as Text", available:true, beta:true},
+      {id:"aof", name:"Age of Fantasy", detail:"Army Forge + New Recruit", available:true},
+      {id:"aof-skirmish", name:"Age of Fantasy: Skirmish", detail:"Army Forge + New Recruit", available:true},
+      {id:"aof-regiments", name:"Age of Fantasy: Regiments", detail:"Army Forge + New Recruit", available:true},
+      {id:"aof-quest", name:"Age of Fantasy: Quest", detail:"Army Forge quest/campaign import", available:true, beta:true}
+    ]
+  },
+  {
+    id:"dnd",
+    name:"Dungeons & Dragons",
+    systems:[
+      {id:"dnd-5e", name:"D&D 5e", detail:"D&D Beyond characters · attacks, spells, slots and inventory", available:true, beta:true}
+    ]
+  },
+  {
+    id:"other",
+    name:"Other",
+    systems:[
+      {id:"trench-crusade", name:"Trench Crusade", detail:"Planned", available:false}
+    ]
+  }
+];
+
+const GAME_SYSTEMS = Object.fromEntries(
+  GAME_PROVIDERS.flatMap(provider =>
+    provider.systems.map(system => [
+      system.id,
+      {...system, provider:provider.id, providerName:provider.name}
+    ])
+  )
+);
+
+const GAME_SYSTEM_PICKER_SEEN_KEY = "tv_game_system_picker_seen_v1";
+
+const GAME_SYSTEM_ROUTES = {
+  "40k":"/40k",
+  aos:"/aos",
+  heresy:"/horus-heresy",
+  "old-world":"/old-world",
+  "kill-team":"/kill-team",
+  necromunda:"/necromunda",
+  "legions-imperialis":"/legions-imperialis",
+  "dnd-5e":"/dnd",
+  grimdark:"/grimdark-future",
+  "grimdark-firefight":"/grimdark-firefight",
+  "opr-star-quest":"/grimdark-star-quest",
+  "opr-warfleets":"/warfleets",
+  aof:"/age-of-fantasy",
+  "aof-skirmish":"/age-of-fantasy-skirmish",
+  "aof-regiments":"/age-of-fantasy-regiments",
+  "aof-quest":"/age-of-fantasy-quest"
+};
+
+const GAME_ROUTE_ALIASES = {
+  "/heresy":"heresy",
+  "/grimdark":"grimdark",
+  "/gff":"grimdark-firefight",
+  "/star-quest":"opr-star-quest",
+  "/opr-warfleets":"opr-warfleets",
+  "/aof":"aof",
+  "/aof-skirmish":"aof-skirmish",
+  "/aof-regiments":"aof-regiments",
+  "/aof-quest":"aof-quest",
+  "/dnd-5e":"dnd-5e",
+  "/dungeons-and-dragons":"dnd-5e"
+};
+
+const GAME_SYSTEM_BY_ROUTE = Object.fromEntries(
+  Object.entries(GAME_SYSTEM_ROUTES).map(([gameSystem, route]) => [route, gameSystem])
+);
+
+function normalizedRoutePath(pathname = location.pathname) {
+  const raw = String(pathname || "/");
+  if (raw === "/") return "/";
+  return raw.replace(/\/+$/, "") || "/";
+}
+
+function gameSystemFromPath(pathname = location.pathname) {
+  const path = normalizedRoutePath(pathname);
+  return GAME_SYSTEM_BY_ROUTE[path] || GAME_ROUTE_ALIASES[path] || "";
+}
+
+function gameRouteForSystem(gameSystem = state.gameSystem) {
+  return GAME_SYSTEM_ROUTES[gameSystem] || "/";
+}
+
+function isRootGameChooserPath(pathname = location.pathname) {
+  const path = normalizedRoutePath(pathname);
+  return path === "/" || path === "/index.html";
+}
+
+function applyGameSystemRoute() {
+  const routedSystem = gameSystemFromPath();
+  if (!routedSystem || !GAME_SYSTEMS[routedSystem]?.available) return false;
+
+  state.gameSystem = routedSystem;
+  localStorage.setItem("tv_game_system", routedSystem);
+  localStorage.setItem(GAME_SYSTEM_PICKER_SEEN_KEY, "1");
+  ensureActiveRosterForGame();
+  return true;
+}
+
+function syncGameSystemUrl(gameSystem = state.gameSystem) {
+  const route = gameRouteForSystem(gameSystem);
+  if (!route || normalizedRoutePath() === route) return;
+
+  const url = new URL(location.href);
+  url.pathname = route;
+  history.replaceState({...history.state, tvView:"list"}, "", url.pathname + url.search + url.hash);
+}
+
+function currentGameName() {
+  return GAME_SYSTEMS[state.gameSystem]?.name || "Choose a game";
+}
+
+function gameSystemDisplayName(gameSystem) {
+  return GAME_SYSTEMS[gameSystem]?.name ||
+    (gameSystem === "grimdark" ? "Grimdark Future" :
+      gameSystem === "aos" ? "Warhammer Age of Sigmar" :
+      gameSystem === "40k" ? "Warhammer 40,000" :
+      "another game system");
+}
+
+const OPR_GAME_SYSTEM_KEYS = {
+  gf:"grimdark",
+  "2":"grimdark",
+  "grimdark-future":"grimdark",
+  gff:"grimdark-firefight",
+  "3":"grimdark-firefight",
+  "grimdark-future-firefight":"grimdark-firefight",
+  aof:"aof",
+  "4":"aof",
+  "age-of-fantasy":"aof",
+  aofs:"aof-skirmish",
+  "5":"aof-skirmish",
+  "age-of-fantasy-skirmish":"aof-skirmish",
+  aofr:"aof-regiments",
+  "6":"aof-regiments",
+  "age-of-fantasy-regiments":"aof-regiments",
+  aofq:"aof-quest",
+  aofqai:"aof-quest",
+  "7":"aof-quest",
+  "8":"aof-quest",
+  "age-of-fantasy-quest":"aof-quest",
+  "age-of-fantasy-quest-ai":"aof-quest",
+  gfsq:"opr-star-quest",
+  gfsqai:"opr-star-quest",
+  "9":"opr-star-quest",
+  "10":"opr-star-quest",
+  "grimdark-future-star-quest":"opr-star-quest",
+  "grimdark-future-star-quest-ai":"opr-star-quest",
+  gfwf:"opr-warfleets",
+  "grimdark-future-warfleet":"opr-warfleets",
+  "grimdark-future-warfleets":"opr-warfleets"
+};
+
+function oprGameSystemKey(code = "") {
+  return OPR_GAME_SYSTEM_KEYS[String(code || "").toLowerCase()] || "";
+}
+
+function isOprMode(gameSystem = state.gameSystem) {
+  return [
+    "grimdark",
+    "grimdark-firefight",
+    "opr-star-quest",
+    "opr-warfleets",
+    "aof",
+    "aof-skirmish",
+    "aof-regiments",
+    "aof-quest"
+  ].includes(gameSystem);
+}
+
+function isOprFantasyMode(gameSystem = state.gameSystem) {
+  return ["aof","aof-skirmish","aof-regiments","aof-quest"].includes(gameSystem);
+}
+
+function isOprQuestMode(gameSystem = state.gameSystem) {
+  return gameSystem === "aof-quest" || gameSystem === "opr-star-quest";
+}
+
+function isWarfleetsMode(gameSystem = state.gameSystem) {
+  return gameSystem === "opr-warfleets";
+}
+
+function isOprSkirmishMode(gameSystem = state.gameSystem) {
+  return gameSystem === "grimdark-firefight" || gameSystem === "aof-skirmish";
+}
+
+function isGrimdarkMode() {
+  return state.gameSystem === "grimdark";
+}
+
+function isAosMode() {
+  return state.gameSystem === "aos";
+}
+
+function isHeresyMode(gameSystem = state.gameSystem) {
+  return gameSystem === "heresy";
+}
+
+function isOldWorldMode(gameSystem = state.gameSystem) {
+  return gameSystem === "old-world";
+}
+
+function isKillTeamMode(gameSystem = state.gameSystem) {
+  return gameSystem === "kill-team";
+}
+
+function isLegionsImperialisMode(gameSystem = state.gameSystem) {
+  return gameSystem === "legions-imperialis";
+}
+
+function isNecromundaMode(gameSystem = state.gameSystem) {
+  return gameSystem === "necromunda";
+}
+
+function isDndMode(gameSystem = state.gameSystem) {
+  return gameSystem === "dnd-5e";
+}
+
+function gameProviderForSystem(gameSystem = state.gameSystem) {
+  return GAME_SYSTEMS[gameSystem]?.provider || "gw";
+}
+
+function gameSystemCardHtml(system) {
+  const selected = state.gameSystem === system.id;
+  const status = system.status ||
+    (system.available
+      ? (system.beta ? "BETA" : "AVAILABLE")
+      : "TBC");
+
+  if (!system.available) {
+    return `
+      <div class="game-system-option disabled" aria-disabled="true">
+        <span class="game-system-status">${status}</span>
+        <strong>${escapeHtml(system.name)}</strong>
+        <small>${escapeHtml(system.detail || "Planned")}</small>
+      </div>`;
+  }
+
+  return `
+    <button
+      class="game-system-option${selected ? " selected" : ""}"
+      type="button"
+      data-game-system-choice="${escapeHtml(system.id)}"
+      aria-pressed="${selected ? "true" : "false"}">
+      <span class="game-system-status live">${status}</span>
+      <strong>${escapeHtml(system.name)}</strong>
+      <small>${escapeHtml(system.detail || "")}</small>
+    </button>`;
+}
+
+function renderGameSystemCatalogue(container, preferredProvider = null) {
+  if (!container) return;
+
+  const requested =
+    preferredProvider ||
+    container.dataset.activeProvider ||
+    gameProviderForSystem();
+
+  const provider = GAME_PROVIDERS.find(item => item.id === requested) || GAME_PROVIDERS[0];
+  container.dataset.activeProvider = provider.id;
+
+  container.innerHTML = `
+    <div class="game-provider-tabs" role="tablist" aria-label="Game publishers">
+      ${GAME_PROVIDERS.map(item => `
+        <button
+          type="button"
+          role="tab"
+          class="game-provider-tab${item.id === provider.id ? " active" : ""}"
+          data-game-provider-tab="${escapeHtml(item.id)}"
+          aria-selected="${item.id === provider.id ? "true" : "false"}">
+          ${escapeHtml(item.name)}
+        </button>`).join("")}
+    </div>
+    <div class="game-provider-heading">
+      <span class="section-label">${escapeHtml(provider.name)}</span>
+      <small>${provider.systems.filter(system => system.available).length} available now</small>
+    </div>
+    <div class="game-system-grid">
+      ${provider.systems.map(gameSystemCardHtml).join("")}
+    </div>`;
+}
+
+function renderGameSystemCatalogues(preferredProvider = null) {
+  renderGameSystemCatalogue(els.gameSystemCatalogue, preferredProvider);
+  renderGameSystemCatalogue(els.settingsGameSystemCatalogue, preferredProvider);
+}
+
+function setGameCatalogueProvider(container, providerId) {
+  if (!GAME_PROVIDERS.some(provider => provider.id === providerId)) return;
+  container.dataset.activeProvider = providerId;
+  renderGameSystemCatalogue(container, providerId);
+}
+
+function openGameSystemChooser() {
+  els.firstRunModal?.classList.add("hidden");
+  renderGameSystemCatalogues(gameProviderForSystem());
+  els.gameSystemClose?.classList.toggle("hidden", !state.gameSystem);
+  els.gameSystemModal?.classList.remove("hidden");
+}
+
+function showEntryModalIfNeeded() {
+  const params = new URLSearchParams(location.search);
+  if (params.has("tvshare") || params.has("transfer")) {
+    showFirstRunIfNeeded();
+    return;
+  }
+
+  const pickerSeen = localStorage.getItem(GAME_SYSTEM_PICKER_SEEN_KEY) === "1";
+  const rootChooser = isRootGameChooserPath();
+  if (rootChooser || !state.gameSystem || !pickerSeen) {
+    els.firstRunModal?.classList.add("hidden");
+    els.gameSystemClose?.classList.toggle("hidden", rootChooser || !state.gameSystem);
+    els.gameSystemModal?.classList.remove("hidden");
+    return;
+  }
+
+  els.gameSystemModal?.classList.add("hidden");
+  showFirstRunIfNeeded();
+}
+
+function inferUnitGameSystem(unit) {
+  if (unit?.gameSystemKey && GAME_SYSTEMS[unit.gameSystemKey]) return unit.gameSystemKey;
+  if (unit?.system === "aos") return "aos";
+  if (unit?.system === "heresy") return "heresy";
+  if (unit?.system === "old-world") return "old-world";
+  if (unit?.system === "kill-team") return "kill-team";
+  if (unit?.system === "legions-imperialis") return "legions-imperialis";
+  if (unit?.system === "necromunda") return "necromunda";
+  if (unit?.system === "dnd") return "dnd-5e";
+  if (unit?.system === "opr") return oprGameSystemKey(unit?.gameSystem) || "grimdark";
+  if (unit?.system === "40k") return "40k";
+
+  const labels = new Set((unit?.stats || []).map(stat => normalize(stat.label)));
+
+  if (
+    labels.has("move") &&
+    labels.has("health") &&
+    labels.has("save") &&
+    labels.has("control")
+  ) {
+    return "aos";
+  }
+
+  if (
+    ["m","ws","bs","s","t","w","i","a","ld"].every(label => labels.has(label))
+  ) {
+    return "old-world";
+  }
+
+  if (labels.has("quality") && (labels.has("defense") || labels.has("defence"))) {
+    return "grimdark";
+  }
+
+  return "40k";
+}
+
+function inferRosterGameSystem(roster) {
+  if (!roster) return "";
+  if (roster.gameSystemKey) return roster.gameSystemKey;
+
+  if (roster.source === "opr") {
+    return oprGameSystemKey(roster.gameSystem) || "opr-other";
+  }
+
+  if (roster.source === "bsdata") return "40k";
+  if (roster.source === "dndbeyond") return "dnd-5e";
+
+  const metadata = normalize([
+    roster.faction,
+    roster.name,
+    roster.gameName,
+    roster.gameSystem,
+    roster.gameSystemName
+  ].filter(Boolean).join(" "));
+
+  if (metadata.includes("age of sigmar")) return "aos";
+  if (
+    metadata.includes("warhammer the old world") ||
+    metadata.includes("warhammer old world") ||
+    metadata.includes("the old world") ||
+    metadata.includes("sys 31d1 bf57 53ea ad55")
+  ) return "old-world";
+  if (
+    metadata.includes("kill team") ||
+    metadata.includes("c521 ad27 44df f959")
+  ) return "kill-team";
+  if (
+    metadata.includes("legions imperialis") ||
+    metadata.includes("sys 9498 516a 178a 3f4f")
+  ) return "legions-imperialis";
+  if (
+    metadata.includes("horus heresy") ||
+    metadata.includes("age of darkness") ||
+    metadata.includes("sys 9fe4 1dc3 b7c2 73cf")
+  ) return "heresy";
+  if (metadata.includes("age of fantasy quest")) return "aof-quest";
+  if (metadata.includes("age of fantasy regiments")) return "aof-regiments";
+  if (metadata.includes("age of fantasy skirmish")) return "aof-skirmish";
+  if (metadata.includes("age of fantasy")) return "aof";
+  if (metadata.includes("grimdark future star quest")) return "opr-star-quest";
+  if (metadata.includes("grimdark future firefight")) return "grimdark-firefight";
+  if (metadata.includes("grimdark future")) return "grimdark";
+
+  const counts = {aos:0, "old-world":0, grimdark:0, "40k":0};
+  for (const unit of roster.units || []) {
+    const system = inferUnitGameSystem(unit);
+    if (counts[system] != null) counts[system]++;
+  }
+
+  const best = Object.entries(counts).sort((a,b) => b[1] - a[1])[0];
+  return best?.[1] ? best[0] : "40k";
+}
+
+function rosterMatchesSelectedGame(roster) {
+  if (!state.gameSystem) return true;
+  return inferRosterGameSystem(roster) === state.gameSystem;
+}
+
+function ensureActiveRosterForGame() {
+  if (!state.gameSystem) return;
+  const current = state.rosters[state.activeRoster];
+  if (current && rosterMatchesSelectedGame(current)) return;
+
+  const index = state.rosters.findIndex(roster => rosterMatchesSelectedGame(roster));
+  state.activeRoster = index >= 0 ? index : 0;
+}
+
+function setGameSystem(gameSystem, options = {}) {
+  if (!GAME_SYSTEMS[gameSystem]?.available) return;
+
+  state.gameSystem = gameSystem;
+  localStorage.setItem("tv_game_system", gameSystem);
+  if (!options.fromRoute) syncGameSystemUrl(gameSystem);
+  if (options.fromChooser) {
+    localStorage.setItem(GAME_SYSTEM_PICKER_SEEN_KEY, "1");
+  }
+  state.selected = null;
+  state.selectedRosterId = null;
+  state.unitBrowserSourceId = "all";
+  localStorage.setItem("tv_unit_browser_source", "all");
+  ensureActiveRosterForGame();
+
+  els.gameSystemModal?.classList.add("hidden");
+  renderGameSystemCatalogues(gameProviderForSystem(gameSystem));
+  applyGameSystemUi();
+  renderAll();
+
+  if (state.currentPage === "strats" || state.currentPage === "score" || state.currentPage === "rules") {
+    switchPage("setup", {silent:true});
+  } else if (!options.fromChooser) {
+    switchPage("setup");
+  }
+
+  if (options.fromChooser) {
+    switchPage("setup", {silent:true});
+    showFirstRunIfNeeded();
+  } else {
+    toast("Switched to " + currentGameName());
+  }
+}
+
+function applyGameSystemUi() {
+  const grimdark = isGrimdarkMode();
+  const opr = isOprMode();
+  const aos = isAosMode();
+  const heresy = isHeresyMode();
+  const oldWorld = isOldWorldMode();
+  const killTeam = isKillTeamMode();
+  const legionsImperialis = isLegionsImperialisMode();
+  const necromunda = isNecromundaMode();
+  const dnd = isDndMode();
+  const fortyK = state.gameSystem === "40k";
+
+  document.body.classList.toggle("game-grimdark", grimdark);
+  document.body.classList.toggle("game-opr", opr);
+  document.body.classList.toggle("game-aos", aos);
+  document.body.classList.toggle("game-heresy", heresy);
+  document.body.classList.toggle("game-old-world", oldWorld);
+  document.body.classList.toggle("game-kill-team", killTeam);
+  document.body.classList.toggle("game-legions-imperialis", legionsImperialis);
+  document.body.classList.toggle("game-necromunda", necromunda);
+  document.body.classList.toggle("game-dnd", dnd);
+  document.body.classList.toggle("game-40k", fortyK);
+  document.title = state.gameSystem
+    ? currentGameName() + " | Tabletop Voice"
+    : "Tabletop Voice";
+
+  if (els.settingsCurrentGame) {
+    els.settingsCurrentGame.textContent = currentGameName();
+  }
+  if (els.setupCurrentGame) {
+    els.setupCurrentGame.textContent = currentGameName();
+  }
+
+  renderGameSystemCatalogues(gameProviderForSystem());
+
+  // The all-armies/community reference loader is currently 40K-specific.
+  if (els.fullDataImportCard) els.fullDataImportCard.classList.toggle("hidden", !fortyK);
+  // Army Forge is the primary current-data source for supported OPR games.
+  if (els.oprImportCard) els.oprImportCard.classList.toggle("hidden", !opr);
+  if (els.liCommunityImportCard) els.liCommunityImportCard.classList.toggle("hidden", !legionsImperialis);
+  if (els.necromundaImportCard) els.necromundaImportCard.classList.toggle("hidden", !necromunda);
+  if (els.dndBeyondImportCard) els.dndBeyondImportCard.classList.toggle("hidden", !dnd);
+
+  if (els.fullDataArmySection) {
+    const hasFullData = fortyK && state.rosters.some(roster => roster.source === "bsdata");
+    els.fullDataArmySection.classList.toggle("hidden", !hasFullData);
+  }
+
+  if (els.newRecruitImportLabel) {
+    els.newRecruitImportLabel.textContent = "NEW RECRUIT";
+  }
+  if (els.newRecruitImportTitle) {
+    els.newRecruitImportTitle.textContent = "Import list";
+  }
+  if (els.newRecruitImportCard) {
+    els.newRecruitImportCard.classList.toggle(
+      "hidden",
+      isOprQuestMode() || isWarfleetsMode() || necromunda || dnd
+    );
+  }
+
+  if (els.oprImportCard) {
+    const label = els.oprImportCard.querySelector(".section-label");
+    const title = els.oprImportCard.querySelector("h2");
+    const copy = els.oprImportCard.querySelector("p");
+
+    if (label) label.textContent = "ARMY FORGE";
+    if (title) title.textContent = isWarfleetsMode() ? "Import Warfleets fleet" : "Import shared list";
+    if (copy) {
+      copy.innerHTML = isWarfleetsMode()
+        ? 'In Warfleets choose <strong>Share as Text</strong>, copy the full fleet block, then paste it below.'
+        : 'In Army Forge choose <strong>Share as Link</strong>, then paste that shared roster link below.';
+    }
+  }
+
+  if (els.oprShareInput) {
+    els.oprShareInput.placeholder = isWarfleetsMode()
+      ? "Paste the full GFWF Share as Text fleet here…"
+      : "Paste Army Forge share link…";
+    els.oprShareInput.setAttribute(
+      "aria-label",
+      isWarfleetsMode() ? "Warfleets Share as Text fleet" : "Army Forge shared list link"
+    );
+  }
+
+  if (els.oprImportButton) {
+    els.oprImportButton.textContent = isWarfleetsMode() ? "Import Warfleets fleet" : "Import OPR list";
+  }
+
+  if (els.oprImportStatus && !els.oprImportStatus.dataset.busy) {
+    els.oprImportStatus.textContent = isWarfleetsMode()
+      ? "Paste the complete ++ … [GFWF …pts] ++ fleet text."
+      : currentGameName() + " · Army Forge";
+  }
+
+  if (els.newRecruitImportCopy) {
+    els.newRecruitImportCopy.textContent = opr
+      ? "If you use New Recruit for " + currentGameName() + ", export the roster as JSON, ROS or ROSZ. Army Forge share links are also supported below."
+      : aos
+        ? "Export your Age of Sigmar 4th edition roster from New Recruit, then choose the JSON, ROS or ROSZ file here."
+        : heresy
+          ? "Export your Horus Heresy 3rd Edition roster from New Recruit, then choose the JSON, ROS or ROSZ file here."
+          : oldWorld
+            ? "Export your Warhammer: The Old World roster from New Recruit, then choose the JSON, ROS or ROSZ file here."
+          : killTeam
+            ? "Export your Kill Team 2024 roster from New Recruit, then choose the JSON, ROS or ROSZ file here."
+            : legionsImperialis
+              ? "Export your Legions Imperialis roster from New Recruit, then choose the JSON, ROS or ROSZ file here."
+              : "Export your Warhammer 40,000 roster from New Recruit, then choose the JSON, ROS, ROSZ or TXT file here.";
+  }
+  if (els.importButton) {
+    els.importButton.textContent = "Choose New Recruit file";
+  }
+  if (els.fileInput) {
+    els.fileInput.accept = fortyK
+      ? ".json,.ros,.rosz,.txt,application/json,text/plain,application/xml,text/xml,application/zip"
+      : ".json,.ros,.rosz,application/json,application/xml,text/xml,application/zip";
+  }
+
+  const setupHeroTitle = els.welcome?.querySelector(".setup-hero h1");
+  if (setupHeroTitle) {
+    setupHeroTitle.textContent = dnd ? "Load your character." : "Load your army.";
+  }
+
+  const setupHero = els.welcome?.querySelector(".setup-hero .lede");
+  if (setupHero) {
+    setupHero.textContent = opr
+      ? isWarfleetsMode()
+        ? "Paste your Army Forge Warfleets fleet and use ship, weapon and system lookup at the table."
+        : isOprQuestMode()
+          ? "Import your " + currentGameName() + " heroes from an Army Forge shared campaign/list and use Tabletop Voice at the table."
+          : "Import your " + currentGameName() + " force from Army Forge or New Recruit, then use Tabletop Voice at the table."
+      : aos
+        ? "Import your Age of Sigmar army from New Recruit, then use Tabletop Voice for warscroll lookup at the table."
+        : heresy
+          ? "Import your Horus Heresy army from New Recruit for profiles, weapons, reactions, wargear and rules at the table."
+          : oldWorld
+            ? "Import your Old World army from New Recruit for model profiles, weapons, special rules and spells at the table."
+          : killTeam
+            ? "Import your Kill Team from New Recruit for operative profiles, weapons, abilities and team rules at the table."
+            : legionsImperialis
+              ? "Import your Legions Imperialis army from New Recruit or Legion Companion for detachment profiles, weapons and formation rules at the table."
+              : necromunda
+                ? "Import a current Necromunda N26 gang from a public Gyrinx share link for fighter profiles, weapons, skills, gear and campaign state."
+                : dnd
+                  ? "Import a D&D Beyond character, then use voice for attacks and spells while Tabletop Voice tracks slots, action economy and inventory."
+                  : "Bring in your New Recruit lists, or load the wider dataset when you need broader 40K lookup at the table.";
+  }
+
+  updateGameContextUi();
+}
+
 function showFirstRunIfNeeded() {
   if (!els.firstRunModal) return;
   if (new URLSearchParams(location.search).has("tvshare")) return;
@@ -434,6 +1226,14 @@ async function handleFiles(event) {
   for (const file of files) {
     try {
       const roster = await parseRosterUpload(file);
+      const importedGame = inferRosterGameSystem(roster);
+
+      if (state.gameSystem && importedGame !== state.gameSystem) {
+        throw new Error(
+          "This looks like a " + gameSystemDisplayName(importedGame) +
+          " list. Switch game system in Settings before importing it."
+        );
+      }
 
       const existingIndex = state.rosters.findIndex(existing =>
         existing.source === "new-recruit" &&
@@ -462,6 +1262,3686 @@ async function handleFiles(event) {
   }
 
   els.fileInput.value = "";
+}
+
+const OPR_GAME_NAMES = {
+  gf:"Grimdark Future",
+  gff:"Grimdark Future: Firefight",
+  aof:"Age of Fantasy",
+  aofs:"Age of Fantasy: Skirmish",
+  aofr:"Age of Fantasy: Regiments",
+  aofq:"Age of Fantasy: Quest",
+  aofqai:"Age of Fantasy: Quest",
+  gfsq:"Grimdark Future: Star Quest",
+  gfsqai:"Grimdark Future: Star Quest",
+  "age-of-fantasy-regiments":"Age of Fantasy: Regiments",
+  "age-of-fantasy-quest":"Age of Fantasy: Quest",
+  "age-of-fantasy-quest-ai":"Age of Fantasy: Quest",
+  "grimdark-future-star-quest":"Grimdark Future: Star Quest",
+  "grimdark-future-star-quest-ai":"Grimdark Future: Star Quest",
+  gfwf:"Grimdark Future: Warfleets",
+  "grimdark-future-warfleet":"Grimdark Future: Warfleets",
+  "grimdark-future-warfleets":"Grimdark Future: Warfleets"
+};
+
+function oprGameName(code = "") {
+  const key = String(code || "").toLowerCase();
+  const systemKey = oprGameSystemKey(key);
+  return OPR_GAME_NAMES[key] || GAME_SYSTEMS[systemKey]?.name || (key ? key.toUpperCase() : "OnePageRules");
+}
+
+function extractOprArmyId(value = "") {
+  const trimmed = String(value || "").trim();
+  if (!trimmed) return null;
+
+  try {
+    const url = new URL(trimmed);
+    const id =
+      url.searchParams.get("id") ||
+      url.searchParams.get("listId") ||
+      url.searchParams.get("shareId");
+    if (id && /^[A-Za-z0-9_-]+$/.test(id)) return id;
+
+    const segments = url.pathname.split("/").filter(Boolean);
+    const tail = segments.at(-1) || "";
+    return /^[A-Za-z0-9_-]{8,}$/.test(tail) ? tail : null;
+  } catch {
+    return /^[A-Za-z0-9_-]+$/.test(trimmed) ? trimmed : null;
+  }
+}
+
+function oprRuleLabel(rule = {}) {
+  if (rule.label) return String(rule.label);
+  const name = String(rule.name || "Rule");
+  const rating = rule.rating;
+  return rating !== undefined && rating !== null && rating !== ""
+    ? name + "(" + rating + ")"
+    : name;
+}
+
+function buildOprRuleLookup(data) {
+  const byId = new Map();
+  const byName = new Map();
+
+  for (const rule of data?.specialRules || []) {
+    if (!rule || !rule.name) continue;
+    if (rule.id) byId.set(String(rule.id), rule);
+    byName.set(normalize(rule.name), rule);
+  }
+
+  return {byId, byName};
+}
+
+function resolveOprRule(rule, lookup, category = "Special rule") {
+  if (!rule?.name) return null;
+
+  const definition =
+    (rule.id && lookup.byId.get(String(rule.id))) ||
+    lookup.byName.get(normalize(rule.name)) ||
+    null;
+
+  const rating = rule.rating;
+  let text = String(definition?.description || rule.description || "").trim();
+  if (rating !== undefined && rating !== null && rating !== "") {
+    text = text.replace(/\bX\b/g, String(rating));
+  }
+
+  return {
+    name:oprRuleLabel(rule),
+    text,
+    category
+  };
+}
+
+function collectOprUnitRuleRefs(unit) {
+  const refs = [...(unit?.rules || [])];
+
+  for (const item of unit?.items || []) {
+    refs.push(...(item?.content || []));
+  }
+
+  for (const selected of unit?.selectedUpgrades || []) {
+    for (const gain of selected?.option?.gains || []) {
+      if (gain?.type === "ArmyBookRule") refs.push(gain);
+      if (gain?.type === "ArmyBookItem") refs.push(...(gain.content || []));
+    }
+  }
+
+  return dedupeBy(
+    refs.filter(rule => rule?.name),
+    rule => normalize(oprRuleLabel(rule))
+  );
+}
+
+function oprWeaponKey(weapon = {}) {
+  return normalize([
+    weapon.name,
+    weapon.range,
+    weapon.attacks,
+    (weapon.specialRules || []).map(oprRuleLabel).join("|")
+  ].join("|"));
+}
+
+function oprUnitTotalCost(unit) {
+  let total = Number(unit?.totalCost ?? unit?.cost ?? 0) || 0;
+  if (unit?.totalCost != null) return total;
+
+  for (const selected of unit?.selectedUpgrades || []) {
+    const option = selected?.option;
+    if (!option) continue;
+
+    const matched = Array.isArray(option.costs)
+      ? option.costs.find(entry => String(entry?.unitId || "") === String(unit?.id || ""))
+      : null;
+
+    const add = Number(matched?.cost ?? option.cost ?? 0);
+    if (Number.isFinite(add)) total += add;
+  }
+
+  return total;
+}
+
+function mergeOprLoadouts(units) {
+  const merged = new Map();
+
+  for (const unit of units || []) {
+    for (const weapon of unit?.loadout || unit?.weapons || []) {
+      if (!weapon?.name) continue;
+      const key = oprWeaponKey(weapon);
+      if (!merged.has(key)) {
+        merged.set(key, {...weapon, count:Number(weapon.count || 1)});
+      } else {
+        const current = merged.get(key);
+        current.count = Number(current.count || 0) + Number(weapon.count || 1);
+      }
+    }
+  }
+
+  return [...merged.values()];
+}
+
+function collapseOprCombinedUnits(units = []) {
+  const raw = Array.isArray(units) ? units : [];
+  const roots = raw.filter(unit => !unit?.joinToUnit);
+  const used = new Set();
+  const output = [];
+
+  for (const root of roots) {
+    const group = [root];
+    used.add(root.selectionId || root);
+
+    if (root.combined && root.selectionId) {
+      for (const candidate of raw) {
+        if (candidate?.joinToUnit === root.selectionId) {
+          group.push(candidate);
+          used.add(candidate.selectionId || candidate);
+        }
+      }
+    }
+
+    if (group.length === 1) {
+      output.push(root);
+      continue;
+    }
+
+    output.push({
+      ...root,
+      size:group.reduce((sum, unit) => sum + Number(unit.size || 0), 0),
+      cost:group.reduce((sum, unit) => sum + oprUnitTotalCost(unit), 0),
+      totalCost:group.reduce((sum, unit) => sum + oprUnitTotalCost(unit), 0),
+      rules:dedupeBy(group.flatMap(unit => unit.rules || []), rule => normalize(oprRuleLabel(rule))),
+      items:group.flatMap(unit => unit.items || []),
+      selectedUpgrades:group.flatMap(unit => unit.selectedUpgrades || []),
+      loadout:mergeOprLoadouts(group),
+      notes:group.map(unit => String(unit.notes || "").trim()).filter(Boolean).join("\n")
+    });
+  }
+
+  for (const unit of raw) {
+    const key = unit?.selectionId || unit;
+    if (!used.has(key)) output.push(unit);
+  }
+
+  return output;
+}
+
+function buildOprWeaponProfile(weapon) {
+  const special = (weapon?.specialRules || [])
+    .map(oprRuleLabel)
+    .filter(Boolean)
+    .join(", ");
+
+  const range = Number(weapon?.range || 0);
+
+  return {
+    name:String(weapon?.name || "Weapon"),
+    type:"OPR Weapon",
+    system:"opr",
+    quantity:Math.max(1, Number(weapon?.count || 1)),
+    values:[
+      {label:"Range", value:range > 0 ? range + '\"' : "Melee"},
+      {label:"A", value:String(Number(weapon?.attacks || 0) || "—")},
+      {label:"Special", value:special || "—"}
+    ]
+  };
+}
+
+function buildOprUnit(rawUnit, data, index) {
+  const lookup = buildOprRuleLookup(data);
+  const ruleRefs = collectOprUnitRuleRefs(rawUnit);
+  const rules = ruleRefs
+    .map(rule => resolveOprRule(rule, lookup))
+    .filter(Boolean);
+
+  if (rawUnit?.notes) {
+    rules.push({name:"Notes", text:String(rawUnit.notes), category:"Notes"});
+  }
+
+  const hero = ruleRefs.some(rule => normalize(rule.name) === "hero");
+  const displayName = String(rawUnit?.customName || rawUnit?.name || rawUnit?.genericName || "Unit");
+  const baseName = String(rawUnit?.name || rawUnit?.genericName || "");
+
+  return {
+    id:"opr-" + String(rawUnit?.selectionId || rawUnit?.id || index),
+    name:displayName,
+    type:"OPR Unit",
+    system:"opr",
+    gameSystem:String(data?.gameSystem || ""),
+    gameSystemKey:oprGameSystemKey(data?.gameSystem),
+    categories:hero ? ["Hero"] : [],
+    stats:[
+      {label:"Quality", value:Number(rawUnit?.quality) ? rawUnit.quality + "+" : "—"},
+      {label:"Defence", value:Number(rawUnit?.defense) ? rawUnit.defense + "+" : "—"},
+      {label:"Models", value:String(Number(rawUnit?.size || 1))},
+      {label:"Pts", value:String(oprUnitTotalCost(rawUnit))}
+    ],
+    rules:dedupeBy(rules, rule => normalize(rule.name + "|" + rule.text)),
+    profiles:mergeOprLoadouts([rawUnit]).map(buildOprWeaponProfile),
+    searchText:normalize([
+      displayName,
+      baseName,
+      rawUnit?.genericName,
+      ruleRefs.map(oprRuleLabel),
+      (rawUnit?.loadout || rawUnit?.weapons || []).map(weapon => [
+        weapon.name,
+        (weapon.specialRules || []).map(oprRuleLabel)
+      ])
+    ].flat(3).join(" "))
+  };
+}
+
+function buildOprArmyRules(data) {
+  const lookup = buildOprRuleLookup(data);
+  const refs = [];
+
+  for (const unit of data?.units || []) {
+    refs.push(...collectOprUnitRuleRefs(unit));
+    for (const weapon of unit?.loadout || unit?.weapons || []) {
+      refs.push(...(weapon?.specialRules || []));
+    }
+  }
+
+  const rules = dedupeBy(
+    refs
+      .map(rule => resolveOprRule(rule, lookup))
+      .filter(rule => rule?.name && rule?.text),
+    rule => normalize(rule.name + "|" + rule.text)
+  );
+
+  for (const spell of data?.spells || []) {
+    if (!spell?.name || !spell?.effect) continue;
+    rules.push({
+      name:String(spell.name),
+      text:String(spell.effect),
+      category:spell.threshold != null ? "Spell · " + spell.threshold + "+" : "Spell"
+    });
+  }
+
+  return dedupeBy(rules, rule => normalize(rule.name + "|" + rule.text));
+}
+
+function buildOprRoster(data, armyId) {
+  if (!data || !Array.isArray(data.units) || !data.units.length) {
+    throw new Error("Army Forge returned no units for this shared list.");
+  }
+
+  const rawGameCode = String(
+    data.gameSystem ||
+    data.gameSystemKey ||
+    data.gameSystemSlug ||
+    data.gameSystemId ||
+    ""
+  ).toLowerCase();
+  const resolvedGameSystemKey = oprGameSystemKey(rawGameCode) || "opr-other";
+
+  const collapsed = collapseOprCombinedUnits(data.units);
+  const units = collapsed.map((unit, index) => {
+    const built = buildOprUnit(unit, data, index);
+    built.gameSystem = rawGameCode;
+    built.gameSystemKey = resolvedGameSystemKey;
+    return built;
+  });
+  const factionNames = Array.isArray(data.armyNames)
+    ? data.armyNames.filter(Boolean)
+    : [];
+
+  return {
+    id:crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random()),
+    externalId:String(armyId),
+    name:String(data.name || factionNames[0] || "OnePageRules army"),
+    faction:factionNames.join(" + ") || "OnePageRules",
+    source:"opr",
+    gameSystemKey:resolvedGameSystemKey,
+    importFormat:"army-forge-link",
+    gameSystem:rawGameCode,
+    gameName:GAME_SYSTEMS[resolvedGameSystemKey]?.name || oprGameName(rawGameCode),
+    points:Number.isFinite(Number(data.listPoints)) ? Number(data.listPoints) : null,
+    units,
+    armyRules:buildOprArmyRules(data),
+    referenceData:{rules:[], stratagems:[]},
+    importedAt:Date.now()
+  };
+}
+
+
+function splitWarfleetsList(value = "") {
+  return String(value || "")
+    .split(",")
+    .map(item => item.trim())
+    .filter(Boolean);
+}
+
+function parseWarfleetsWeaponBlock(block = "") {
+  const profiles = [];
+  const text = String(block || "").trim();
+  if (!text) return profiles;
+
+  const weaponPattern = /\[([A-Z])\]\s*([^()]+?)\s*\(\s*Ran\s*([^/),]+?)\s*\/\s*Att\s*(\d+)\s*\/\s*Str\s*(-?\d+)(?:\s*,\s*([^)]+))?\s*\)/gi;
+  let match;
+
+  while ((match = weaponPattern.exec(text))) {
+    profiles.push({
+      name:match[2].trim(),
+      type:"Warfleets Weapon",
+      system:"warfleet",
+      quantity:1,
+      values:[
+        {label:"Facing", value:match[1].toUpperCase()},
+        {label:"Range", value:match[3].trim()},
+        {label:"A", value:match[4]},
+        {label:"Str", value:match[5]},
+        {label:"Special", value:String(match[6] || "").trim() || "—"}
+      ]
+    });
+  }
+
+  return profiles;
+}
+
+function parseWarfleetsTurret(text = "") {
+  const match = String(text || "").match(
+    /(?:\[T\]\s*)?Turret\s*\(\s*Ran\s*([^/),]+?)\s*\/\s*Att\s*(\d+)\s*\/\s*Str\s*(-?\d+)(?:\s*,\s*([^)]+))?\s*\)/i
+  );
+  if (!match) return null;
+
+  return {
+    name:"Turret",
+    type:"Warfleets Weapon",
+    system:"warfleet",
+    quantity:1,
+    values:[
+      {label:"Facing", value:"T"},
+      {label:"Range", value:match[1].trim()},
+      {label:"A", value:match[2]},
+      {label:"Str", value:match[3]},
+      {label:"Special", value:String(match[4] || "").trim() || "—"}
+    ]
+  };
+}
+
+function warfleetsRuleEntries(names = [], category = "Special rule") {
+  return dedupeBy(
+    (names || [])
+      .map(name => String(name || "").trim())
+      .filter(Boolean)
+      .map(name => ({name, text:"", category})),
+    rule => normalize(rule.name)
+  );
+}
+
+function parseWarfleetsModelLine(line, index) {
+  const cleaned = String(line || "")
+    .replace(/[“”]/g, '"')
+    .replace(/\u00a0/g, " ")
+    .trim();
+
+  if (!cleaned || /^\+\+/.test(cleaned)) return null;
+
+  const match = cleaned.match(
+    /^(.+?)(?:\s*\[([^\]]+)\])?\s*\|\s*Mov\s*([0-9.]+)"?\s+Cru\s*([0-9.]+)"?\s+Eva\s*(\d+\+?)\s+Tou\s*(\d+\+?)\s*\|\s*(\d+)\s*pts?\s*(?:\|\s*(.*))?$/i
+  );
+  if (!match) return null;
+
+  const name = match[1].trim();
+  const classText = String(match[2] || "").trim();
+  const remainder = String(match[8] || "").trim();
+
+  const weaponsMatch = remainder.match(/\bWeapons\s*:/i);
+  const systemsMatch = remainder.match(/\bSystems\s*:/i);
+  const turretMatch = remainder.match(/(?:\[T\]\s*)?Turret\s*\(/i);
+  const weaponsIndex = weaponsMatch?.index ?? -1;
+  const systemsIndex = systemsMatch?.index ?? -1;
+
+  let prefixEnd = remainder.length;
+  for (const candidate of [turretMatch?.index, weaponsIndex, systemsIndex]) {
+    if (Number.isInteger(candidate) && candidate >= 0) prefixEnd = Math.min(prefixEnd, candidate);
+  }
+
+  const prefixRules = splitWarfleetsList(
+    remainder.slice(0, prefixEnd).replace(/[,\s]+$/, "")
+  );
+
+  let weaponBlock = "";
+  if (weaponsIndex >= 0) {
+    const start = weaponsIndex + weaponsMatch[0].length;
+    const end = systemsIndex > weaponsIndex ? systemsIndex : remainder.length;
+    weaponBlock = remainder.slice(start, end).trim();
+  }
+
+  let systems = [];
+  if (systemsIndex >= 0) {
+    const start = systemsIndex + systemsMatch[0].length;
+    systems = splitWarfleetsList(remainder.slice(start));
+  }
+
+  const turret = parseWarfleetsTurret(remainder);
+  const profiles = [
+    ...(turret ? [turret] : []),
+    ...parseWarfleetsWeaponBlock(weaponBlock)
+  ];
+
+  const classParts = classText.split(/\s+/).filter(Boolean);
+  const slotValue = classParts.length && /^\d+$/.test(classParts.at(-1))
+    ? classParts.pop()
+    : "";
+  const hullClass = classParts.join(" ");
+  const squadron = /squadron/i.test(name) || /squadron/i.test(classText);
+
+  const rules = [
+    ...warfleetsRuleEntries(prefixRules, "Special rule"),
+    ...warfleetsRuleEntries(systems, "System")
+  ];
+
+  return {
+    id:"gfwf-" + index + "-" + normalize(name).replace(/\s+/g, "-"),
+    name,
+    type:squadron ? "Warfleets Squadron" : "Warfleets Ship",
+    system:"warfleet",
+    gameSystem:"gfwf",
+    gameSystemKey:"opr-warfleets",
+    categories:[
+      squadron ? "Squadron" : "Ship",
+      hullClass || classText
+    ].filter(Boolean),
+    stats:[
+      {label:"Move", value:match[3] + '"'},
+      {label:"Cruise", value:match[4] + '"'},
+      {label:"Evasion", value:match[5]},
+      {label:"Toughness", value:match[6]},
+      ...(slotValue ? [{label:"Upgrades", value:slotValue}] : []),
+      {label:"Pts", value:match[7]}
+    ],
+    rules,
+    profiles,
+    warfleets:{
+      hullClass:hullClass || classText,
+      upgradeSlots:slotValue ? Number(slotValue) : null,
+      systems,
+      specialRules:prefixRules
+    },
+    searchText:normalize([
+      name,
+      hullClass,
+      prefixRules,
+      systems,
+      profiles.map(profile => [
+        profile.name,
+        (profile.values || []).map(value => value.value)
+      ])
+    ].flat(4).join(" "))
+  };
+}
+
+function parseWarfleetsShareText(text) {
+  const normalizedText = String(text || "")
+    .replace(/\r/g, "")
+    .replace(/[“”]/g, '"')
+    .replace(/\u00a0/g, " ")
+    .trim();
+
+  if (!/\[\s*GFWF\b/i.test(normalizedText)) {
+    throw new Error("This does not look like a Warfleets Share as Text export.");
+  }
+
+  const lines = normalizedText
+    .split("\n")
+    .map(line => line.trim())
+    .filter(Boolean);
+
+  const headerLine = lines.find(line => /\[\s*GFWF\b/i.test(line)) || "";
+  const pointsMatch = headerLine.match(/\[\s*GFWF\s+(\d+)\s*pts?\s*\]/i);
+  const points = pointsMatch ? Number(pointsMatch[1]) : null;
+
+  const headerBody = headerLine
+    .replace(/^\+\+\s*/, "")
+    .replace(/\s*\[\s*GFWF\b.*$/i, "")
+    .replace(/\s*\+\+\s*$/, "")
+    .trim();
+
+  const withoutVersion = headerBody.replace(/\s*\(v?[\d.]+\)\s*$/i, "").trim();
+  const divider = withoutVersion.lastIndexOf(" - ");
+  const listName = divider >= 0 ? withoutVersion.slice(0, divider).trim() : withoutVersion;
+  const faction = divider >= 0
+    ? withoutVersion.slice(divider + 3).trim()
+    : "Grimdark Future: Warfleets";
+
+  const modelLines = lines.filter(line => line !== headerLine);
+  const units = modelLines
+    .map((line, index) => parseWarfleetsModelLine(line, index))
+    .filter(Boolean);
+
+  if (!units.length) {
+    throw new Error(
+      "The GFWF header was found, but no ships or squadrons could be read. Copy the complete Army Forge Share as Text output."
+    );
+  }
+
+  const totalFromModels = units.reduce((sum, unit) => {
+    const stat = (unit.stats || []).find(item => normalize(item.label) === "pts");
+    return sum + (Number(stat?.value) || 0);
+  }, 0);
+
+  const armyRules = dedupeBy(
+    units.flatMap(unit => unit.rules || []),
+    rule => normalize((rule.category || "") + "|" + rule.name)
+  );
+
+  return {
+    id:crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random()),
+    externalId:null,
+    name:listName || "Warfleets fleet",
+    faction:faction || "Grimdark Future: Warfleets",
+    source:"opr",
+    gameSystemKey:"opr-warfleets",
+    importFormat:"army-forge-text",
+    gameSystem:"gfwf",
+    gameName:"Grimdark Future: Warfleets",
+    points:Number.isFinite(points) ? points : totalFromModels,
+    units,
+    armyRules,
+    referenceData:{rules:[], stratagems:[]},
+    importedAt:Date.now()
+  };
+}
+
+
+async function loadOprArmyForgeList() {
+  const rawInput = String(els.oprShareInput?.value || "").trim();
+  const warfleetsText = /\[\s*GFWF\b/i.test(rawInput);
+
+  if (isWarfleetsMode() || warfleetsText) {
+    try {
+      const roster = parseWarfleetsShareText(rawInput);
+
+      if (state.gameSystem && state.gameSystem !== "opr-warfleets") {
+        throw new Error(
+          "This is a Grimdark Future: Warfleets fleet. Switch game system in Settings before importing it."
+        );
+      }
+
+      const existingIndex = state.rosters.findIndex(existing =>
+        existing.source === "opr" &&
+        existing.gameSystemKey === "opr-warfleets" &&
+        normalize(existing.name) === normalize(roster.name) &&
+        normalize(existing.faction) === normalize(roster.faction)
+      );
+
+      if (existingIndex >= 0) {
+        state.rosters.splice(existingIndex, 1, roster);
+        state.activeRoster = existingIndex;
+      } else {
+        state.rosters.push(roster);
+        state.activeRoster = state.rosters.length - 1;
+      }
+
+      state.unitBrowserSourceId = "roster:" + roster.id;
+      localStorage.setItem("tv_unit_browser_source", state.unitBrowserSourceId);
+      state.selected = null;
+      state.selectedRosterId = null;
+
+      persist();
+      renderAll();
+      switchPage("datasheets", {silent:true});
+
+      if (els.oprShareInput) els.oprShareInput.value = "";
+      if (els.oprImportStatus) {
+        els.oprImportStatus.dataset.busy = "";
+        els.oprImportStatus.textContent =
+          "Imported " + roster.units.length + " ships/squadrons" +
+          (roster.points != null ? " · " + roster.points + " pts" : "");
+      }
+      toast("Imported " + roster.name);
+      return;
+    } catch (error) {
+      console.error("Warfleets import failed", error);
+      if (els.oprImportStatus) {
+        els.oprImportStatus.dataset.busy = "";
+        els.oprImportStatus.textContent = error.message || "Could not import this Warfleets fleet.";
+      }
+      toast(error.message || "Could not import Warfleets fleet.");
+      return;
+    }
+  }
+
+  const armyId = extractOprArmyId(rawInput);
+  if (!armyId) {
+    if (els.oprImportStatus) {
+      els.oprImportStatus.textContent = "Paste an Army Forge Share as Link URL first.";
+    }
+    toast("Paste a valid Army Forge share link.");
+    return;
+  }
+
+  const button = els.oprImportButton;
+  if (button) {
+    button.disabled = true;
+    button.textContent = "Importing…";
+  }
+  if (els.oprImportStatus) {
+    els.oprImportStatus.dataset.busy = "1";
+    els.oprImportStatus.textContent = "Loading the shared list from Army Forge…";
+  }
+
+  try {
+    const response = await fetch("./api/opr-army?id=" + encodeURIComponent(armyId), {
+      headers:{"Accept":"application/json"}
+    });
+
+    let data = {};
+    try { data = await response.json(); } catch {}
+
+    if (!response.ok) {
+      throw new Error(data.error || "Could not load that Army Forge list.");
+    }
+
+    const gameCode = String(
+      data.gameSystem ||
+      data.gameSystemKey ||
+      data.gameSystemSlug ||
+      data.gameSystemId ||
+      ""
+    ).toLowerCase();
+    const importedGame = oprGameSystemKey(gameCode);
+    const supportedOprGames = [
+      "grimdark",
+      "grimdark-firefight",
+      "aof",
+      "aof-skirmish",
+      "aof-regiments",
+      "aof-quest",
+      "opr-star-quest"
+    ];
+
+    if (!supportedOprGames.includes(importedGame)) {
+      throw new Error("This Army Forge game is not supported yet.");
+    }
+
+    if (state.gameSystem && importedGame !== state.gameSystem) {
+      throw new Error(
+        "This is a " + gameSystemDisplayName(importedGame) +
+        " list. Switch game system in Settings before importing it."
+      );
+    }
+
+    const roster = buildOprRoster(data, armyId);
+    const existingIndex = state.rosters.findIndex(existing =>
+      existing.source === "opr" && existing.externalId === armyId
+    );
+
+    if (existingIndex >= 0) {
+      state.rosters.splice(existingIndex, 1, roster);
+      state.activeRoster = existingIndex;
+    } else {
+      state.rosters.push(roster);
+      state.activeRoster = state.rosters.length - 1;
+    }
+
+    state.unitBrowserSourceId = "roster:" + roster.id;
+    localStorage.setItem("tv_unit_browser_source", state.unitBrowserSourceId);
+    state.selected = null;
+    state.selectedRosterId = null;
+
+    persist();
+    renderAll();
+    switchPage("datasheets", {silent:true});
+
+    if (els.oprShareInput) els.oprShareInput.value = "";
+    if (els.oprImportStatus) {
+      els.oprImportStatus.dataset.busy = "";
+      els.oprImportStatus.textContent =
+        "Imported " + roster.units.length + " units · " + roster.gameName +
+        (roster.points != null ? " · " + roster.points + " pts" : "");
+    }
+    toast("Imported " + roster.name);
+  } catch (error) {
+    console.error("OPR import failed", error);
+    if (els.oprImportStatus) {
+      els.oprImportStatus.dataset.busy = "";
+      els.oprImportStatus.textContent = error.message || "Could not import this Army Forge list.";
+    }
+    toast(error.message || "Could not import OPR list.");
+  } finally {
+    if (button) {
+      button.disabled = false;
+      button.textContent = "Import OPR list";
+    }
+  }
+}
+
+
+let liCommunityReferencePromise = null;
+
+function liCommunityNameKey(value = "") {
+  return normalize(
+    String(value || "")
+      .replace(/\b(detachment|squadron|talon|battery)\b/gi, " ")
+      .replace(/\s+/g, " ")
+  );
+}
+
+async function loadLiCommunityReference() {
+  if (liCommunityReferencePromise) return liCommunityReferencePromise;
+
+  liCommunityReferencePromise = Promise.all([
+    fetch("./li-community-units-weapons.json").then(response => {
+      if (!response.ok) throw new Error("Could not load the Legions unit reference.");
+      return response.json();
+    }),
+    fetch("./li-community-detachments.json").then(response => {
+      if (!response.ok) throw new Error("Could not load the Legions detachment reference.");
+      return response.json();
+    }),
+    fetch("./li-community-formations.json").then(response => {
+      if (!response.ok) throw new Error("Could not load the Legions formation reference.");
+      return response.json();
+    })
+  ]).then(([unitWeaponData, detachmentData, formationData]) => {
+    const units = unitWeaponData.units || [];
+    const weapons = unitWeaponData.weapons || [];
+    const detachments = detachmentData.detachments || [];
+    const formations = formationData.formations || [];
+
+    const detachmentByName = new Map();
+    const detachmentByLooseName = new Map();
+    for (const detachment of detachments) {
+      const exactKey = normalize(detachment.name);
+      const looseKey = liCommunityNameKey(detachment.name);
+      if (exactKey && !detachmentByName.has(exactKey)) detachmentByName.set(exactKey, detachment);
+      if (looseKey && !detachmentByLooseName.has(looseKey)) detachmentByLooseName.set(looseKey, detachment);
+    }
+
+    const formationByName = new Map();
+    for (const formation of formations) {
+      const key = normalize(formation.name);
+      if (key && !formationByName.has(key)) formationByName.set(key, formation);
+    }
+
+    return {
+      units,
+      weapons,
+      detachments,
+      formations,
+      unitById:new Map(units.map(unit => [String(unit.id), unit])),
+      weaponById:new Map(weapons.map(weapon => [String(weapon.id), weapon])),
+      weaponByName:new Map(weapons.map(weapon => [normalize(weapon.name), weapon])),
+      detachmentById:new Map(detachments.map(detachment => [String(detachment.id), detachment])),
+      detachmentByName,
+      detachmentByLooseName,
+      formationById:new Map(formations.map(formation => [String(formation.id), formation])),
+      formationByName
+    };
+  }).catch(error => {
+    liCommunityReferencePromise = null;
+    throw error;
+  });
+
+  return liCommunityReferencePromise;
+}
+
+function findLiCommunityDetachment(reference, id, name) {
+  const idCandidates = [
+    id,
+    typeof id === "object" ? id?.id : null,
+    typeof id === "object" ? id?.data_id : null
+  ].filter(value => value !== null && value !== undefined && value !== "");
+
+  for (const candidate of idCandidates) {
+    const exact = reference.detachmentById.get(String(candidate));
+    if (exact) return exact;
+  }
+
+  const exactName = reference.detachmentByName.get(normalize(name || ""));
+  if (exactName) return exactName;
+
+  const loose = reference.detachmentByLooseName.get(liCommunityNameKey(name || ""));
+  if (loose) return loose;
+
+  const key = liCommunityNameKey(name || "");
+  if (!key) return null;
+
+  const candidates = reference.detachments.filter(detachment => {
+    const detKey = liCommunityNameKey(detachment.name);
+    return detKey.includes(key) || key.includes(detKey);
+  });
+
+  return candidates.length === 1 ? candidates[0] : null;
+}
+
+function findLiCommunityFormation(reference, id, name) {
+  if (id !== null && id !== undefined && id !== "") {
+    const exact = reference.formationById.get(String(id));
+    if (exact) return exact;
+  }
+
+  const key = normalize(name || "");
+  if (!key) return null;
+
+  const exact = reference.formationByName.get(key);
+  if (exact) return exact;
+
+  const candidates = reference.formations.filter(formation => {
+    const formKey = normalize(formation.name);
+    return formKey.includes(key) || key.includes(formKey);
+  });
+
+  return candidates.length === 1 ? candidates[0] : null;
+}
+
+function liCommunityTraitText(traits = []) {
+  return (traits || []).map(trait => {
+    if (!trait?.name) return "";
+    return trait.value !== null && trait.value !== undefined && trait.value !== ""
+      ? trait.name + " (" + trait.value + ")"
+      : trait.name;
+  }).filter(Boolean).join(", ");
+}
+
+function liCommunityWeaponProfile(weapon) {
+  const profiles = [];
+
+  for (const profile of weapon?.profiles || []) {
+    profiles.push({
+      name:weapon.name || "Weapon",
+      type:"Weapon",
+      system:"legions-imperialis",
+      quantity:1,
+      values:[
+        {label:"Range", value:profile.range ?? "—"},
+        {label:"Dice", value:profile.dice ?? "—"},
+        {
+          label:"To Hit",
+          value:profile.toHit === null || profile.toHit === undefined
+            ? "—"
+            : String(profile.toHit).endsWith("+")
+              ? String(profile.toHit)
+              : String(profile.toHit) + "+"
+        },
+        {
+          label:"AP",
+          value:typeof profile.ap === "number"
+            ? (profile.ap === 0 ? "0" : "-" + profile.ap)
+            : profile.ap ?? "—"
+        },
+        {label:"Traits", value:liCommunityTraitText(profile.traits) || "—"}
+      ]
+    });
+  }
+
+  return profiles;
+}
+
+function liCommunityUnitProfile(unit) {
+  return {
+    name:unit.name || "Model",
+    values:[
+      {label:"Move", value:unit.move ?? "—"},
+      {
+        label:"Sv",
+        value:unit.sv === null || unit.sv === undefined
+          ? "—"
+          : String(unit.sv).endsWith("+")
+            ? String(unit.sv)
+            : String(unit.sv) + "+"
+      },
+      {
+        label:"CAF",
+        value:unit.caf === null || unit.caf === undefined
+          ? "—"
+          : Number(unit.caf) > 0 && !String(unit.caf).startsWith("+")
+            ? "+" + unit.caf
+            : String(unit.caf)
+      },
+      {
+        label:"Morale",
+        value:unit.morale === null || unit.morale === undefined
+          ? "—"
+          : String(unit.morale).endsWith("+")
+            ? String(unit.morale)
+            : String(unit.morale) + "+"
+      },
+      {label:"W", value:unit.w ?? "—"}
+    ]
+  };
+}
+
+function liCommunitySelectionText(value) {
+  if (value === null || value === undefined) return "";
+  if (typeof value === "string" || typeof value === "number") return String(value);
+  if (Array.isArray(value)) {
+    return value.map(liCommunitySelectionText).filter(Boolean).join(", ");
+  }
+
+  const parts = [];
+  for (const [key, item] of Object.entries(value)) {
+    if (["id","slot_id","formation_id","formationId","detachmentId","data_id"].includes(key)) continue;
+    const text = liCommunitySelectionText(item);
+    if (text) parts.push(key + ": " + text);
+  }
+  return parts.join("; ");
+}
+
+function matchLiCommunityWeapon(reference, name) {
+  const key = normalize(String(name || "")
+    .replace(/^(turret|hull|sponson|sponsons|pintle|arm|main|wing)\s*:\s*/i, "")
+    .replace(/\bmounted\b/gi, " ")
+    .replace(/\s+/g, " ")
+  );
+  if (!key || key === "none") return null;
+
+  const exact = reference.weaponByName.get(key);
+  if (exact) return exact;
+
+  const candidates = reference.weapons.filter(weapon => {
+    const weaponKey = normalize(weapon.name.replace(/\bmounted\b/gi, " "));
+    return weaponKey === key || weaponKey.includes(key) || key.includes(weaponKey);
+  });
+
+  return candidates.length === 1 ? candidates[0] : null;
+}
+
+function buildLiCommunityUnit(raw, reference, index) {
+  const refDetachment = findLiCommunityDetachment(reference, raw.id, raw.name);
+  const mainUnitIds = [...(refDetachment?.mainUnit || [])];
+  let selectedUnitIds = [...(raw.selectedUnitRefs || [])];
+
+  if (!selectedUnitIds.length && refDetachment?.upgradeOptions?.length && raw.notes?.length) {
+    const noteText = normalize(raw.notes.join(" "));
+    for (const upgrade of refDetachment.upgradeOptions) {
+      const upgradeKey = normalize(upgrade.name || "");
+      if (upgradeKey && noteText.includes(upgradeKey) && upgrade.unitRef != null) {
+        selectedUnitIds.push(upgrade.unitRef);
+        continue;
+      }
+
+      const meaningfulWords = upgradeKey
+        .split(" ")
+        .filter(word => word.length > 4 && !["additional","models","model"].includes(word));
+      if (
+        meaningfulWords.length &&
+        meaningfulWords.every(word => noteText.includes(word)) &&
+        upgrade.unitRef != null
+      ) {
+        selectedUnitIds.push(upgrade.unitRef);
+      }
+    }
+  }
+
+  const relatedFallback = selectedUnitIds.length
+    ? selectedUnitIds
+    : (refDetachment?.relatedUnit || []);
+
+  const refUnitIds = dedupeBy(
+    [...mainUnitIds, ...relatedFallback],
+    value => String(value)
+  );
+
+  const refUnits = refUnitIds
+    .map(id => reference.unitById.get(String(id)))
+    .filter(Boolean);
+
+  const profiles = refUnits.map(liCommunityUnitProfile);
+
+  const weaponIds = new Set(
+    refUnits.flatMap(unit => unit.weapons || []).map(id => String(id))
+  );
+
+  for (const selectedWeapon of raw.selectedWeapons || []) {
+    const match = matchLiCommunityWeapon(reference, selectedWeapon);
+    if (match) weaponIds.add(String(match.id));
+  }
+
+  const weapons = [...weaponIds]
+    .map(id => reference.weaponById.get(String(id)))
+    .filter(Boolean)
+    .flatMap(liCommunityWeaponProfile);
+
+  const rules = [];
+  for (const unit of refUnits) {
+    for (const rule of unit.rules || []) {
+      const ruleName = rule.value !== null && rule.value !== undefined && rule.value !== ""
+        ? rule.name + " (" + rule.value + ")"
+        : rule.name;
+      rules.push({name:ruleName, text:"", category:"Special Rule"});
+    }
+  }
+
+  for (const note of raw.notes || []) {
+    if (!note) continue;
+    rules.push({
+      name:"Selected configuration",
+      text:String(note),
+      category:"Loadout"
+    });
+  }
+
+  const primary = profiles[0]?.values || [];
+  const stats = primary.map(item => ({...item}));
+  if (raw.points !== null && raw.points !== undefined && raw.points !== "") {
+    stats.push({label:"Pts", value:String(raw.points)});
+  }
+
+  const categories = dedupeBy([
+    raw.slotType,
+    ...(refDetachment?.types || []),
+    ...refUnits.map(unit => unit.unitType)
+  ].filter(Boolean), value => normalize(value));
+
+  const name = raw.name || refDetachment?.name || "Detachment";
+
+  return {
+    id:"li-community-" + index + "-" + normalize(name).replace(/\s+/g, "-"),
+    externalId:raw.id ?? null,
+    name,
+    type:"Detachment",
+    system:"legions-imperialis",
+    gameSystemKey:"legions-imperialis",
+    categories,
+    stats,
+    rules:dedupeBy(rules, rule => normalize(rule.category + "|" + rule.name + "|" + rule.text)),
+    profiles:dedupeBy(
+      weapons,
+      profile => normalize(profile.name + "|" + JSON.stringify(profile.values || []))
+    ),
+    legionsImperialisProfiles:profiles,
+    liCommunity:{
+      source:raw.source || "",
+      formation:raw.formationName || "",
+      slotType:raw.slotType || "",
+      size:raw.size ?? null,
+      points:raw.points ?? null,
+      referenceDetachmentId:refDetachment?.id ?? null,
+      notes:raw.notes || []
+    },
+    searchText:normalize([
+      name,
+      raw.formationName,
+      raw.slotType,
+      categories,
+      profiles.map(profile => profile.name),
+      weapons.map(profile => profile.name),
+      rules.map(rule => rule.name),
+      raw.notes
+    ].flat(4).join(" "))
+  };
+}
+
+function liCommunityFormationRules(reference, formations = []) {
+  const rules = [];
+
+  for (const formation of formations || []) {
+    const refFormation = findLiCommunityFormation(
+      reference,
+      formation.dataId ?? formation.data_id ?? formation.id,
+      formation.name
+    );
+    if (!refFormation) continue;
+
+    for (const rule of refFormation.rules || []) {
+      if (!rule?.name || !rule?.text) continue;
+      rules.push({
+        name:rule.name,
+        text:rule.text,
+        category:"Formation Rule",
+        source:formation.nickname
+          ? formation.nickname + " — " + refFormation.name
+          : refFormation.name
+      });
+    }
+  }
+
+  return dedupeBy(
+    rules,
+    rule => normalize(rule.source + "|" + rule.name + "|" + rule.text)
+  );
+}
+
+function liBuilderSlotPoints(list, detachment) {
+  const slotId = detachment.slot_id;
+  const upgrades = (list.upgrades || []).find(entry => entry.slot_id === slotId)?.upgrades || [];
+  const loadouts = (list.loadouts || []).find(entry => entry.slot_id === slotId)?.loadouts || [];
+
+  const upgradePoints = upgrades.reduce((sum, upgrade) =>
+    sum + (Number(upgrade.cost) || 0) +
+      (list.gamemode === "titandeath" ? (Number(upgrade.td_ek) || 0) : 0), 0);
+
+  const loadoutPoints = loadouts.reduce((sum, loadout) => {
+    const perModel = (loadout.weapons || []).reduce((weaponSum, weapon) =>
+      weaponSum + (Number(weapon.cost) || 0), 0);
+    return sum + perModel * (Number(loadout.number) || 0);
+  }, 0);
+
+  return (Number(detachment.cost) || 0) + upgradePoints + loadoutPoints;
+}
+
+function liBuilderSlotSize(list, detachment) {
+  const upgrades = (list.upgrades || []).find(entry => entry.slot_id === detachment.slot_id)?.upgrades || [];
+  return (Number(detachment.size) || 0) +
+    upgrades.reduce((sum, upgrade) => sum + (Number(upgrade.size) || 0), 0);
+}
+
+function liBuilderSlotNotes(list, detachment) {
+  const notes = [];
+  const selectedWeapons = [];
+  const selectedUnitRefs = [];
+  const upgrades = (list.upgrades || []).find(entry => entry.slot_id === detachment.slot_id)?.upgrades || [];
+  const loadouts = (list.loadouts || []).find(entry => entry.slot_id === detachment.slot_id)?.loadouts || [];
+
+  for (const upgrade of upgrades) {
+    const count = Number(upgrade.number) || 0;
+    if (upgrade.unit_ref !== null && upgrade.unit_ref !== undefined) {
+      selectedUnitRefs.push(upgrade.unit_ref);
+    }
+    notes.push(
+      (count ? count + " × " : "") +
+      (upgrade.name || "Upgrade") +
+      (Number(upgrade.cost) ? " · " + upgrade.cost + " pts" : "")
+    );
+  }
+
+  for (const loadout of loadouts) {
+    const count = Number(loadout.number) || 0;
+    const weapons = (loadout.weapons || []).map(weapon => {
+      if (weapon.weapon && normalize(weapon.weapon) !== "none") selectedWeapons.push(weapon.weapon);
+      return (weapon.location ? weapon.location + ": " : "") +
+        (weapon.weapon || "") +
+        (Number(weapon.cost) ? " · " + weapon.cost + " pts" : "");
+    }).filter(Boolean);
+
+    if (weapons.length) {
+      notes.push((count ? count + " × " : "") + weapons.join(", "));
+    }
+  }
+
+  return {
+    notes,
+    selectedWeapons,
+    selectedUnitRefs:dedupeBy(selectedUnitRefs, value => String(value))
+  };
+}
+
+function normalizeLiBuilderJsonList(rawList, reference, sourceName = "Legion Companion") {
+  const list = rawList || {};
+  const formationMap = new Map(
+    (list.formations || []).map(formation => [String(formation.id), formation])
+  );
+
+  const rawDetachments = [];
+  for (const detachment of list.detachments || []) {
+    if (!detachment || !detachment.id || !detachment.name) continue;
+    const formation = formationMap.get(String(detachment.formation_id)) || {};
+    const config = liBuilderSlotNotes(list, detachment);
+
+    rawDetachments.push({
+      id:detachment.id,
+      name:detachment.name,
+      slotType:detachment.slot_type || "",
+      formationName:formation.name || "",
+      size:liBuilderSlotSize(list, detachment),
+      points:liBuilderSlotPoints(list, detachment),
+      notes:config.notes,
+      selectedWeapons:config.selectedWeapons,
+      selectedUnitRefs:config.selectedUnitRefs,
+      source:sourceName
+    });
+  }
+
+  if (!rawDetachments.length) {
+    throw new Error("No Legions Imperialis detachments were found in this JSON export.");
+  }
+
+  const units = rawDetachments.map((detachment, index) =>
+    buildLiCommunityUnit(detachment, reference, index)
+  );
+
+  const formations = (list.formations || [])
+    .filter(formation => formation?.name)
+    .map(formation => ({
+      id:formation.id,
+      dataId:formation.data_id,
+      name:formation.name,
+      nickname:formation.nickname || "",
+      faction:formation.faction || null,
+      subfaction:formation.subfaction || null
+    }));
+
+  const factionCounts = {};
+  for (const unit of units) {
+    const refDetachment = reference.detachmentById.get(String(unit.liCommunity.referenceDetachmentId));
+    if (!refDetachment?.faction) continue;
+    factionCounts[refDetachment.faction] = (factionCounts[refDetachment.faction] || 0) + 1;
+  }
+  const inferredFaction = Object.entries(factionCounts).sort((a,b) => b[1] - a[1])[0]?.[0];
+
+  const totalPoints = rawDetachments.reduce((sum, detachment) =>
+    sum + (Number(detachment.points) || 0), 0);
+
+  return {
+    id:crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random()),
+    name:list.name || sourceName + " list",
+    faction:list.faction || inferredFaction || "Legions Imperialis",
+    source:"li-community",
+    communitySource:sourceName,
+    gameSystemKey:"legions-imperialis",
+    importFormat:"companion-json",
+    points:totalPoints || Number(list.points) || null,
+    units,
+    armyRules:liCommunityFormationRules(reference, formations),
+    formations,
+    referenceData:{rules:[], stratagems:[]},
+    importedAt:Date.now()
+  };
+}
+
+function cleanLiCommunityLine(line = "") {
+  return String(line)
+    .replace(/\r/g, "")
+    .replace(/^\s*[-*•]\s*/, "")
+    .replace(/\*\*/g, "")
+    .replace(/__/g, "")
+    .replace(/\u00a0/g, " ")
+    .trim();
+}
+
+function parseLiCommunityText(text, reference) {
+  const rawText = String(text || "").trim();
+  if (!rawText) throw new Error("Paste a Legion Companion export first.");
+
+  const sourceName = "Legion Companion";
+
+  const lines = rawText.split("\n");
+  const slotNamePattern = "(HQ|CORE|SUPPORT|TRANSPORT|VANGUARD|LIGHT\\s+ARMOU?R|BATTLE\\s+TANK|HEAVY\\s+ARMOU?R|ARTILLERY|BASTION|AIR\\s+SUPPORT|KNIGHT|TITAN|DEDICATED)";
+  const slotPatternWithSize = new RegExp(
+    "^" + slotNamePattern + "\\s*:\\s*(.+?)\\s*\\((\\d+)\\)\\s*(?:[-–—,]\\s*)?(\\d+)\\s*pts?\\b",
+    "i"
+  );
+  const slotPattern = new RegExp(
+    "^" + slotNamePattern + "\\s*:\\s*(.+?)\\s*(?:[-–—,]\\s*)?(\\d+)\\s*pts?\\b",
+    "i"
+  );
+
+  let currentFormation = null;
+  let currentDetachment = null;
+  const formations = [];
+  const rawDetachments = [];
+  let rosterName = "";
+  let declaredTotal = null;
+
+  function pushFormation(name) {
+    const cleanName = String(name || "")
+      .replace(/^formation\s*:\s*/i, "")
+      .trim();
+    const refFormation = findLiCommunityFormation(reference, null, cleanName);
+    if (!refFormation) return false;
+
+    currentFormation = {
+      id:"text-formation-" + formations.length,
+      dataId:refFormation.id,
+      name:refFormation.name,
+      nickname:normalize(cleanName) === normalize(refFormation.name) ? "" : cleanName
+    };
+    formations.push(currentFormation);
+    currentDetachment = null;
+    return true;
+  }
+
+  for (const originalLine of lines) {
+    const line = cleanLiCommunityLine(originalLine);
+    if (!line) continue;
+
+    if (/^(compulsory|optional|choice|additional|detachments?|upgrades?|loadouts?)$/i.test(line)) {
+      continue;
+    }
+    if (/^(formation strength|breakpoint)\s*:/i.test(line)) continue;
+    if (/^[-─═_]{4,}$/.test(line)) continue;
+    if (/^generated by legion companion$/i.test(line) || /^legioncompanion\.app$/i.test(line)) continue;
+
+    const companionHeader = line.match(/^(.+?)\s+(\d+)\s*\/\s*(\d+)\s*pts?\s*$/i);
+    if (companionHeader && !rosterName) {
+      rosterName = companionHeader[1].trim();
+      declaredTotal = Number(companionHeader[2]);
+      continue;
+    }
+
+    const sizedDetachmentMatch = line.match(slotPatternWithSize);
+    const detachmentMatch = sizedDetachmentMatch || line.match(slotPattern);
+    if (detachmentMatch) {
+      const hasSize = Boolean(sizedDetachmentMatch);
+      const name = detachmentMatch[2].trim();
+      const refDetachment = findLiCommunityDetachment(reference, null, name);
+      currentDetachment = {
+        id:refDetachment?.id ?? null,
+        name:refDetachment?.name || name,
+        slotType:detachmentMatch[1].replace(/\s+/g, " ").trim(),
+        formationName:currentFormation?.name || "",
+        size:hasSize ? Number(detachmentMatch[3]) : refDetachment?.baseSize ?? null,
+        points:Number(detachmentMatch[hasSize ? 4 : 3]),
+        notes:[],
+        selectedWeapons:[],
+        source:sourceName
+      };
+
+      const detachmentSuffix = line.match(/\s+->\s+(.+)$/);
+      if (detachmentSuffix?.[1]) currentDetachment.notes.push(detachmentSuffix[1].trim());
+
+      rawDetachments.push(currentDetachment);
+      continue;
+    }
+
+    const pointsLine = line.match(/^(.*?)\s*(?::|,|\s[-–—]\s)\s*(\d+)\s*pts?\b/i);
+    if (pointsLine) {
+      const possibleName = pointsLine[1].trim();
+      if (pushFormation(possibleName)) continue;
+
+      if (/^(total|list total)/i.test(possibleName)) {
+        declaredTotal = Number(pointsLine[2]);
+        continue;
+      }
+
+      if (currentDetachment) {
+        currentDetachment.notes.push(line);
+        continue;
+      }
+
+      if (!rosterName && !/^(allies|main faction)/i.test(possibleName)) {
+        rosterName = possibleName;
+        declaredTotal = Number(pointsLine[2]);
+      }
+      continue;
+    }
+
+    const inlineTotal = line.match(/^(.+?)\s+(\d+)\s*pts?\s*$/i);
+    if (inlineTotal && !currentDetachment && !rosterName) {
+      rosterName = inlineTotal[1].trim();
+      declaredTotal = Number(inlineTotal[2]);
+      continue;
+    }
+
+    if (/^formation\s*:/i.test(line) && pushFormation(line)) continue;
+
+    if (currentDetachment) {
+      const weaponLine = line.match(/^x?(\d+)\s+([^:]+):\s*(.+?)(?:\s+\d+\s*pts?)?$/i);
+      if (weaponLine) {
+        const weaponText = weaponLine[3].trim();
+        currentDetachment.selectedWeapons.push(
+          ...weaponText.split(/,\s*/).map(value => value.trim()).filter(Boolean)
+        );
+      } else {
+        const possibleWeapon = line
+          .replace(/^x\d+\s+/i, "")
+          .replace(/^[^:]{1,30}:\s*/, "")
+          .replace(/\s*\(\+?\d+\s*pts?\)\s*$/i, "")
+          .trim();
+        if (matchLiCommunityWeapon(reference, possibleWeapon)) {
+          currentDetachment.selectedWeapons.push(possibleWeapon);
+        }
+      }
+
+      currentDetachment.notes.push(line);
+      continue;
+    }
+
+    if (!rosterName &&
+        !/^(gamemode|faction|allegiance|game size|formations|total|allies|generated by)/i.test(line) &&
+        line.length < 100) {
+      rosterName = line;
+    }
+  }
+
+  if (!rawDetachments.length) {
+    throw new Error(
+      "No detachments were found. In Legion Companion, use Export as Text or JSON and import that export here."
+    );
+  }
+
+  const units = rawDetachments.map((detachment, index) =>
+    buildLiCommunityUnit(detachment, reference, index)
+  );
+
+  const factionCounts = {};
+  for (const raw of rawDetachments) {
+    const refDetachment = findLiCommunityDetachment(reference, raw.id, raw.name);
+    if (!refDetachment?.faction) continue;
+    factionCounts[refDetachment.faction] = (factionCounts[refDetachment.faction] || 0) + 1;
+  }
+  const faction = Object.entries(factionCounts).sort((a,b) => b[1] - a[1])[0]?.[0] || "Legions Imperialis";
+  const summedPoints = rawDetachments.reduce((sum, detachment) => sum + (Number(detachment.points) || 0), 0);
+
+  return {
+    id:crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random()),
+    name:rosterName || sourceName + " list",
+    faction,
+    source:"li-community",
+    communitySource:sourceName,
+    gameSystemKey:"legions-imperialis",
+    importFormat:"companion-text",
+    points:declaredTotal || summedPoints || null,
+    units,
+    armyRules:liCommunityFormationRules(reference, formations),
+    formations,
+    referenceData:{rules:[], stratagems:[]},
+    importedAt:Date.now()
+  };
+}
+
+function liCommunityUnwrapJson(value) {
+  let current = value;
+
+  for (let depth = 0; depth < 5; depth++) {
+    if (typeof current === "string") {
+      try {
+        current = JSON.parse(current);
+        continue;
+      } catch {
+        return current;
+      }
+    }
+
+    if (!current || typeof current !== "object" || Array.isArray(current)) return current;
+
+    const directList = Array.isArray(current.formations) && Array.isArray(current.detachments);
+    if (directList) return current;
+
+    const next = ["list","army","roster","data","payload"]
+      .map(key => current[key])
+      .find(item => item && (typeof item === "object" || typeof item === "string"));
+
+    if (!next) return current;
+    current = next;
+  }
+
+  return current;
+}
+
+function liCompanionValue(object, keys, fallback = null) {
+  for (const key of keys) {
+    if (object?.[key] !== undefined && object?.[key] !== null && object?.[key] !== "") {
+      return object[key];
+    }
+  }
+  return fallback;
+}
+
+function normalizeLiCompanionJson(root, reference) {
+  const formations = [];
+  const rawDetachments = [];
+  const seenObjects = new Set();
+
+  function walk(node, context = {}) {
+    if (!node || typeof node !== "object") return;
+    if (seenObjects.has(node)) return;
+    seenObjects.add(node);
+
+    if (Array.isArray(node)) {
+      for (const item of node) walk(item, context);
+      return;
+    }
+
+    const name = liCompanionValue(node, ["name","detachmentName","unitName","title"], "");
+    const possibleId = liCompanionValue(node, ["detachmentId","detachment_id","dataId","data_id","unitId","unit_id","id"], null);
+    const refDetachment = findLiCommunityDetachment(reference, possibleId, name);
+
+    const likelyFormation = name && (
+      /formation/i.test(String(liCompanionValue(node, ["type","kind","entityType"], ""))) ||
+      Array.isArray(node.detachments) ||
+      Array.isArray(node.slots)
+    );
+    const refFormation = likelyFormation
+      ? findLiCommunityFormation(reference, liCompanionValue(node, ["dataId","data_id","formationId","formation_id","id"], null), name)
+      : null;
+
+    let nextContext = context;
+    if (refFormation) {
+      const formation = {
+        id:liCompanionValue(node, ["id","formationId","formation_id"], "companion-formation-" + formations.length),
+        dataId:refFormation.id,
+        name:refFormation.name,
+        nickname:liCompanionValue(node, ["nickname","customName"], "")
+      };
+      formations.push(formation);
+      nextContext = {...context, formationName:refFormation.name};
+    }
+
+    const typeText = normalize(String(liCompanionValue(node, ["type","kind","entityType","slotType","slot_type"], "")));
+    const hasDetachmentSignals =
+      refDetachment &&
+      (
+        /detachment|unit/.test(typeText) ||
+        node.size !== undefined ||
+        node.modelCount !== undefined ||
+        node.models !== undefined ||
+        node.points !== undefined ||
+        node.cost !== undefined ||
+        node.loadout !== undefined ||
+        node.loadouts !== undefined ||
+        node.upgrades !== undefined ||
+        node.weapons !== undefined
+      );
+
+    if (hasDetachmentSignals) {
+      const notes = [];
+      const selectedWeapons = [];
+      const configValues = [
+        node.upgrades,
+        node.loadout,
+        node.loadouts,
+        node.equipment,
+        node.weapons,
+        node.options
+      ].filter(value => value !== undefined && value !== null);
+
+      for (const value of configValues) {
+        const text = liCommunitySelectionText(value);
+        if (text) notes.push(text);
+      }
+
+      function collectWeaponNames(value) {
+        if (!value) return;
+        if (typeof value === "string") {
+          selectedWeapons.push(value);
+          return;
+        }
+        if (Array.isArray(value)) {
+          value.forEach(collectWeaponNames);
+          return;
+        }
+        if (typeof value === "object") {
+          const weaponName = liCompanionValue(value, ["weapon","weaponName","name"], "");
+          if (weaponName && matchLiCommunityWeapon(reference, weaponName)) selectedWeapons.push(weaponName);
+          for (const item of Object.values(value)) {
+            if (item !== weaponName) collectWeaponNames(item);
+          }
+        }
+      }
+      collectWeaponNames(node.weapons);
+      collectWeaponNames(node.loadout);
+      collectWeaponNames(node.loadouts);
+
+      rawDetachments.push({
+        id:refDetachment.id,
+        name:refDetachment.name,
+        slotType:liCompanionValue(node, ["slotType","slot_type","category","role"], refDetachment.types?.[0] || ""),
+        formationName:nextContext.formationName || "",
+        size:Number(liCompanionValue(node, ["size","modelCount","model_count","models","count"], refDetachment.baseSize || 0)) || refDetachment.baseSize || null,
+        points:Number(liCompanionValue(node, ["points","totalPoints","total_points","cost"], refDetachment.baseCost || 0)) || refDetachment.baseCost || null,
+        notes:dedupeBy(notes, note => normalize(note)),
+        selectedWeapons:dedupeBy(selectedWeapons, weapon => normalize(weapon)),
+        source:"Legion Companion"
+      });
+      return;
+    }
+
+    for (const [key, value] of Object.entries(node)) {
+      if (["reference","metadata","rules","weaponProfiles","datasheet"].includes(key)) continue;
+      if (value && typeof value === "object") walk(value, nextContext);
+    }
+  }
+
+  walk(root);
+
+  const uniqueDetachments = dedupeBy(
+    rawDetachments,
+    detachment => [
+      detachment.formationName,
+      detachment.slotType,
+      detachment.name,
+      detachment.size,
+      detachment.points,
+      JSON.stringify(detachment.notes)
+    ].map(normalize).join("|")
+  );
+
+  if (!uniqueDetachments.length) {
+    throw new Error(
+      "This JSON was readable, but I could not identify Legion Companion detachments. Try a fresh Legion Companion JSON export or Export as Text."
+    );
+  }
+
+  const units = uniqueDetachments.map((detachment, index) =>
+    buildLiCommunityUnit(detachment, reference, index)
+  );
+  const factionCounts = {};
+  for (const detachment of uniqueDetachments) {
+    const refDetachment = findLiCommunityDetachment(reference, detachment.id, detachment.name);
+    if (!refDetachment?.faction) continue;
+    factionCounts[refDetachment.faction] = (factionCounts[refDetachment.faction] || 0) + 1;
+  }
+
+  return {
+    id:crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random()),
+    name:liCompanionValue(root, ["name","armyName","army_name","title"], "Legion Companion list"),
+    faction:liCompanionValue(root, ["faction","mainFaction","main_faction"],
+      Object.entries(factionCounts).sort((a,b) => b[1] - a[1])[0]?.[0] || "Legions Imperialis"),
+    source:"li-community",
+    communitySource:"Legion Companion",
+    gameSystemKey:"legions-imperialis",
+    importFormat:"companion-json",
+    points:uniqueDetachments.reduce((sum, detachment) => sum + (Number(detachment.points) || 0), 0) || null,
+    units,
+    armyRules:liCommunityFormationRules(reference, formations),
+    formations,
+    referenceData:{rules:[], stratagems:[]},
+    importedAt:Date.now()
+  };
+}
+
+async function parseLiCommunityPayload(payload) {
+  const reference = await loadLiCommunityReference();
+  const text = String(payload || "").trim();
+  if (!text) throw new Error("Paste or choose a Legion Companion export first.");
+
+  if (/^[\[{]/.test(text)) {
+    let parsed;
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      throw new Error("The JSON export could not be read.");
+    }
+
+    const unwrapped = liCommunityUnwrapJson(parsed);
+    if (unwrapped && Array.isArray(unwrapped.formations) && Array.isArray(unwrapped.detachments)) {
+      return normalizeLiBuilderJsonList(unwrapped, reference, "Legion Companion");
+    }
+
+    return normalizeLiCompanionJson(unwrapped, reference);
+  }
+
+  return parseLiCommunityText(text, reference);
+}
+
+async function importLiCommunityPayload(payload, origin = "paste") {
+  if (!isLegionsImperialisMode()) {
+    toast("Switch to Legions Imperialis before importing this list.");
+    return;
+  }
+
+  const button = els.liCommunityImportButton;
+  if (button) {
+    button.disabled = true;
+    button.textContent = "Importing…";
+  }
+  if (els.liCommunityImportStatus) {
+    els.liCommunityImportStatus.dataset.busy = "1";
+    els.liCommunityImportStatus.textContent = "Reading list and matching detachments…";
+  }
+
+  try {
+    const roster = await parseLiCommunityPayload(payload);
+    const existingIndex = state.rosters.findIndex(existing =>
+      existing.source === "li-community" &&
+      normalize(existing.communitySource) === normalize(roster.communitySource) &&
+      normalize(existing.name) === normalize(roster.name) &&
+      normalize(existing.faction) === normalize(roster.faction)
+    );
+
+    if (existingIndex >= 0) {
+      state.rosters.splice(existingIndex, 1, roster);
+      state.activeRoster = existingIndex;
+    } else {
+      state.rosters.push(roster);
+      state.activeRoster = state.rosters.length - 1;
+    }
+
+    state.unitBrowserSourceId = "roster:" + roster.id;
+    localStorage.setItem("tv_unit_browser_source", state.unitBrowserSourceId);
+    state.selected = null;
+    state.selectedRosterId = null;
+
+    persist();
+    renderAll();
+    switchPage("datasheets", {silent:true});
+
+    if (origin === "paste" && els.liCommunityInput) els.liCommunityInput.value = "";
+    if (els.liCommunityImportStatus) {
+      els.liCommunityImportStatus.dataset.busy = "";
+      els.liCommunityImportStatus.textContent =
+        "Imported " + roster.units.length + " detachments · " +
+        roster.communitySource +
+        (roster.points != null ? " · " + roster.points + " pts" : "");
+    }
+    toast("Imported " + roster.name);
+  } catch (error) {
+    console.error("Legions community import failed", error);
+    if (els.liCommunityImportStatus) {
+      els.liCommunityImportStatus.dataset.busy = "";
+      els.liCommunityImportStatus.textContent =
+        error.message || "Could not import this Legions Imperialis list.";
+    }
+    toast(error.message || "Could not import this Legions Imperialis list.");
+  } finally {
+    if (button) {
+      button.disabled = false;
+      button.textContent = "Import pasted list";
+    }
+  }
+}
+
+async function handleLiCommunityFile(event) {
+  const file = event.target.files?.[0];
+  if (!file) return;
+
+  try {
+    const text = await file.text();
+    await importLiCommunityPayload(text, "file");
+  } finally {
+    event.target.value = "";
+  }
+}
+
+
+
+function cleanGyrinxText(value = "") {
+  return String(value || "")
+    .replace(/\u00a0/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function cleanGyrinxWeaponName(value = "") {
+  return cleanGyrinxText(value)
+    .replace(/^[+\-–—]\s*/, "")
+    .replace(/\s+—\s+\d+\s*(?:cr|¢)\b.*$/i, "")
+    .replace(/\s+\(\+?\d+\s*(?:cr|¢)\)\s*$/i, "")
+    .replace(/\s+\d+\s*(?:cr|¢)\s*$/i, "")
+    .trim();
+}
+
+function splitGyrinxNames(value = "") {
+  return cleanGyrinxText(value)
+    .split(/\s*,\s*/)
+    .map(item => item.trim())
+    .filter(item =>
+      item &&
+      !/^choose\b/i.test(item) &&
+      !/^add\b/i.test(item)
+    );
+}
+
+function parseGyrinxFighterStats(cardRoot) {
+  const allowed = new Set([
+    "m","ws","bs","s","t","w","i","a","ld","cl","wil","int",
+    "fr","sd","rr","hp","hnd",
+    "front toughness","side toughness","rear toughness","hit points","handling"
+  ]);
+  const stats = [];
+  let typeLine = "";
+  let xp = "";
+
+  for (const table of cardRoot.querySelectorAll("table")) {
+    const firstHeading = cleanGyrinxText(table.querySelector("th")?.textContent);
+    if (normalize(firstHeading) === "weapons") continue;
+
+    const rows = [...table.querySelectorAll("tr")];
+    for (let index = 0; index < rows.length - 1; index++) {
+      const headingCells = [...rows[index].querySelectorAll("th")];
+      if (!headingCells.length) continue;
+
+      const valueCells = [...rows[index + 1].querySelectorAll("td")];
+      if (!valueCells.length) continue;
+
+      const headings = headingCells.map(cell => cleanGyrinxText(cell.textContent));
+      const values = valueCells.map(cell => cleanGyrinxText(cell.textContent));
+      if (!headings.some(label => allowed.has(normalize(label)))) continue;
+
+      for (let cellIndex = 0; cellIndex < Math.min(headings.length, values.length); cellIndex++) {
+        const label = headings[cellIndex];
+        const value = values[cellIndex];
+        const key = normalize(label);
+        if (!label || !value) continue;
+
+        if (allowed.has(key)) {
+          if (!stats.some(stat => normalize(stat.label) === key)) {
+            stats.push({label, value});
+          }
+        } else if (key === "type") {
+          typeLine = value;
+        } else if (key === "xp") {
+          xp = value;
+        }
+      }
+
+      index++;
+    }
+  }
+
+  return {stats, typeLine, xp};
+}
+
+function parseGyrinxWeapons(cardRoot) {
+  const profiles = [];
+  const gear = [];
+
+  const weaponTable = [...cardRoot.querySelectorAll("table")].find(table =>
+    normalize(cleanGyrinxText(table.querySelector("th")?.textContent)) === "weapons"
+  );
+  if (!weaponTable) return {profiles, gear};
+
+  const headingCells = [...weaponTable.querySelectorAll("thead th")];
+  const columns = headingCells.slice(1).map(cell => cleanGyrinxText(cell.textContent));
+  let pendingWeapon = "";
+  let lastProfile = null;
+
+  for (const row of weaponTable.querySelectorAll("tbody tr")) {
+    const cells = [...row.querySelectorAll("td")];
+    if (!cells.length) continue;
+
+    const firstText = cleanGyrinxText(cells[0].textContent);
+    const allText = cleanGyrinxText(row.textContent);
+
+    if (cells.length === 1 || cells[0].colSpan > 1) {
+      if (!allText) continue;
+
+      if (/^\+/.test(allText)) {
+        gear.push(cleanGyrinxWeaponName(allText));
+        continue;
+      }
+
+      if (lastProfile && !firstText) {
+        const trait = cleanGyrinxText(cells.at(-1)?.textContent);
+        if (trait) {
+          const existing = lastProfile.values.find(value => normalize(value.label) === "traits");
+          if (existing) existing.value = [existing.value, trait].filter(Boolean).join(", ");
+          else lastProfile.values.push({label:"Traits", value:trait});
+        }
+        continue;
+      }
+
+      pendingWeapon = cleanGyrinxWeaponName(allText);
+      continue;
+    }
+
+    if (!firstText) {
+      const trait = cleanGyrinxText(cells.at(-1)?.textContent);
+      if (trait && lastProfile) {
+        const existing = lastProfile.values.find(value => normalize(value.label) === "traits");
+        if (existing) existing.value = [existing.value, trait].filter(Boolean).join(", ");
+        else lastProfile.values.push({label:"Traits", value:trait});
+      }
+      continue;
+    }
+
+    if (/^\+/.test(firstText)) {
+      gear.push(cleanGyrinxWeaponName(firstText));
+      continue;
+    }
+
+    const rawProfileName = cleanGyrinxWeaponName(firstText);
+    const namedSubProfile = /^[\-–—]/.test(firstText.trim());
+    const displayName = namedSubProfile && pendingWeapon
+      ? pendingWeapon + " — " + rawProfileName
+      : rawProfileName;
+
+    const values = [];
+    for (let index = 0; index < columns.length; index++) {
+      const value = cleanGyrinxText(cells[index + 1]?.textContent);
+      values.push({
+        label:columns[index],
+        value:value || "—"
+      });
+    }
+
+    const hasStats = values.some(value => value.value !== "—");
+    if (!hasStats) {
+      pendingWeapon = rawProfileName;
+      continue;
+    }
+
+    lastProfile = {
+      name:displayName || pendingWeapon || "Weapon",
+      type:"Necromunda Weapon",
+      system:"necromunda",
+      quantity:1,
+      values
+    };
+    profiles.push(lastProfile);
+
+    if (!namedSubProfile) pendingWeapon = rawProfileName;
+  }
+
+  return {
+    profiles:dedupeBy(
+      profiles,
+      profile => normalize(profile.name + "|" + JSON.stringify(profile.values || []))
+    ),
+    gear:dedupeBy(gear.filter(Boolean), value => normalize(value))
+  };
+}
+
+function parseGyrinxDetailRows(cardRoot) {
+  const rules = [];
+  const gear = [];
+  const counters = [];
+
+  const detailLists = [...cardRoot.querySelectorAll("dl")];
+  for (const list of detailLists) {
+    const terms = [...list.querySelectorAll(":scope > dt")];
+    for (const term of terms) {
+      let description = term.nextElementSibling;
+      while (description && description.tagName !== "DD") {
+        description = description.nextElementSibling;
+      }
+      if (!description) continue;
+
+      const label = cleanGyrinxText(term.textContent);
+      const value = cleanGyrinxText(description.textContent);
+      if (!label || !value) continue;
+
+      const key = normalize(label);
+      if ([
+        "skills",
+        "rules",
+        "powers",
+        "psyker",
+        "advancements",
+        "lasting injuries",
+        "lasting injury",
+        "lasting damage"
+      ].includes(key)) {
+        const category = key === "skills"
+          ? "Skill"
+          : ["powers","psyker"].includes(key)
+            ? "Power"
+            : key === "advancements"
+              ? "Advancement"
+              : key.startsWith("lasting")
+                ? "Injury / Damage"
+                : "Rule";
+        for (const name of splitGyrinxNames(value)) {
+          rules.push({name, text:"", category});
+        }
+        continue;
+      }
+
+      if (
+        key === "gear" ||
+        key.includes("equipment") ||
+        key.includes("wargear") ||
+        key.includes("armour") ||
+        key.includes("gear")
+      ) {
+        gear.push(...splitGyrinxNames(value));
+        continue;
+      }
+
+      if (!/^(type|xp)$/i.test(label)) {
+        counters.push({label, value});
+      }
+    }
+  }
+
+  return {
+    rules:dedupeBy(rules, rule => normalize(rule.category + "|" + rule.name)),
+    gear:dedupeBy(gear, value => normalize(value)),
+    counters:dedupeBy(counters, counter => normalize(counter.label + "|" + counter.value))
+  };
+}
+
+function gyrinxFighterCategories(profileName = "", typeLine = "", status = "") {
+  const text = normalize([profileName, typeLine, status].filter(Boolean).join(" "));
+  const categories = [];
+
+  const tests = [
+    ["leader","Leader"],
+    ["champion","Champion"],
+    ["juve","Juve"],
+    ["prospect","Prospect"],
+    ["ganger","Ganger"],
+    ["hanger on","Hanger-on"],
+    ["hanger-on","Hanger-on"],
+    ["brute","Brute"],
+    ["vehicle","Vehicle"],
+    ["exotic beast","Pet"],
+    ["pet","Pet"]
+  ];
+
+  for (const [needle, category] of tests) {
+    if (text.includes(normalize(needle))) categories.push(category);
+  }
+
+  return dedupeBy(categories.length ? categories : ["Fighter"], value => normalize(value));
+}
+
+function parseGyrinxN26Fighter(header, index) {
+  const cardRoot = header.parentElement;
+  if (!cardRoot) return null;
+
+  const id = String(header.id || "").replace(/^model-/, "") || String(index);
+  const name = cleanGyrinxText(
+    header.querySelector('[id^="n26-model-name-"]')?.textContent
+  );
+  if (!name) return null;
+
+  const profileName = cleanGyrinxText(
+    header.querySelector('[id^="n26-model-profile-name-"]')?.textContent
+  );
+
+  const headerText = cleanGyrinxText(header.textContent);
+  const ratingMatch = headerText.match(/(\d+)\s*(?:cr|¢)\b/i);
+  const statusCandidates = [
+    "In Recovery",
+    "Critically Injured",
+    "Critically Damaged",
+    "Ransomed",
+    "Captured",
+    "Dead",
+    "Destroyed",
+    "Active"
+  ];
+  const status = statusCandidates.find(candidate =>
+    normalize(headerText).includes(normalize(candidate))
+  ) || "";
+
+  const statData = parseGyrinxFighterStats(cardRoot);
+  const weaponData = parseGyrinxWeapons(cardRoot);
+  const details = parseGyrinxDetailRows(cardRoot);
+
+  const rules = [
+    ...details.rules,
+    ...details.gear.map(item => ({name:item, text:"", category:"Gear"})),
+    ...weaponData.gear.map(item => ({name:item, text:"", category:"Weapon accessory"}))
+  ];
+
+  if (status && normalize(status) !== "active") {
+    rules.unshift({name:status, text:"", category:"Status"});
+  }
+
+  const stats = [...statData.stats];
+  if (ratingMatch) stats.push({label:"Rating", value:ratingMatch[1] + "cr"});
+
+  const categories = gyrinxFighterCategories(
+    profileName,
+    statData.typeLine,
+    status
+  );
+
+  return {
+    id:"gyrinx-" + id,
+    externalId:id,
+    name,
+    type:statData.typeLine || profileName || "Fighter",
+    system:"necromunda",
+    gameSystemKey:"necromunda",
+    categories,
+    stats,
+    rules:dedupeBy(
+      rules,
+      rule => normalize(rule.category + "|" + rule.name + "|" + rule.text)
+    ),
+    profiles:weaponData.profiles,
+    necromunda:{
+      profileName,
+      typeLine:statData.typeLine,
+      rating:ratingMatch ? Number(ratingMatch[1]) : null,
+      xp:statData.xp,
+      status,
+      counters:details.counters,
+      gear:dedupeBy(
+        [...details.gear, ...weaponData.gear],
+        value => normalize(value)
+      )
+    },
+    searchText:normalize([
+      name,
+      profileName,
+      statData.typeLine,
+      status,
+      categories,
+      statData.stats.map(stat => [stat.label, stat.value]),
+      weaponData.profiles.map(profile => profile.name),
+      rules.map(rule => rule.name),
+      details.counters.map(counter => [counter.label, counter.value])
+    ].flat(4).join(" "))
+  };
+}
+
+function parseGyrinxCampaignState(sheet) {
+  const root = sheet.querySelector("#n26-campaign-state");
+  if (!root) return null;
+
+  const heading = cleanGyrinxText(root.querySelector("h2")?.textContent);
+  const name = heading
+    .replace(/^Campaign\s*[·•:–—-]?\s*/i, "")
+    .trim() || "Campaign";
+
+  const rows = [];
+  for (const term of root.querySelectorAll("dl dt")) {
+    const row = term.parentElement;
+    const description = row?.querySelector(":scope > dd") || term.nextElementSibling;
+    const label = cleanGyrinxText(term.textContent);
+    const value = cleanGyrinxText(description?.textContent);
+    if (!label || !value) continue;
+    rows.push({label, value});
+  }
+
+  const boonSection = [...root.querySelectorAll("section")].find(section =>
+    normalize(cleanGyrinxText(section.querySelector("h3")?.textContent)) === "boons"
+  );
+  const boons = boonSection
+    ? cleanGyrinxText(boonSection.textContent).replace(/^Boons\s*/i, "").trim()
+    : "";
+
+  return {
+    name,
+    rows:dedupeBy(rows, row => normalize(row.label + "|" + row.value)),
+    boons
+  };
+}
+
+function parseGyrinxGangRules(sheet, cardRoots) {
+  const rules = [];
+
+  for (const term of sheet.querySelectorAll("dt")) {
+    if (cardRoots.some(root => root.contains(term))) continue;
+    if (normalize(cleanGyrinxText(term.textContent)) !== "rules") continue;
+
+    let description = term.nextElementSibling;
+    while (description && description.tagName !== "DD") {
+      description = description.nextElementSibling;
+    }
+    if (!description) continue;
+
+    for (const name of splitGyrinxNames(description.textContent)) {
+      rules.push({name, text:"", category:"Gang Rule"});
+    }
+  }
+
+  return dedupeBy(rules, rule => normalize(rule.name));
+}
+
+function parseGyrinxN26GangHtml(html, sourceUrl = "") {
+  const doc = new DOMParser().parseFromString(String(html || ""), "text/html");
+  const sheet = doc.querySelector("#n26-gang-sheet");
+  if (!sheet) {
+    throw new Error("This Gyrinx page did not contain a readable N26 gang.");
+  }
+
+  const headers = [...sheet.querySelectorAll('[id^="model-"]')];
+  const units = headers
+    .map((header, index) => parseGyrinxN26Fighter(header, index))
+    .filter(Boolean);
+
+  if (!units.length) {
+    throw new Error("The Gyrinx gang was found, but no fighter cards could be read.");
+  }
+
+  const cardRoots = headers.map(header => header.parentElement).filter(Boolean);
+  const pageText = cleanGyrinxText(sheet.textContent);
+  const heading = sheet.querySelector("h1");
+  const name = cleanGyrinxText(heading?.textContent) ||
+    cleanGyrinxText(doc.title).replace(/\s*[|–—-]\s*Gyrinx.*$/i, "") ||
+    "Necromunda gang";
+  const headerGangType = cleanGyrinxText(
+    heading?.parentElement?.querySelector("p.text-muted")?.textContent
+  );
+
+  const ratingMatch = pageText.match(/\bRating\s+(\d+)\b/i);
+  const creditsMatch = pageText.match(/\bCredits\s+(\d+)\b/i);
+  const wealthMatch = pageText.match(/\bWealth\s+(\d+)\b/i);
+
+  const profileWords = units
+    .map(unit => unit.necromunda?.profileName || "")
+    .join(" ");
+  const gangNames = [
+    "Goliath","Escher","Orlock","Van Saar","Cawdor","Delaque",
+    "Palanite Enforcers","Corpse Grinder Cult","Genestealer Cult",
+    "Chaos Cult","Venators","Underhive Outcasts","Outcasts",
+    "Ash Waste Nomads","Ironhead Squat Prospectors","Slave Ogryns",
+    "Malstrain","Spyre Hunters"
+  ];
+  const gangType = headerGangType || gangNames.find(type =>
+    normalize(profileWords).includes(normalize(type))
+  ) || "Necromunda";
+
+  const campaign = parseGyrinxCampaignState(sheet);
+  const gangRules = parseGyrinxGangRules(sheet, cardRoots);
+  const campaignRules = campaign
+    ? [
+        {name:"Campaign", text:campaign.name, category:"Campaign"},
+        ...campaign.rows.map(row => ({
+          name:row.label,
+          text:row.value,
+          category:"Campaign"
+        })),
+        ...(campaign.boons
+          ? [{name:"Boons", text:campaign.boons, category:"Campaign"}]
+          : [])
+      ]
+    : [];
+
+  return {
+    id:crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random()),
+    name,
+    faction:gangType,
+    source:"gyrinx",
+    gameSystemKey:"necromunda",
+    importFormat:"gyrinx-share",
+    points:null,
+    units,
+    armyRules:dedupeBy(
+      [...gangRules, ...campaignRules],
+      rule => normalize(rule.category + "|" + rule.name + "|" + rule.text)
+    ),
+    referenceData:{rules:[], stratagems:[]},
+    importedAt:Date.now(),
+    necromunda:{
+      rating:ratingMatch ? Number(ratingMatch[1]) : null,
+      credits:creditsMatch ? Number(creditsMatch[1]) : null,
+      wealth:wealthMatch ? Number(wealthMatch[1]) : null,
+      campaign,
+      sourceUrl
+    }
+  };
+}
+
+async function loadGyrinxGang() {
+  const value = String(els.necromundaShareInput?.value || "").trim();
+  if (!value) {
+    if (els.necromundaImportStatus) {
+      els.necromundaImportStatus.textContent = "Paste a public Gyrinx N26 gang link first.";
+    }
+    toast("Paste a Gyrinx gang link.");
+    return;
+  }
+
+  if (!isNecromundaMode()) {
+    toast("Switch to Necromunda before importing this gang.");
+    return;
+  }
+
+  const button = els.necromundaImportButton;
+  if (button) {
+    button.disabled = true;
+    button.textContent = "Importing…";
+  }
+  if (els.necromundaImportStatus) {
+    els.necromundaImportStatus.dataset.busy = "1";
+    els.necromundaImportStatus.textContent = "Loading the public gang from Gyrinx…";
+  }
+
+  try {
+    const response = await fetch("./api/gyrinx-gang?url=" + encodeURIComponent(value));
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(payload.error || "Could not import this Gyrinx gang.");
+    }
+
+    const roster = parseGyrinxN26GangHtml(payload.html, payload.url || value);
+    const existingIndex = state.rosters.findIndex(existing =>
+      existing.source === "gyrinx" &&
+      (
+        (existing.necromunda?.sourceUrl && existing.necromunda.sourceUrl === roster.necromunda.sourceUrl) ||
+        (
+          normalize(existing.name) === normalize(roster.name) &&
+          normalize(existing.faction) === normalize(roster.faction)
+        )
+      )
+    );
+
+    if (existingIndex >= 0) {
+      state.rosters.splice(existingIndex, 1, roster);
+      state.activeRoster = existingIndex;
+    } else {
+      state.rosters.push(roster);
+      state.activeRoster = state.rosters.length - 1;
+    }
+
+    state.unitBrowserSourceId = "roster:" + roster.id;
+    localStorage.setItem("tv_unit_browser_source", state.unitBrowserSourceId);
+    state.selected = null;
+    state.selectedRosterId = null;
+
+    persist();
+    renderAll();
+    switchPage("datasheets", {silent:true});
+
+    if (els.necromundaShareInput) els.necromundaShareInput.value = "";
+    if (els.necromundaImportStatus) {
+      els.necromundaImportStatus.dataset.busy = "";
+      els.necromundaImportStatus.textContent =
+        "Imported " + roster.units.length + " fighters" +
+        (roster.necromunda.rating != null ? " · Rating " + roster.necromunda.rating : "") +
+        (roster.necromunda.campaign?.name ? " · " + roster.necromunda.campaign.name : "");
+    }
+    toast("Imported " + roster.name);
+  } catch (error) {
+    console.error("Gyrinx import failed", error);
+    if (els.necromundaImportStatus) {
+      els.necromundaImportStatus.dataset.busy = "";
+      els.necromundaImportStatus.textContent =
+        error.message || "Could not import this Gyrinx gang.";
+    }
+    toast(error.message || "Could not import this Gyrinx gang.");
+  } finally {
+    if (button) {
+      button.disabled = false;
+      button.textContent = "Import Gyrinx gang";
+    }
+  }
+}
+
+
+
+const DND_ABILITY_IDS = {
+  1:"str",
+  2:"dex",
+  3:"con",
+  4:"int",
+  5:"wis",
+  6:"cha"
+};
+
+const DND_ABILITY_LABELS = {
+  str:"STR",
+  dex:"DEX",
+  con:"CON",
+  int:"INT",
+  wis:"WIS",
+  cha:"CHA"
+};
+
+const DND_ABILITY_NAMES = {
+  str:"strength",
+  dex:"dexterity",
+  con:"constitution",
+  int:"intelligence",
+  wis:"wisdom",
+  cha:"charisma"
+};
+
+const DND_SKILLS = [
+  {key:"acr", name:"Acrobatics", ability:"dex", subType:"acrobatics", valueId:3},
+  {key:"ani", name:"Animal Handling", ability:"wis", subType:"animal-handling", valueId:11},
+  {key:"arc", name:"Arcana", ability:"int", subType:"arcana", valueId:6},
+  {key:"ath", name:"Athletics", ability:"str", subType:"athletics", valueId:2},
+  {key:"dec", name:"Deception", ability:"cha", subType:"deception", valueId:16},
+  {key:"his", name:"History", ability:"int", subType:"history", valueId:7},
+  {key:"ins", name:"Insight", ability:"wis", subType:"insight", valueId:12},
+  {key:"itm", name:"Intimidation", ability:"cha", subType:"intimidation", valueId:17},
+  {key:"inv", name:"Investigation", ability:"int", subType:"investigation", valueId:8},
+  {key:"med", name:"Medicine", ability:"wis", subType:"medicine", valueId:13},
+  {key:"nat", name:"Nature", ability:"int", subType:"nature", valueId:9},
+  {key:"prc", name:"Perception", ability:"wis", subType:"perception", valueId:14},
+  {key:"prf", name:"Performance", ability:"cha", subType:"performance", valueId:18},
+  {key:"per", name:"Persuasion", ability:"cha", subType:"persuasion", valueId:19},
+  {key:"rel", name:"Religion", ability:"int", subType:"religion", valueId:10},
+  {key:"slt", name:"Sleight of Hand", ability:"dex", subType:"sleight-of-hand", valueId:4},
+  {key:"ste", name:"Stealth", ability:"dex", subType:"stealth", valueId:5},
+  {key:"sur", name:"Survival", ability:"wis", subType:"survival", valueId:15}
+];
+
+function dndIsRecord(value) {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function dndNumber(value, fallback = null) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function dndPlainText(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  const doc = new DOMParser().parseFromString(raw, "text/html");
+  return String(doc.body?.textContent || raw)
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function dndModifier(score) {
+  return Math.floor((Number(score || 10) - 10) / 2);
+}
+
+function dndSigned(value) {
+  const number = Number(value || 0);
+  return number >= 0 ? "+" + number : String(number);
+}
+
+function dndProficiencyBonus(level) {
+  return Math.floor((Math.max(1, Number(level || 1)) - 1) / 4) + 2;
+}
+
+function dndBucketEntries(value) {
+  if (Array.isArray(value)) {
+    return value
+      .filter(dndIsRecord)
+      .map(item => ({item, source:""}));
+  }
+  if (!dndIsRecord(value)) return [];
+
+  return Object.entries(value).flatMap(([source, list]) =>
+    Array.isArray(list)
+      ? list.filter(dndIsRecord).map(item => ({item, source}))
+      : []
+  );
+}
+
+function dndAbilityScores(root) {
+  const scores = {str:10,dex:10,con:10,int:10,wis:10,cha:10};
+  const base = Array.isArray(root?.stats) ? root.stats : [];
+  const bonus = Array.isArray(root?.bonusStats) ? root.bonusStats : [];
+  const override = Array.isArray(root?.overrideStats) ? root.overrideStats : [];
+
+  for (const stat of base) {
+    const id = dndNumber(stat?.id ?? stat?.statId ?? stat?.abilityId, 0);
+    const key = DND_ABILITY_IDS[id];
+    if (!key) continue;
+
+    const baseValue = dndNumber(stat?.value ?? stat?.score ?? stat?.total, scores[key]) ?? scores[key];
+    const bonusStat = bonus.find(item =>
+      dndNumber(item?.id ?? item?.statId ?? item?.abilityId, 0) === id
+    );
+    const overrideStat = override.find(item =>
+      dndNumber(item?.id ?? item?.statId ?? item?.abilityId, 0) === id
+    );
+
+    const bonusValue = dndNumber(bonusStat?.value ?? bonusStat?.score ?? bonusStat?.total, 0) || 0;
+    const overrideValue = dndNumber(overrideStat?.value ?? overrideStat?.score ?? overrideStat?.total, 0) || 0;
+    scores[key] = overrideValue > 0 ? overrideValue : baseValue + bonusValue;
+  }
+
+  for (const {item:modifier} of dndBucketEntries(root?.modifiers)) {
+    const subtype = normalize(modifier?.subType || modifier?.subtype || "").replace(/\s+/g, "-");
+    const map = {
+      "strength-score":"str",
+      "dexterity-score":"dex",
+      "constitution-score":"con",
+      "intelligence-score":"int",
+      "wisdom-score":"wis",
+      "charisma-score":"cha"
+    };
+    const key = map[subtype];
+    if (!key) continue;
+
+    const value = dndNumber(modifier?.value, 0) || 0;
+    const type = normalize(modifier?.type);
+    if (type === "bonus") scores[key] += value;
+    if (type === "set" && value > scores[key]) scores[key] = value;
+  }
+
+  return scores;
+}
+
+function dndUnrestrictedModifier(modifier) {
+  return !String(modifier?.restriction || "").trim();
+}
+
+function dndModifierNumericValue(modifier) {
+  return dndNumber(modifier?.value ?? modifier?.fixedValue, 0) || 0;
+}
+
+function dndCustomSkillProficiency(root, skill) {
+  const entry = (root?.characterValues || []).find(value =>
+    Number(value?.typeId) === 26 &&
+    Number(value?.valueId) === Number(skill.valueId) &&
+    value?.value != null
+  );
+  if (!entry) return null;
+  return ({1:0, 2:.5, 3:1, 4:2})[Number(entry.value)] ?? null;
+}
+
+function dndCustomSkillAbility(root, skill) {
+  const entry = (root?.characterValues || []).find(value =>
+    Number(value?.typeId) === 27 &&
+    Number(value?.valueId) === Number(skill.valueId)
+  );
+  return DND_ABILITY_IDS[Number(entry?.value || 0)] || "";
+}
+
+function dndCustomSkillBonus(root, skill) {
+  return (root?.characterValues || [])
+    .filter(value =>
+      [24,25].includes(Number(value?.typeId)) &&
+      Number(value?.valueId) === Number(skill.valueId)
+    )
+    .reduce((sum, value) => sum + (dndNumber(value?.value, 0) || 0), 0);
+}
+
+function dndSkillProficiency(root, skill, ability) {
+  const custom = dndCustomSkillProficiency(root, skill);
+  if (custom != null) {
+    return {rank:custom, roundUp:false};
+  }
+
+  const modifiers = dndBucketEntries(root?.modifiers).map(entry => entry.item);
+  const skillModifiers = modifiers.filter(modifier => {
+    const subtype = normalize(modifier?.subType || modifier?.subtype || "");
+    const friendly = normalize(modifier?.friendlySubtypeName || "");
+    return subtype === skill.subType || friendly === normalize(skill.name);
+  });
+
+  if (skillModifiers.some(modifier => normalize(modifier.type) === "expertise")) {
+    return {rank:2, roundUp:false};
+  }
+  if (skillModifiers.some(modifier => normalize(modifier.type) === "proficiency")) {
+    return {rank:1, roundUp:false};
+  }
+
+  const abilityName = DND_ABILITY_NAMES[ability] || ability;
+  const halfRoundUp = modifiers.some(modifier => {
+    const type = normalize(modifier?.type);
+    const subtype = normalize(modifier?.subType || "");
+    return type === "half-proficiency-round-up" &&
+      (subtype === abilityName + "-ability-checks" || subtype === "ability-checks");
+  });
+  if (halfRoundUp) return {rank:.5, roundUp:true};
+
+  const half = modifiers.some(modifier =>
+    normalize(modifier?.type) === "half-proficiency" &&
+    normalize(modifier?.subType || "") === "ability-checks"
+  );
+  return {rank:half ? .5 : 0, roundUp:false};
+}
+
+function dndSkillMiscBonus(root, skill, ability) {
+  const abilityName = DND_ABILITY_NAMES[ability] || ability;
+  const accepted = new Set([
+    skill.subType,
+    "skill-checks",
+    "ability-checks",
+    abilityName + "-ability-checks"
+  ]);
+
+  const modifierBonus = dndBucketEntries(root?.modifiers)
+    .map(entry => entry.item)
+    .filter(modifier =>
+      normalize(modifier?.type) === "bonus" &&
+      dndUnrestrictedModifier(modifier) &&
+      accepted.has(normalize(modifier?.subType || modifier?.subtype || ""))
+    )
+    .reduce((sum, modifier) => sum + dndModifierNumericValue(modifier), 0);
+
+  return modifierBonus + dndCustomSkillBonus(root, skill);
+}
+
+function dndParseSkills(root, scores, proficiencyBonus) {
+  return DND_SKILLS.map(skill => {
+    const ability = dndCustomSkillAbility(root, skill) || skill.ability;
+    const proficiency = dndSkillProficiency(root, skill, ability);
+    const proficiencyBonusValue = proficiency.rank === .5
+      ? (proficiency.roundUp
+          ? Math.ceil(proficiencyBonus / 2)
+          : Math.floor(proficiencyBonus / 2))
+      : proficiencyBonus * proficiency.rank;
+    const miscBonus = dndSkillMiscBonus(root, skill, ability);
+    const bonus = dndModifier(scores[ability]) + proficiencyBonusValue + miscBonus;
+
+    return {
+      ...skill,
+      ability,
+      bonus,
+      miscBonus,
+      proficiency:proficiency.rank,
+      proficiencyLabel:proficiency.rank >= 2
+        ? "Expertise"
+        : proficiency.rank >= 1
+          ? "Proficient"
+          : proficiency.rank > 0
+            ? "Half proficiency"
+            : ""
+    };
+  });
+}
+
+function dndActivationLabel(value) {
+  const activation = dndIsRecord(value?.activation) ? value.activation : value;
+  const raw = activation?.activationType ?? activation?.type ?? null;
+  if (typeof raw === "string") {
+    const key = normalize(raw);
+    if (key.includes("bonus")) return "Bonus Action";
+    if (key.includes("reaction")) return "Reaction";
+    if (key.includes("action")) return "Action";
+    if (key.includes("minute")) return "Minute";
+    if (key.includes("hour")) return "Hour";
+    if (key.includes("special")) return "Special";
+  }
+
+  return ({
+    0:"No Action",
+    1:"Action",
+    2:"Action",
+    3:"Bonus Action",
+    4:"Reaction",
+    5:"Action",
+    6:"Minute",
+    7:"Hour",
+    8:"Special"
+  })[Number(raw)] || "Action";
+}
+
+function dndRangeLabel(value) {
+  const range = dndIsRecord(value?.range) ? value.range : value;
+  if (!range) return "";
+
+  if (typeof range === "number") return range + " ft.";
+  if (typeof range === "string") return range;
+
+  const normal =
+    dndNumber(range.range, null) ??
+    dndNumber(range.distance, null) ??
+    dndNumber(range.rangeValue, null) ??
+    dndNumber(range.rangeValue?.amount, null) ??
+    dndNumber(range.amount, null);
+  const longRange =
+    dndNumber(range.longRange, null) ??
+    dndNumber(range.longRangeValue, null);
+  const origin = String(range.origin || range.rangeType || "").trim();
+
+  if (normal != null && longRange != null) return normal + "/" + longRange + " ft.";
+  if (normal != null) return normal + " ft.";
+  return origin;
+}
+
+function dndDurationLabel(value) {
+  const duration = dndIsRecord(value?.duration) ? value.duration : value;
+  if (!duration) return "";
+  if (typeof duration === "string") return duration;
+
+  const amount = dndNumber(duration.durationInterval ?? duration.amount, null);
+  const unit = String(duration.durationUnit || duration.unit || "").trim();
+  if (amount != null && unit) {
+    return amount + " " + unit + (amount === 1 ? "" : "s");
+  }
+  return String(duration.durationType || duration.type || "").trim();
+}
+
+function dndDiceExpression(value, depth = 0) {
+  if (depth > 5 || value == null) return "";
+
+  if (typeof value === "string") {
+    const match = value.match(/\b(\d+d\d+(?:\s*[+-]\s*\d+)?)\b/i);
+    return match ? match[1].replace(/\s+/g, "") : "";
+  }
+
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const found = dndDiceExpression(item, depth + 1);
+      if (found) return found;
+    }
+    return "";
+  }
+
+  if (!dndIsRecord(value)) return "";
+
+  const direct = [
+    value.diceString,
+    value.damageDiceString,
+    value.die?.diceString,
+    value.dice?.diceString,
+    value.damage?.diceString
+  ];
+  for (const candidate of direct) {
+    const found = dndDiceExpression(candidate, depth + 1);
+    if (found) return found;
+  }
+
+  const count = dndNumber(value.diceCount ?? value.count, null);
+  const sides = dndNumber(value.diceValue ?? value.sides ?? value.dieSize, null);
+  const fixed = dndNumber(value.fixedValue ?? value.bonus, 0) || 0;
+  if (count && sides && sides >= 2) {
+    return count + "d" + sides + (fixed ? (fixed > 0 ? "+" : "") + fixed : "");
+  }
+
+  for (const key of ["damage","dice","damageDice","damageEffect","healing","healingDice","tempHpDice","value"]) {
+    const found = dndDiceExpression(value[key], depth + 1);
+    if (found) return found;
+  }
+
+  return "";
+}
+
+function dndDamageType(value) {
+  if (!value) return "";
+  const direct = value.damageType || value?.definition?.damageType;
+  if (typeof direct === "string") return direct;
+  if (dndIsRecord(direct) && direct.name) return String(direct.name);
+  return "";
+}
+
+function dndAbilityFromId(value, fallback = "cha") {
+  return DND_ABILITY_IDS[dndNumber(value, 0)] || fallback;
+}
+
+function dndSpellAbility(root, spell, definition, scores) {
+  const direct =
+    spell?.spellCastingAbilityId ??
+    spell?.spellcastingAbilityId ??
+    definition?.spellCastingAbilityId ??
+    definition?.spellcastingAbilityId;
+
+  if (DND_ABILITY_IDS[dndNumber(direct, 0)]) {
+    return dndAbilityFromId(direct);
+  }
+
+  const casterClasses = (root?.classes || []).filter(item =>
+    dndIsRecord(item) && dndIsRecord(item.definition)
+  );
+  const best = casterClasses
+    .map(item => dndNumber(item.definition.spellCastingAbilityId, 0))
+    .find(id => DND_ABILITY_IDS[id]);
+
+  if (best) return dndAbilityFromId(best);
+  return Object.entries(scores)
+    .sort((a,b) => dndModifier(b[1]) - dndModifier(a[1]))[0]?.[0] || "cha";
+}
+
+function dndClassSummary(root) {
+  const classes = Array.isArray(root?.classes) ? root.classes : [];
+  const names = [];
+  let level = 0;
+
+  for (const item of classes) {
+    if (!dndIsRecord(item)) continue;
+    const className = String(item.definition?.name || item.name || "Adventurer").trim();
+    const subclassName = String(item.subclassDefinition?.name || "").trim();
+    const classLevel = Math.max(0, dndNumber(item.level, 0) || 0);
+    level += classLevel;
+    names.push((subclassName ? subclassName + " " : "") + className + " " + classLevel);
+  }
+
+  return {
+    level:level || Math.max(1, dndNumber(root?.level, 1) || 1),
+    label:names.filter(Boolean).join(" / ") || "Adventurer"
+  };
+}
+
+function dndArmorClass(root, scores) {
+  const explicit =
+    dndNumber(root?.armorClass, null) ??
+    dndNumber(root?.ac, null) ??
+    dndNumber(root?.overrideArmorClass, null);
+  if (explicit != null && explicit > 0) return explicit;
+
+  const dex = dndModifier(scores.dex);
+  let ac = 10 + dex;
+  let shield = 0;
+
+  for (const item of root?.inventory || []) {
+    if (!dndIsRecord(item) || item.equipped === false) continue;
+    const definition = dndIsRecord(item.definition) ? item.definition : {};
+    const descriptor = normalize([
+      definition.name,
+      definition.type,
+      definition.filterType,
+      definition.subType
+    ].filter(Boolean).join(" "));
+
+    if (descriptor.includes("shield")) {
+      shield += dndNumber(definition.grantedArmorClass ?? definition.acBonus, 2) || 2;
+      continue;
+    }
+
+    const base = dndNumber(definition.armorClass, null);
+    if (base == null || !descriptor.includes("armor")) continue;
+
+    const dexBonus = descriptor.includes("heavy")
+      ? 0
+      : descriptor.includes("medium")
+        ? Math.min(2, dex)
+        : dex;
+    ac = Math.max(ac, base + dexBonus);
+  }
+
+  return ac + shield;
+}
+
+function dndMagicBonus(name) {
+  const match = String(name || "").match(/\+(\d+)/);
+  return match ? Number(match[1]) : 0;
+}
+
+function dndWeaponAbility(definition, scores) {
+  const descriptor = normalize([
+    definition?.type,
+    definition?.filterType,
+    definition?.subType,
+    ...(definition?.properties || []).map(item => item?.name || "")
+  ].join(" "));
+  const ranged = Number(definition?.attackType) === 2 || descriptor.includes("ranged");
+  const finesse = descriptor.includes("finesse");
+  if (finesse) {
+    return dndModifier(scores.dex) > dndModifier(scores.str) ? "dex" : "str";
+  }
+  return ranged ? "dex" : "str";
+}
+
+function dndParseActions(root, scores, proficiencyBonus) {
+  const actions = [];
+
+  for (const {item:action, source} of dndBucketEntries(root?.actions)) {
+    const definition = dndIsRecord(action.definition) ? action.definition : action;
+    const name = String(definition.name || action.name || "").trim();
+    if (!name) continue;
+
+    const ability = dndAbilityFromId(
+      action.abilityModifierStatId ?? definition.abilityModifierStatId,
+      Number(action.attackTypeRange ?? definition.attackTypeRange) === 2 ? "dex" : "str"
+    );
+    const explicitToHit =
+      dndNumber(action.fixedToHit, null) ??
+      dndNumber(action.toHit, null) ??
+      dndNumber(definition.fixedToHit, null) ??
+      dndNumber(definition.toHit, null);
+    const toHit = explicitToHit != null
+      ? explicitToHit
+      : dndModifier(scores[ability]) + (action.isProficient === false ? 0 : proficiencyBonus);
+
+    const dice = dndDiceExpression(action.dice) || dndDiceExpression(definition.dice) || dndDiceExpression(action);
+    const bonus = dndNumber(action.value ?? definition.value, 0) || 0;
+    const damage = dice
+      ? dice + (bonus && !/[+-]\d+$/.test(dice) ? (bonus > 0 ? "+" : "") + bonus : "")
+      : "";
+
+    if (!action.displayAsAttack && !dice && explicitToHit == null && !definition.displayAsAttack) {
+      continue;
+    }
+
+    actions.push({
+      id:"ddb-action-" + String(action.id || definition.id || actions.length + 1),
+      name,
+      kind:"attack",
+      activation:dndActivationLabel(action.activation || definition.activation || action),
+      range:dndRangeLabel(action.range || definition.range),
+      toHit,
+      damage,
+      damageType:dndDamageType(action) || dndDamageType(definition),
+      description:dndPlainText(definition.snippet || definition.description || action.snippet || action.description),
+      source:source || "Action",
+      derived:false
+    });
+  }
+
+  const existing = new Set(actions.map(action => normalize(action.name)));
+  for (const [index, item] of (root?.inventory || []).entries()) {
+    if (!dndIsRecord(item) || item.equipped === false) continue;
+    const definition = dndIsRecord(item.definition) ? item.definition : {};
+    const name = String(definition.name || item.name || "").trim();
+    if (!name || existing.has(normalize(name))) continue;
+
+    const descriptor = normalize([
+      definition.type,
+      definition.filterType,
+      definition.subType
+    ].filter(Boolean).join(" "));
+    const dice = dndDiceExpression(definition.damage);
+    const isWeapon =
+      descriptor.includes("weapon") ||
+      Number(definition.attackType || 0) > 0 ||
+      Boolean(dice);
+    if (!isWeapon || !dice) continue;
+
+    const ability = dndWeaponAbility(definition, scores);
+    const magic = dndMagicBonus(name);
+    const abilityBonus = dndModifier(scores[ability]);
+    const range = typeof definition.range === "number"
+      ? definition.range + (definition.longRange ? "/" + definition.longRange : "") + " ft."
+      : dndRangeLabel(definition.range);
+
+    actions.push({
+      id:"ddb-item-attack-" + String(item.id || definition.id || index + 1),
+      name,
+      kind:"attack",
+      activation:"Action",
+      range,
+      toHit:abilityBonus + proficiencyBonus + magic,
+      damage:dice + ((abilityBonus + magic)
+        ? (abilityBonus + magic > 0 ? "+" : "") + (abilityBonus + magic)
+        : ""),
+      damageType:String(definition.damageType || ""),
+      description:dndPlainText(definition.snippet || definition.description),
+      source:"Equipped weapon",
+      derived:true
+    });
+  }
+
+  return dedupeBy(actions, item => normalize(item.kind + "|" + item.name + "|" + item.damage + "|" + item.toHit));
+}
+
+function dndSpellRecords(root) {
+  const rows = [...dndBucketEntries(root?.spells).map(entry => entry.item)];
+
+  for (const group of root?.classSpells || []) {
+    if (!dndIsRecord(group)) continue;
+    for (const key of ["spells","alwaysPreparedSpells","alwaysKnownSpells","cantrips"]) {
+      for (const spell of group[key] || []) {
+        if (dndIsRecord(spell)) rows.push(spell);
+      }
+    }
+  }
+
+  return dedupeBy(
+    rows,
+    spell => {
+      const definition = dndIsRecord(spell.definition) ? spell.definition : spell;
+      return String(definition.id || spell.definitionId || "") + "|" + normalize(definition.name || spell.name || "");
+    }
+  );
+}
+
+function dndSpellModifierKind(modifier) {
+  if (!dndIsRecord(modifier)) return "";
+  const type = normalize(modifier.type || "");
+  const subtype = normalize(modifier.subType || modifier.subtype || "");
+  if (type === "damage") return "damage";
+  if (
+    type === "healing" ||
+    (type === "bonus" && ["hit-points","healing"].includes(subtype))
+  ) return "healing";
+  return "";
+}
+
+function dndSpellModifierFormula(modifier) {
+  return dndDiceExpression(
+    modifier?.die ||
+    modifier?.dice ||
+    modifier?.damage ||
+    modifier
+  );
+}
+
+function dndSpellBaseFormula(definition, kind, castingAbilityModifier = 0) {
+  const matching = (definition?.modifiers || []).filter(modifier =>
+    dndSpellModifierKind(modifier) === kind
+  );
+
+  for (const modifier of matching) {
+    const expression = dndSpellModifierFormula(modifier);
+    if (!expression) continue;
+    if (kind === "healing" && modifier.usePrimaryStat) {
+      const bonus = Number(castingAbilityModifier || 0);
+      return expression + (bonus ? (bonus > 0 ? "+" : "") + bonus : "");
+    }
+    return expression;
+  }
+  return "";
+}
+
+
+function dndSpellDescriptionFormula(definition, kind, castingAbilityModifier = 0) {
+  const fullText = dndPlainText(
+    definition?.description ||
+    definition?.snippet ||
+    ""
+  );
+  if (!fullText) return "";
+
+  // Base-roll detection should not accidentally grab dice that only appear in
+  // the At Higher Levels paragraph.
+  const text = fullText.split(/\bat higher levels?\b/i)[0].trim();
+  if (!text) return "";
+
+  const damageTypes = [
+    "acid","cold","fire","force","lightning","necrotic","poison",
+    "psychic","radiant","thunder","bludgeoning","piercing","slashing"
+  ];
+
+  const candidates = [];
+  const diceRegex = /\b(\d+d\d+(?:\s*[+-]\s*\d+)?)\b/gi;
+  let match;
+
+  while ((match = diceRegex.exec(text))) {
+    const index = Number(match.index || 0);
+    const before = text.slice(Math.max(0, index - 110), index);
+    const after = text.slice(index + match[0].length, Math.min(text.length, index + match[0].length + 150));
+    const context = (before + " " + match[0] + " " + after).toLowerCase();
+    let score = 0;
+
+    if (kind === "healing") {
+      if (/\b(?:heal|healing|heals|restore|restores|restored|regain|regains|recovered?)\b/i.test(context)) score += 6;
+      if (/\bhit points?\b/i.test(context)) score += 5;
+      if (/\btemporary hit points?\b/i.test(context)) score -= 10;
+      if (/\bdamage\b/i.test(context)) score -= 5;
+    } else if (kind === "damage") {
+      if (/\bdamage\b/i.test(context)) score += 7;
+      if (damageTypes.some(type => new RegExp("\\b" + type + "\\b", "i").test(context))) score += 3;
+      if (/\b(?:takes?|deals?|suffers?)\b/i.test(context)) score += 2;
+      if (/\b(?:heal|healing|restore|regain|hit points?)\b/i.test(context)) score -= 6;
+    }
+
+    if (score < 4) continue;
+
+    let expression = match[1].replace(/\s+/g, "");
+    const abilityTail = after.match(/^\s*(?:\+|plus)\s+(?:your\s+)?spellcasting ability modifier\b/i);
+    if (abilityTail && castingAbilityModifier) {
+      expression += castingAbilityModifier > 0
+        ? "+" + castingAbilityModifier
+        : String(castingAbilityModifier);
+    }
+
+    candidates.push({expression, score, index});
+  }
+
+  candidates.sort((a,b) => b.score - a.score || a.index - b.index);
+  return candidates[0]?.expression || "";
+}
+
+function dndSpellUpcastScaling(definition, kind = "damage") {
+  if (!definition?.canCastAtHigherLevel) return [];
+
+  const rows = [];
+  for (const modifier of definition.modifiers || []) {
+    if (dndSpellModifierKind(modifier) !== kind) continue;
+    const higher = modifier.atHigherLevels;
+    if (!dndIsRecord(higher)) continue;
+
+    const scaleType = normalize(higher.scaleType || definition.scaleType || "");
+    if (scaleType !== "spellscale") continue;
+
+    for (const entry of higher.higherLevelDefinitions || []) {
+      if (!dndIsRecord(entry)) continue;
+      const expression = dndDiceExpression(entry.dice || entry.die || entry);
+      if (!expression) continue;
+
+      rows.push({
+        expression,
+        interval:Math.max(1, dndNumber(entry.level, 1) || 1),
+        baseLevel:Math.max(0, dndNumber(definition.level, 0) || 0),
+        damageType:kind === "damage"
+          ? normalize(
+              modifier.subType ||
+              modifier.friendlySubtypeName ||
+              dndSpellDamageType(definition) ||
+              ""
+            )
+          : "",
+        kind,
+        details:String(entry.details || "").trim()
+      });
+    }
+  }
+
+  if (!rows.length) {
+    const text = dndPlainText(
+      definition?.atHigherLevels?.description ||
+      definition?.description ||
+      definition?.snippet ||
+      ""
+    );
+    const label = kind === "healing"
+      ? "(?:healing|hit points? restored|amount healed)"
+      : "damage";
+    const regex = new RegExp(
+      label +
+      "[^.]{0,180}?increases? by\\s+(\\d+d\\d+)" +
+      "[^.]{0,120}?for each (?:spell )?slot level above\\s+(\\d+)(?:st|nd|rd|th)?",
+      "i"
+    );
+    const match = text.match(regex);
+    if (match) {
+      rows.push({
+        expression:match[1],
+        interval:1,
+        baseLevel:Number(match[2]),
+        damageType:kind === "damage" ? dndSpellDamageType(definition) : "",
+        kind,
+        details:"Parsed from D&D Beyond spell text"
+      });
+    }
+  }
+
+  return dedupeBy(
+    rows,
+    row => [
+      row.expression,
+      row.interval,
+      row.baseLevel,
+      row.damageType,
+      row.kind,
+      normalize(row.details)
+    ].join("|")
+  );
+}
+
+function dndCantripScaledFormula(definition, baseExpression, characterLevel, kind = "damage") {
+  if (!baseExpression || Number(definition?.level || 0) !== 0) return baseExpression;
+
+  const baseMatch = String(baseExpression).match(/^(\d+)d(\d+)([+-]\d+)?$/i);
+  const dieSides = baseMatch ? Number(baseMatch[2]) : 0;
+  const candidates = [];
+
+  for (const modifier of definition?.modifiers || []) {
+    if (dndSpellModifierKind(modifier) !== kind) continue;
+    const higher = modifier.atHigherLevels;
+    if (!dndIsRecord(higher)) continue;
+    const scaleType = normalize(higher.scaleType || definition.scaleType || "");
+    if (scaleType !== "characterlevel") continue;
+
+    for (const entry of higher.higherLevelDefinitions || []) {
+      const threshold = Math.max(1, dndNumber(entry?.level, 0) || 0);
+      const expression = dndDiceExpression(entry?.dice || entry?.die || entry);
+      if (!threshold || !expression) continue;
+      candidates.push({threshold, expression});
+    }
+  }
+
+  if (!candidates.length) {
+    const text = dndPlainText(definition?.description || definition?.snippet || "");
+    const pairRegex = /(\d+)(?:st|nd|rd|th)?(?:\s+level)?\s*\(([^)]+)\)/gi;
+    let match;
+    while ((match = pairRegex.exec(text))) {
+      const threshold = Number(match[1]);
+      const formulas = [...String(match[2]).matchAll(/(\d+d\d+(?:[+-]\d+)?)/gi)]
+        .map(item => item[1]);
+      const expression = formulas.find(formula => {
+        if (!dieSides) return true;
+        const parsed = formula.match(/^\d+d(\d+)/i);
+        return Number(parsed?.[1] || 0) === dieSides;
+      }) || formulas[0];
+      if (threshold && expression) candidates.push({threshold, expression});
+    }
+  }
+
+  const applicable = candidates
+    .filter(item => item.threshold <= Number(characterLevel || 1))
+    .sort((a,b) => b.threshold - a.threshold);
+
+  return applicable[0]?.expression || baseExpression;
+}
+
+function dndSpellDamageType(definition) {
+  const direct = dndDamageType(definition);
+  if (direct) return direct;
+
+  const known = new Set([
+    "acid","cold","fire","force","lightning","necrotic","poison",
+    "psychic","radiant","thunder","bludgeoning","piercing","slashing"
+  ]);
+
+  for (const modifier of definition?.modifiers || []) {
+    if (dndSpellModifierKind(modifier) !== "damage") continue;
+    const subtype = normalize(modifier.subType || modifier.friendlySubtypeName || "");
+    if (known.has(subtype)) return subtype;
+  }
+  return "";
+}
+
+function dndParseSpells(root, scores, proficiencyBonus, characterLevel = 1) {
+  return dndSpellRecords(root).map((spell, index) => {
+    const definition = dndIsRecord(spell.definition) ? spell.definition : spell;
+    const name = String(definition.name || spell.name || "Spell").trim();
+    const ability = dndSpellAbility(root, spell, definition, scores);
+    const castingAbilityModifier = dndModifier(scores[ability]);
+    const spellAttack = castingAbilityModifier + proficiencyBonus;
+    const level = Math.max(0, dndNumber(definition.level ?? spell.level, 0) || 0);
+    const requiresAttackRoll = Boolean(definition.requiresAttackRoll || spell.requiresAttackRoll || definition.attackType);
+    const requiresSavingThrow = Boolean(definition.requiresSavingThrow || spell.requiresSavingThrow || definition.saveDcAbilityId);
+    const saveAbility = DND_ABILITY_IDS[dndNumber(definition.saveDcAbilityId ?? spell.saveDcAbilityId, 0)] || "";
+
+    const baseDamage =
+      dndSpellBaseFormula(definition, "damage", castingAbilityModifier) ||
+      dndSpellDescriptionFormula(definition, "damage", castingAbilityModifier);
+    const baseHealing =
+      dndSpellBaseFormula(definition, "healing", castingAbilityModifier) ||
+      dndSpellDescriptionFormula(definition, "healing", castingAbilityModifier);
+    const damage = dndCantripScaledFormula(definition, baseDamage, characterLevel, "damage");
+    const healing = dndCantripScaledFormula(definition, baseHealing, characterLevel, "healing");
+    const upcastScaling = dndSpellUpcastScaling(definition, "damage");
+    const upcastHealingScaling = dndSpellUpcastScaling(definition, "healing");
+
+    const components = (definition.components || [])
+      .map(value => ({1:"V",2:"S",3:"M"})[Number(value)])
+      .filter(Boolean)
+      .join(", ");
+
+    return {
+      id:"ddb-spell-" + String(spell.id || definition.id || spell.definitionId || index + 1),
+      name,
+      kind:"spell",
+      level,
+      school:String(definition.school?.name || definition.school || "").trim(),
+      activation:dndActivationLabel(spell.activation || definition.activation || spell),
+      range:dndRangeLabel(spell.range || definition.range),
+      duration:dndDurationLabel(definition.duration || spell.duration),
+      concentration:Boolean(definition.concentration || spell.concentration),
+      ritual:Boolean(definition.ritual || spell.castOnlyAsRitual),
+      prepared:Boolean(spell.prepared || spell.alwaysPrepared || spell.baseLevelAtWill || level === 0),
+      usesSpellSlot:level > 0 && spell.usesSpellSlot !== false && !spell.baseLevelAtWill,
+      toHit:requiresAttackRoll ? spellAttack : null,
+      saveDc:requiresSavingThrow ? 8 + spellAttack : null,
+      saveAbility,
+      damage,
+      healing,
+      upcastScaling,
+      upcastHealingScaling,
+      canCastAtHigherLevel:Boolean(definition.canCastAtHigherLevel),
+      castAtLevel:dndNumber(spell.castAtLevel, null),
+      damageType:dndSpellDamageType(definition),
+      components,
+      description:dndPlainText(definition.snippet || definition.description || spell.additionalDescription),
+      source:"Spell"
+    };
+  }).filter(spell => spell.name);
+}
+
+function dndSpellSlotTableRow(spellRules, classLevel) {
+  const table = spellRules?.levelSpellSlots;
+  if (!Array.isArray(table) || !table.length || classLevel < 1) return [];
+
+  // Current D&D Beyond captures use 20 rows (levels 1-20); some older
+  // payloads/importers expose a leading level-0 row. Support both shapes.
+  const zeroRow = Array.isArray(table[0]) && table[0].every(value => Number(value || 0) === 0);
+  const index = table.length >= 21 && zeroRow
+    ? classLevel
+    : classLevel - 1;
+
+  const row = table[index];
+  return Array.isArray(row) ? row.map(value => Math.max(0, Number(value || 0))) : [];
+}
+
+function dndClassSpellRules(classEntry) {
+  if (!dndIsRecord(classEntry)) return null;
+  return classEntry.definition?.spellRules ||
+    classEntry.subclassDefinition?.spellRules ||
+    null;
+}
+
+function dndClassCanCast(classEntry) {
+  if (!dndIsRecord(classEntry)) return false;
+  return Boolean(
+    classEntry.definition?.canCastSpells ||
+    classEntry.subclassDefinition?.canCastSpells
+  );
+}
+
+function dndSpellSlots(root) {
+  const merged = new Map();
+  const classes = (root?.classes || []).filter(dndIsRecord);
+  const castingClasses = classes.filter(dndClassCanCast);
+  const pactNames = new Set(["warlock","blood hunter"]);
+  const pactCasters = castingClasses.filter(entry =>
+    pactNames.has(normalize(entry.definition?.name || entry.name || ""))
+  );
+  const standardCasters = castingClasses.filter(entry => !pactCasters.includes(entry));
+
+  const addMaxRow = (row, pool = "spell") => {
+    for (let index = 0; index < row.length; index++) {
+      const max = Math.max(0, Number(row[index] || 0));
+      if (!max) continue;
+      const level = index + 1;
+      const existing = merged.get(level) || {level,max:0,used:0,pools:[]};
+      existing.max += max;
+      if (!existing.pools.includes(pool)) existing.pools.push(pool);
+      merged.set(level, existing);
+    }
+  };
+
+  if (standardCasters.length === 1) {
+    const cls = standardCasters[0];
+    addMaxRow(
+      dndSpellSlotTableRow(dndClassSpellRules(cls), Math.max(1, Number(cls.level || 1))),
+      "spell"
+    );
+  } else if (standardCasters.length > 1) {
+    // D&D Beyond supplies each class's multiclass divisor alongside its slot table.
+    // Convert each class to an effective caster level, then use one of those same
+    // DDB-supplied tables as the pooled progression. This avoids a hardcoded slot table.
+    const effectiveLevel = standardCasters.reduce((total, cls) => {
+      const rules = dndClassSpellRules(cls);
+      const divisor = Math.max(1, dndNumber(rules?.multiClassSpellSlotDivisor, 1) || 1);
+      return total + Math.floor(Math.max(0, Number(cls.level || 0)) / divisor);
+    }, 0);
+
+    const candidates = standardCasters
+      .map(cls => {
+        const rules = dndClassSpellRules(cls);
+        const divisor = Math.max(1, dndNumber(rules?.multiClassSpellSlotDivisor, 1) || 1);
+        const proxyLevel = Math.max(1, effectiveLevel * divisor);
+        return {
+          rules,
+          divisor,
+          proxyLevel,
+          row:proxyLevel <= 20 ? dndSpellSlotTableRow(rules, proxyLevel) : []
+        };
+      })
+      .filter(item => item.row.some(value => Number(value || 0) > 0))
+      .sort((a,b) => a.divisor - b.divisor);
+
+    if (candidates[0]) addMaxRow(candidates[0].row, "spell");
+  }
+
+  for (const cls of pactCasters) {
+    const row = dndSpellSlotTableRow(
+      dndClassSpellRules(cls),
+      Math.max(1, Number(cls.level || 1))
+    );
+    addMaxRow(row, "pact");
+  }
+
+  // Keep current usage from the character payload. The available field has
+  // been observed as zero on live casters, so it is fallback-only for maxima.
+  for (const slot of root?.spellSlots || []) {
+    if (!dndIsRecord(slot)) continue;
+    const level = dndNumber(slot.level, 0) || 0;
+    if (level < 1) continue;
+    const existing = merged.get(level) || {level,max:0,used:0,pools:["spell"]};
+    existing.used += Math.max(0, dndNumber(slot.used, 0) || 0);
+    if (!existing.max) existing.max = Math.max(0, dndNumber(slot.available, 0) || 0);
+    merged.set(level, existing);
+  }
+
+  for (const slot of root?.pactMagic || []) {
+    if (!dndIsRecord(slot)) continue;
+    const level = dndNumber(slot.level, 0) || 0;
+    if (level < 1) continue;
+    const existing = merged.get(level) || {level,max:0,used:0,pools:["pact"]};
+    existing.used += Math.max(0, dndNumber(slot.used, 0) || 0);
+    if (!existing.max) existing.max = Math.max(0, dndNumber(slot.available, 0) || 0);
+    if (!existing.pools.includes("pact")) existing.pools.push("pact");
+    merged.set(level, existing);
+  }
+
+  return [...merged.values()]
+    .filter(slot => slot.max > 0)
+    .sort((a,b) => a.level - b.level);
+}
+
+function dndInventory(root) {
+  return (root?.inventory || [])
+    .filter(dndIsRecord)
+    .map((item, index) => {
+      const definition = dndIsRecord(item.definition) ? item.definition : {};
+      return {
+        id:"ddb-inventory-" + String(item.id || definition.id || index + 1),
+        name:String(definition.name || item.name || "Item").trim(),
+        quantity:Math.max(0, dndNumber(item.quantity, 1) || 1),
+        equipped:Boolean(item.equipped),
+        type:String(definition.type || definition.filterType || definition.subType || "").trim(),
+        description:dndPlainText(definition.snippet || "")
+      };
+    })
+    .filter(item => item.name);
+}
+
+function dndFeatureRules(root) {
+  const rules = [];
+
+  const add = (value, category) => {
+    if (!dndIsRecord(value)) return;
+    const definition = dndIsRecord(value.definition) ? value.definition : value;
+    const name = String(definition.name || value.name || "").trim();
+    const text = dndPlainText(definition.snippet || definition.description || value.description);
+    if (!name) return;
+    rules.push({name, text, category, source:"D&D Beyond"});
+  };
+
+  for (const trait of root?.race?.racialTraits || []) add(trait, "Species trait");
+  for (const feat of root?.feats || []) add(feat, "Feat");
+  for (const cls of root?.classes || []) {
+    const className = String(cls?.definition?.name || "Class");
+    for (const feature of cls?.classFeatures || []) add(feature, className);
+  }
+
+  return dedupeBy(rules, item => normalize(item.category + "|" + item.name + "|" + item.text));
+}
+
+function parseDndBeyondCharacterPayload(payload, sourceUrl = "") {
+  if (!dndIsRecord(payload)) throw new Error("This D&D Beyond JSON was not readable.");
+  if (payload.success === false) {
+    throw new Error(
+      dndPlainText(payload.data?.serverMessage || payload.message) ||
+      "D&D Beyond did not return this character. Make sure its privacy is Public."
+    );
+  }
+
+  const root = dndIsRecord(payload.data) ? payload.data : payload;
+  if (!dndIsRecord(root) || !root.name) {
+    throw new Error("This does not look like D&D Beyond character-service JSON.");
+  }
+
+  const characterId = String(root.id || "").trim();
+  const classes = dndClassSummary(root);
+  const scores = dndAbilityScores(root);
+  const proficiencyBonus = dndProficiencyBonus(classes.level);
+  const ac = dndArmorClass(root, scores);
+  const overrideHp = dndNumber(root.overrideHitPoints, 0) || 0;
+  const constitutionHp = dndModifier(scores.con) * classes.level;
+  const maxHp = Math.max(
+    1,
+    overrideHp > 0
+      ? overrideHp
+      : (dndNumber(root.baseHitPoints, 1) || 1) +
+        constitutionHp +
+        (dndNumber(root.bonusHitPoints, 0) || 0)
+  );
+  const removedHp = Math.max(0, dndNumber(root.removedHitPoints, 0) || 0);
+  const tempHp = Math.max(0, dndNumber(root.temporaryHitPoints, 0) || 0);
+  const currentHp = Math.max(0, maxHp - removedHp);
+  const speed =
+    dndNumber(root.speed, null) ??
+    dndNumber(root.race?.weightSpeeds?.normal?.walk, null) ??
+    30;
+
+  const skills = dndParseSkills(root, scores, proficiencyBonus);
+  const attacks = dndParseActions(root, scores, proficiencyBonus);
+  const spells = dndParseSpells(root, scores, proficiencyBonus, classes.level);
+  const spellSlots = dndSpellSlots(root);
+  const inventory = dndInventory(root);
+  const features = dndFeatureRules(root);
+
+  const character = {
+    id:"dnd-" + (characterId || normalize(root.name).replace(/\s+/g, "-")),
+    externalId:characterId,
+    name:String(root.name || "D&D Character"),
+    type:"Character",
+    system:"dnd",
+    gameSystemKey:"dnd-5e",
+    categories:dedupeBy([
+      String(root.race?.fullName || root.race?.baseName || "").trim(),
+      classes.label
+    ].filter(Boolean), value => normalize(value)),
+    stats:[
+      {label:"HP", value:currentHp + "/" + maxHp + (tempHp ? " +" + tempHp : "")},
+      {label:"AC", value:String(ac)},
+      {label:"Speed", value:String(speed) + " ft."},
+      {label:"Init", value:dndSigned(dndModifier(scores.dex))},
+      {label:"PB", value:dndSigned(proficiencyBonus)},
+      {label:"Level", value:String(classes.level)}
+    ],
+    profiles:[],
+    rules:features,
+    dnd:{
+      level:classes.level,
+      classes:classes.label,
+      race:String(root.race?.fullName || root.race?.baseName || "").trim(),
+      scores,
+      proficiencyBonus,
+      maxHp,
+      currentHp,
+      tempHp,
+      ac,
+      speed,
+      skills,
+      attacks,
+      spells,
+      spellSlots,
+      inventory
+    },
+    searchText:normalize([
+      root.name,
+      classes.label,
+      root.race?.fullName,
+      attacks.map(item => item.name),
+      spells.map(item => item.name),
+      inventory.map(item => item.name),
+      features.map(item => item.name)
+    ].flat(3).join(" "))
+  };
+
+  return {
+    id:crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random()),
+    name:character.name,
+    faction:classes.label,
+    source:"dndbeyond",
+    gameSystemKey:"dnd-5e",
+    importFormat:sourceUrl ? "ddb-public" : "json",
+    points:null,
+    units:[character],
+    armyRules:features,
+    referenceData:{rules:[], stratagems:[]},
+    importedAt:Date.now(),
+    dnd:{
+      characterId,
+      sourceUrl
+    }
+  };
+}
+
+function extractDndBeyondCharacterId(value = "") {
+  const text = String(value || "").trim();
+  if (/^\d{1,20}$/.test(text)) return text;
+
+  try {
+    const url = new URL(text);
+    if (!["dndbeyond.com","www.dndbeyond.com","ddb.ac","www.ddb.ac"].includes(url.hostname.toLowerCase())) return "";
+    const match = url.pathname.match(/\/characters\/(\d{1,20})(?:\/|$)/i);
+    return match?.[1] || "";
+  } catch {
+    return "";
+  }
+}
+
+function saveImportedDndRoster(roster) {
+  const existingIndex = state.rosters.findIndex(existing =>
+    existing.source === "dndbeyond" &&
+    (
+      (roster.dnd?.characterId && existing.dnd?.characterId === roster.dnd.characterId) ||
+      normalize(existing.name) === normalize(roster.name)
+    )
+  );
+
+  if (existingIndex >= 0) {
+    const oldId = state.rosters[existingIndex].id;
+    roster.id = oldId;
+    state.rosters.splice(existingIndex, 1, roster);
+    state.activeRoster = existingIndex;
+  } else {
+    state.rosters.push(roster);
+    state.activeRoster = state.rosters.length - 1;
+  }
+
+  state.unitBrowserSourceId = "roster:" + roster.id;
+  localStorage.setItem("tv_unit_browser_source", state.unitBrowserSourceId);
+  state.selected = roster.units[0] || null;
+  state.selectedRosterId = roster.id;
+  state.dndFocusedActionId = "";
+  state.dndDetailTab = "actions";
+  state.dndScrollToFocusedAction = false;
+  state.dndListFilter = "";
+  state.dndListKind = "";
+
+  persist();
+  renderAll();
+  switchPage("datasheets", {silent:true});
+  if (state.selected) renderDetail(state.selected);
+}
+
+async function loadDndBeyondCharacter() {
+  const value = String(els.dndBeyondInput?.value || "").trim();
+  const characterId = extractDndBeyondCharacterId(value);
+
+  if (!isDndMode()) {
+    toast("Switch to D&D 5e before importing a character.");
+    return;
+  }
+  if (!characterId) {
+    if (els.dndBeyondImportStatus) {
+      els.dndBeyondImportStatus.textContent = "Paste a D&D Beyond character link or numeric character ID.";
+    }
+    toast("Paste a D&D Beyond character link or ID.");
+    return;
+  }
+
+  const button = els.dndBeyondImportButton;
+  if (button) {
+    button.disabled = true;
+    button.textContent = "Importing…";
+  }
+  if (els.dndBeyondImportStatus) {
+    els.dndBeyondImportStatus.dataset.busy = "1";
+    els.dndBeyondImportStatus.textContent = "Loading the public character from D&D Beyond…";
+  }
+
+  try {
+    const response = await fetch("/api/dndbeyond-character?id=" + encodeURIComponent(characterId));
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload.error || "Could not import this D&D Beyond character.");
+
+    const sourceUrl = "https://www.dndbeyond.com/characters/" + characterId;
+    const roster = parseDndBeyondCharacterPayload(payload, sourceUrl);
+    saveImportedDndRoster(roster);
+
+    if (els.dndBeyondInput) els.dndBeyondInput.value = "";
+    if (els.dndBeyondImportStatus) {
+      els.dndBeyondImportStatus.dataset.busy = "";
+      els.dndBeyondImportStatus.textContent =
+        "Imported " + roster.name + " · " + roster.faction;
+    }
+    toast("Imported " + roster.name);
+  } catch (error) {
+    console.error("D&D Beyond import failed", error);
+    if (els.dndBeyondImportStatus) {
+      els.dndBeyondImportStatus.dataset.busy = "";
+      els.dndBeyondImportStatus.textContent =
+        error.message || "Could not import this D&D Beyond character.";
+    }
+    toast(error.message || "Could not import this D&D Beyond character.");
+  } finally {
+    if (button) {
+      button.disabled = false;
+      button.textContent = "Import D&D Beyond character";
+    }
+  }
+}
+
+async function handleDndBeyondJsonFile(event) {
+  const file = event.target.files?.[0];
+  if (!file) return;
+
+  try {
+    const payload = JSON.parse(await file.text());
+    const roster = parseDndBeyondCharacterPayload(payload, "");
+    saveImportedDndRoster(roster);
+
+    if (els.dndBeyondImportStatus) {
+      els.dndBeyondImportStatus.textContent =
+        "Imported " + roster.name + " from JSON · " + roster.faction;
+    }
+    toast("Imported " + roster.name);
+  } catch (error) {
+    console.error("D&D Beyond JSON import failed", error);
+    if (els.dndBeyondImportStatus) {
+      els.dndBeyondImportStatus.textContent =
+        error.message || "Could not import this D&D Beyond JSON.";
+    }
+    toast(error.message || "Could not import this D&D Beyond JSON.");
+  } finally {
+    if (els.dndBeyondFileInput) els.dndBeyondFileInput.value = "";
+  }
+}
+
+function rosterSourceSummary(roster) {
+  if (roster?.source === "dndbeyond") {
+    return "D&D 5e · D&D Beyond · " +
+      (roster.importFormat === "json" ? "JSON" : "Public character");
+  }
+
+  if (roster?.source === "gyrinx") {
+    return "Necromunda · Gyrinx · N26";
+  }
+
+  if (roster?.source === "opr") {
+    return "OnePageRules · " + (roster.gameName || oprGameName(roster.gameSystem)) + " · Army Forge";
+  }
+
+  if (roster?.source === "li-community") {
+    return "Legions Imperialis · " + (roster.communitySource || "Community Builder") + " · " +
+      String(roster?.importFormat || "import").toUpperCase();
+  }
+
+  const game = inferRosterGameSystem(roster);
+  const prefix = roster?.sharedFromOpponent ? "Opponent share · " : "";
+  return prefix +
+    gameSystemDisplayName(game) +
+    " · New Recruit · " +
+    String(roster?.importFormat || "json").toUpperCase();
 }
 
 function fileExtension(name = "") {
@@ -493,6 +4973,12 @@ async function parseRosterUpload(file) {
   }
 
   if (ext === "txt") {
+    if (state.gameSystem && state.gameSystem !== "40k") {
+      throw new Error(
+        "TXT import is currently supported for Warhammer 40,000 only. " +
+        "For " + currentGameName() + ", export JSON, ROS or ROSZ from New Recruit."
+      );
+    }
     return parseTextRosterFile(await file.text(), file.name);
   }
 
@@ -578,6 +5064,8 @@ function xmlForceToObject(element) {
     name:element.getAttribute("name") || "",
     catalogueName:element.getAttribute("catalogueName") || element.getAttribute("name") || "",
     selections:xmlContainerChildren(element, "selections", "selection").map(xmlSelectionToObject),
+    forces:xmlContainerChildren(element, "forces", "force").map(xmlForceToObject),
+    profiles:xmlContainerChildren(element, "profiles", "profile").map(xmlProfileToObject),
     rules:xmlContainerChildren(element, "rules", "rule").map(xmlRuleToObject),
     costs:xmlContainerChildren(element, "costs", "cost").map(xmlCostToObject),
     categories:xmlContainerChildren(element, "categories", "category").map(xmlCategoryToObject)
@@ -726,6 +5214,7 @@ function parseTextRosterFile(text, fileName) {
     name:rosterName || fileName.replace(/\.[^.]+$/, ""),
     faction,
     source:"new-recruit",
+    gameSystemKey:["40k","aos","grimdark"].includes(state.gameSystem) ? state.gameSystem : "40k",
     importFormat:"txt",
     detachmentParserVersion:4,
     points:Number.isFinite(totalPoints) ? totalPoints : null,
@@ -739,11 +5228,109 @@ function parseTextRosterFile(text, fileName) {
   };
 }
 
+
+
+function hasLegionsImperialisDetachmentProfile(selection) {
+  return collectProfiles(selection).some(isLegionsImperialisDetachmentProfile);
+}
+
+function isLegionsImperialisDetachmentSelection(selection) {
+  if (!selection || typeof selection !== "object") return false;
+  if (normalize(selection.type) !== "unit") return false;
+  if (normalize(selection.subType || selection.subtype || "") === "unit group") return false;
+  return hasLegionsImperialisDetachmentProfile(selection);
+}
+
+function collectLegionsImperialisDetachmentSelections(selections = []) {
+  const found = [];
+
+  function walk(selection) {
+    if (!selection || typeof selection !== "object") return;
+
+    if (isLegionsImperialisDetachmentSelection(selection)) {
+      found.push(selection);
+      return;
+    }
+
+    for (const child of selection.selections || []) walk(child);
+  }
+
+  for (const selection of selections || []) walk(selection);
+  return found;
+}
+
+function extractLegionsImperialisFormationRules(root) {
+  const rules = [];
+
+  function addRule(rule, source = "") {
+    if (!rule || rule.hidden) return;
+    const name = cleanRuleText(rule.name || "").trim();
+    const text = cleanRuleText(rule.description || "").trim();
+    if (!name || !text) return;
+    rules.push({name, text, category:"Formation Rule", source});
+  }
+
+  function addProfile(profile, source = "") {
+    if (!isLegionsImperialisRuleProfile(profile)) return;
+    const rule = legionsImperialisRuleProfileToRule(profile);
+    if (!rule?.name || !rule?.text) return;
+    rules.push({...rule, category:"Formation Rule", source});
+  }
+
+  function walkWrapperSelection(selection, source = "") {
+    if (!selection || typeof selection !== "object") return;
+    if (isLegionsImperialisDetachmentSelection(selection)) return;
+
+    for (const rule of selection.rules || []) addRule(rule, source);
+    for (const profile of selection.profiles || []) addProfile(profile, source);
+    for (const child of selection.selections || []) walkWrapperSelection(child, source);
+  }
+
+  for (const force of collectRosterForces(root?.forces || [])) {
+    const source = force.name || force.catalogueName || "";
+    for (const rule of force.rules || []) addRule(rule, source);
+    for (const profile of force.profiles || []) addProfile(profile, source);
+    for (const selection of force.selections || []) walkWrapperSelection(selection, source);
+  }
+
+  return dedupeBy(
+    rules,
+    item => normalize((item.category || "") + "|" + item.name + "|" + item.text + "|" + item.source)
+  );
+}
+
+function collectKillTeamOperativeSelections(selections = []) {
+  const found = [];
+
+  function walk(selection) {
+    if (!selection || typeof selection !== "object") return;
+
+    const directOperative = (selection.profiles || []).some(isKillTeamOperativeProfile);
+    if (directOperative) {
+      found.push(selection);
+      return;
+    }
+
+    for (const child of selection.selections || []) walk(child);
+  }
+
+  for (const selection of selections || []) walk(selection);
+  return found;
+}
+
 function buildRosterFromNewRecruitRoot(root, fileName, importFormat = "json") {
   const units = [];
+  const allForces = collectRosterForces(root?.forces || []);
+  const metadataGameSystem = detectNewRecruitGameSystem(root, []);
 
-  for (const force of root.forces || []) {
-    for (const selection of force.selections || []) {
+  for (const force of allForces) {
+    const selections = metadataGameSystem === "kill-team"
+      ? collectKillTeamOperativeSelections(force.selections || [])
+      : metadataGameSystem === "legions-imperialis"
+        ? collectLegionsImperialisDetachmentSelections(force.selections || [])
+        : (force.selections || []);
+
+    for (const selection of selections) {
       const unit = parseNewRecruitSelection(selection);
       if (unit) units.push(unit);
     }
@@ -751,27 +5338,207 @@ function buildRosterFromNewRecruitRoot(root, fileName, importFormat = "json") {
 
   if (!units.length) throw new Error("No units were found in this New Recruit list.");
 
-  const uniqueUnits = dedupeBy(units, u => u.id || u.name);
-  resolveRosterAttachments(uniqueUnits);
+  const uniqueUnits = dedupeBy(units, unit => unit.id || unit.name);
+  const gameSystemKey = detectNewRecruitGameSystem(root, uniqueUnits);
 
-  const pts = (root.costs || []).find(c => String(c.name).toLowerCase() === "pts")?.value;
+  if (gameSystemKey === "40k") resolveRosterAttachments(uniqueUnits);
+
+  const pts = (root.costs || []).find(cost => isPointsCostName(cost.name))?.value;
+  const firstFactionForce =
+    allForces.find(force => String(force.catalogueName || "").trim()) ||
+    allForces[0];
+
+  const armyRules = gameSystemKey === "aos"
+    ? extractAosRosterAbilities(root)
+    : gameSystemKey === "heresy"
+      ? extractHeresyArmyRules(root)
+      : gameSystemKey === "kill-team"
+        ? extractKillTeamRules(root)
+        : gameSystemKey === "legions-imperialis"
+          ? extractLegionsImperialisFormationRules(root)
+          : gameSystemKey === "40k"
+            ? [...extractArmyRules(root), ...extractForceDispositions(root)]
+            : extractArmyRules(root);
+
+  uniqueUnits.forEach(unit => {
+    if (unit?.system === "opr") unit.gameSystemKey = gameSystemKey;
+    if (gameSystemKey === "old-world") {
+      unit.system = "old-world";
+      unit.gameSystemKey = "old-world";
+    }
+    if (gameSystemKey === "heresy") {
+      unit.system = "heresy";
+      unit.gameSystemKey = "heresy";
+    }
+    if (gameSystemKey === "kill-team") {
+      unit.system = "kill-team";
+      unit.gameSystemKey = "kill-team";
+    }
+    if (gameSystemKey === "legions-imperialis") {
+      unit.system = "legions-imperialis";
+      unit.gameSystemKey = "legions-imperialis";
+    }
+  });
 
   return {
     id:crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random()),
     name:root.name || fileName.replace(/\.[^.]+$/, ""),
-    faction:(root.forces || [])[0]?.catalogueName || (root.forces || [])[0]?.name || "New Recruit list",
+    faction:firstFactionForce?.catalogueName || firstFactionForce?.name || "New Recruit list",
     source:"new-recruit",
+    gameSystemKey,
+    gameSystemName:String(root?.gameSystemName || ""),
     importFormat,
     detachmentParserVersion:4,
     points:pts ?? null,
-    detachments:extractSelectedDetachments(root),
-    selectedDetachmentStratagems:extractSelectedDetachmentStratagems(root),
-    detachmentRules:extractSelectedDetachmentRules(root),
-    armyRules:extractArmyRules(root),
+    detachments:gameSystemKey === "40k" ? extractSelectedDetachments(root) : [],
+    selectedDetachmentStratagems:gameSystemKey === "40k" ? extractSelectedDetachmentStratagems(root) : [],
+    detachmentRules:gameSystemKey === "40k" ? extractSelectedDetachmentRules(root) : [],
+    armyRules,
     units:uniqueUnits,
-    referenceData:extractReferenceData(root, fileName),
+    referenceData:gameSystemKey === "40k"
+      ? extractReferenceData(root, fileName)
+      : {rules:[], stratagems:[]},
     importedAt:Date.now()
   };
+}
+
+function collectRosterForces(forces = []) {
+  const output = [];
+
+  function walk(list) {
+    for (const force of list || []) {
+      if (!force || typeof force !== "object") continue;
+      output.push(force);
+      if (Array.isArray(force.forces) && force.forces.length) walk(force.forces);
+    }
+  }
+
+  walk(forces);
+  return output;
+}
+
+function detectNewRecruitGameSystem(root, units = []) {
+  const systemName = normalize(
+    root?.gameSystemName ||
+    root?.gameSystem ||
+    root?.gameSystemId ||
+    ""
+  );
+
+  if (systemName.includes("age of sigmar")) return "aos";
+  if (
+    systemName.includes("warhammer the old world") ||
+    systemName.includes("warhammer old world") ||
+    systemName.includes("the old world") ||
+    systemName.includes("sys 31d1 bf57 53ea ad55")
+  ) return "old-world";
+  if (
+    systemName.includes("kill team") ||
+    systemName.includes("c521 ad27 44df f959")
+  ) return "kill-team";
+  if (
+    systemName.includes("legions imperialis") ||
+    systemName.includes("sys 9498 516a 178a 3f4f")
+  ) return "legions-imperialis";
+  if (
+    systemName.includes("horus heresy") ||
+    systemName.includes("age of darkness") ||
+    systemName.includes("sys 9fe4 1dc3 b7c2 73cf")
+  ) return "heresy";
+  if (systemName.includes("age of fantasy quest")) return "aof-quest";
+  if (systemName.includes("age of fantasy regiments")) return "aof-regiments";
+  if (systemName.includes("age of fantasy skirmish")) return "aof-skirmish";
+  if (systemName.includes("age of fantasy")) return "aof";
+  if (systemName.includes("grimdark future star quest")) return "opr-star-quest";
+  if (systemName.includes("grimdark future firefight")) return "grimdark-firefight";
+  if (systemName.includes("grimdark future")) return "grimdark";
+  if (
+    systemName.includes("warhammer 40 000") ||
+    systemName.includes("warhammer 40000") ||
+    systemName === "40k"
+  ) return "40k";
+
+  const counts = {aos:0, "old-world":0, grimdark:0, "40k":0};
+  for (const unit of units) {
+    const system = inferUnitGameSystem(unit);
+    if (counts[system] != null) counts[system]++;
+  }
+
+  const best = Object.entries(counts).sort((a,b) => b[1] - a[1])[0];
+  if (best?.[1] > 0) {
+    if (best[0] === "grimdark" && isOprMode()) return state.gameSystem;
+    return best[0];
+  }
+
+  return "40k";
+}
+
+function isAosAbilityProfile(profile) {
+  return /^ability\s*\(/i.test(String(profile?.typeName || ""));
+}
+
+function aosAbilityProfileToRule(profile) {
+  const values = new Map(
+    (profile?.characteristics || []).map(item => [
+      normalize(item?.name || ""),
+      cleanRuleText(characteristicValue(item))
+    ])
+  );
+
+  const ordered = [
+    ["timing","Timing"],
+    ["casting value","Casting Value"],
+    ["chanting value","Chanting Value"],
+    ["cost","Cost"],
+    ["declare","Declare"],
+    ["effect","Effect"],
+    ["keywords","Keywords"],
+    ["used by","Used By"]
+  ];
+
+  const fields = ordered
+    .map(([key,label]) => ({label, value:String(values.get(key) || "").trim()}))
+    .filter(field => field.value);
+
+  const typeMatch = String(profile?.typeName || "").match(/Ability\s*\(([^)]+)\)/i);
+
+  return {
+    name:cleanRuleText(profile?.name || "Ability"),
+    category:typeMatch?.[1] || "Ability",
+    fields,
+    text:fields.map(field => field.label + ": " + field.value).join("\n")
+  };
+}
+
+function extractAosRosterAbilities(root) {
+  const collected = [];
+
+  function walkSelection(selection) {
+    if (!selection || typeof selection !== "object") return;
+
+    const isUnit =
+      String(selection.type || "").toLowerCase() === "unit" ||
+      (selection.profiles || []).some(profile => profile?.typeName === "Unit");
+
+    if (isUnit) return;
+
+    for (const profile of selection.profiles || []) {
+      if (!isAosAbilityProfile(profile) || profile.hidden) continue;
+      const rule = aosAbilityProfileToRule(profile);
+      if (rule.name && rule.text) collected.push(rule);
+    }
+
+    for (const child of selection.selections || []) walkSelection(child);
+  }
+
+  for (const force of collectRosterForces(root?.forces || [])) {
+    for (const selection of force.selections || []) walkSelection(selection);
+  }
+
+  return dedupeBy(
+    collected,
+    rule => normalize(rule.category + "|" + rule.name + "|" + rule.text)
+  );
 }
 
 function splitCompositeDetachmentName(name = "") {
@@ -898,7 +5665,7 @@ function extractSelectedDetachmentStratagems(root) {
     walk(node);
   }
 
-  for (const force of root?.forces || []) {
+  for (const force of collectRosterForces(root?.forces || [])) {
     function walk(value) {
       if (!value || typeof value !== "object") return;
       if (Array.isArray(value)) {
@@ -929,7 +5696,7 @@ function extractSelectedDetachmentStratagems(root) {
 function extractSelectedDetachments(root) {
   const found = [];
 
-  for (const force of root?.forces || []) {
+  for (const force of collectRosterForces(root?.forces || [])) {
     const faction = force.catalogueName || force.name || "";
 
     function walk(value) {
@@ -1021,7 +5788,7 @@ function extractSelectedDetachmentRules(root) {
     walk(node);
   }
 
-  for (const force of root?.forces || []) {
+  for (const force of collectRosterForces(root?.forces || [])) {
     const sourceLabel = force.catalogueName || force.name || "";
 
     function walk(value) {
@@ -1051,10 +5818,143 @@ function extractSelectedDetachmentRules(root) {
   );
 }
 
+
+
+function extractKillTeamRules(root) {
+  const rules = [...extractArmyRules(root)];
+
+  function addProfile(profile, source = "") {
+    if (!isKillTeamRuleProfile(profile)) return;
+    const rule = killTeamRuleProfileToRule(profile);
+    if (!rule?.name || !rule?.text) return;
+    rules.push({...rule, source});
+  }
+
+  function addRule(rule, source = "") {
+    if (!rule || rule.hidden) return;
+    const name = cleanRuleText(rule.name || "").trim();
+    const text = cleanRuleText(rule.description || "").trim();
+    if (!name || !text) return;
+    rules.push({name, text, category:"Team rule", source});
+  }
+
+  function hasOperativeProfile(selection) {
+    return collectProfiles(selection).some(isKillTeamOperativeProfile);
+  }
+
+  function walkNonOperativeSelection(selection, source = "") {
+    if (!selection || typeof selection !== "object") return;
+    if (hasOperativeProfile(selection)) return;
+
+    for (const profile of selection.profiles || []) addProfile(profile, source);
+    for (const rule of selection.rules || []) addRule(rule, source);
+    for (const child of selection.selections || []) walkNonOperativeSelection(child, source);
+  }
+
+  for (const force of collectRosterForces(root?.forces || [])) {
+    const source = force.catalogueName || force.name || "";
+    for (const profile of force.profiles || []) addProfile(profile, source);
+    for (const rule of force.rules || []) addRule(rule, source);
+    for (const selection of force.selections || []) walkNonOperativeSelection(selection, source);
+  }
+
+  return dedupeBy(
+    rules,
+    item => normalize((item.category || "") + "|" + item.name + "|" + item.text)
+  );
+}
+
+function extractHeresyArmyRules(root) {
+  const rules = [...extractArmyRules(root)];
+
+  function addProfile(profile, source = "") {
+    if (!isHeresyRuleProfile(profile)) return;
+    const rule = heresyRuleProfileToRule(profile);
+    if (!rule?.name || !rule?.text) return;
+    rules.push({...rule, source});
+  }
+
+  function addRule(rule, source = "") {
+    if (!rule || rule.hidden) return;
+    const name = cleanRuleText(rule.name || "").trim();
+    const text = cleanRuleText(rule.description || "").trim();
+    if (!name || !text) return;
+    rules.push({name, text, category:"Army rule", source});
+  }
+
+  function walkNonUnitSelection(selection, source = "") {
+    if (!selection || typeof selection !== "object") return;
+    if (normalize(selection.type) === "unit") return;
+
+    for (const profile of selection.profiles || []) addProfile(profile, source);
+    for (const rule of selection.rules || []) addRule(rule, source);
+    for (const child of selection.selections || []) walkNonUnitSelection(child, source);
+  }
+
+  for (const force of collectRosterForces(root?.forces || [])) {
+    const source = force.catalogueName || force.name || "";
+    for (const profile of force.profiles || []) addProfile(profile, source);
+    for (const selection of force.selections || []) walkNonUnitSelection(selection, source);
+  }
+
+  return dedupeBy(
+    rules,
+    item => normalize((item.category || "") + "|" + item.name + "|" + item.text)
+  );
+}
+
+function extractForceDispositions(root) {
+  const dispositions = [];
+
+  for (const force of collectRosterForces(root?.forces || [])) {
+    const source = force.catalogueName || force.name || "";
+
+    function addDisposition(value) {
+      const name = cleanRuleText(value || "").trim();
+      if (!name || normalize(name) === "force disposition") return;
+
+      dispositions.push({
+        name:"Force Disposition",
+        text:name,
+        category:"Force Disposition",
+        source
+      });
+    }
+
+    function walk(value) {
+      if (!value || typeof value !== "object") return;
+      if (Array.isArray(value)) {
+        value.forEach(walk);
+        return;
+      }
+
+      const isDispositionContainer = normalize(value.name || "") === "force disposition";
+      const isDispositionChoice = normalize(value.group || "") === "force disposition";
+
+      if (isDispositionContainer) {
+        for (const child of value.selections || []) {
+          addDisposition(child?.name);
+        }
+      } else if (isDispositionChoice) {
+        addDisposition(value.name);
+      }
+
+      for (const child of value.selections || []) walk(child);
+    }
+
+    walk(force.selections || []);
+  }
+
+  return dedupeBy(
+    dispositions,
+    item => normalize(item.name + "|" + item.text + "|" + item.source)
+  );
+}
+
 function extractArmyRules(root) {
   const rules = [];
 
-  for (const force of root?.forces || []) {
+  for (const force of collectRosterForces(root?.forces || [])) {
     for (const rule of force.rules || []) {
       const name = cleanRuleText(rule?.name || "").trim();
       const text = cleanRuleText(rule?.description || "").trim();
@@ -1209,14 +6109,398 @@ function resolveRosterAttachments(units = []) {
   return units;
 }
 
+
+
+
+function isLegionsImperialisDetachmentProfile(profile) {
+  if (!profile || typeof profile !== "object") return false;
+  if (normalize(profile.typeName || "") !== "detachment") return false;
+
+  const labels = new Set(
+    (profile.characteristics || []).map(item => normalize(item?.name || ""))
+  );
+
+  return labels.has("move") &&
+    labels.has("sv") &&
+    labels.has("caf") &&
+    labels.has("morale") &&
+    labels.has("w");
+}
+
+function isLegionsImperialisRuleProfile(profile) {
+  return profile &&
+    !profile.hidden &&
+    normalize(profile.typeName || "") === "special rules";
+}
+
+function legionsImperialisRuleProfileToRule(profile) {
+  const text = cleanRuleText(
+    characteristicValue((profile.characteristics || [])[0])
+  ).trim();
+
+  if (!text) return null;
+
+  return {
+    name:String(profile.name || "Special Rule").trim(),
+    text,
+    category:"Special Rule"
+  };
+}
+
+function isKillTeamOperativeProfile(profile) {
+  if (!profile || typeof profile !== "object") return false;
+  if (normalize(profile.typeName || "") !== "operative") return false;
+
+  const labels = new Set(
+    (profile.characteristics || []).map(item => normalize(item?.name || ""))
+  );
+
+  return labels.has("apl") &&
+    labels.has("move") &&
+    labels.has("save") &&
+    labels.has("wounds");
+}
+
+function isKillTeamRuleProfile(profile) {
+  if (!profile || profile.hidden) return false;
+  return [
+    "abilities",
+    "equipment",
+    "unique actions",
+    "psychic power",
+    "chapter tactics",
+    "markerlight tokens"
+  ].includes(normalize(profile.typeName || ""));
+}
+
+function killTeamRuleProfileToRule(profile) {
+  const fields = (profile?.characteristics || [])
+    .map(item => ({
+      label:String(item?.name || "").trim(),
+      value:cleanRuleText(characteristicValue(item)).trim()
+    }))
+    .filter(item => item.value);
+
+  if (!fields.length) return null;
+
+  return {
+    name:String(profile.name || profile.typeName || "Rule").trim(),
+    text:fields.map(item => item.value).join("\n\n"),
+    category:String(profile.typeName || "Rule")
+  };
+}
+
+function isHeresyUnitProfile(profile) {
+  if (!profile || typeof profile !== "object") return false;
+  const type = normalize(profile.typeName || "");
+  const allowed = new Set([
+    "profile",
+    "vehicle",
+    "knight",
+    "ordinatus carriage",
+    "ordinatus gun",
+    "titan head",
+    "titan carapace",
+    "titan arms",
+    "titan legs"
+  ]);
+  if (!allowed.has(type)) return false;
+
+  const labels = new Set(
+    (profile.characteristics || []).map(item => normalize(item?.name || ""))
+  );
+
+  if (type === "profile") {
+    return labels.has("m") &&
+      (labels.has("ws") || labels.has("bs")) &&
+      (labels.has("sav") || labels.has("t") || labels.has("w"));
+  }
+
+  return labels.has("m") && labels.has("hp");
+}
+
+function heresyTypeCategories(profile) {
+  const typeValue = (profile?.characteristics || [])
+    .find(item => normalize(item?.name || "") === "type");
+
+  const raw = characteristicValue(typeValue);
+  if (!raw) return [];
+
+  return dedupeBy(
+    String(raw)
+      .replace(/[()]/g, ",")
+      .split(",")
+      .map(value => value.trim())
+      .filter(Boolean),
+    value => normalize(value)
+  );
+}
+
+function isHeresyRuleProfile(profile) {
+  if (!profile || profile.hidden) return false;
+  const type = normalize(profile.typeName || "");
+  return [
+    "wargear",
+    "wargear item",
+    "traits",
+    "reaction",
+    "reactions",
+    "gambit",
+    "detachment description",
+    "psychic power",
+    "cybertheurgic rite",
+    "cybertheurgic rite:",
+    "asset"
+  ].includes(type);
+}
+
+function heresyRuleProfileToRule(profile) {
+  const fields = (profile?.characteristics || [])
+    .map(item => ({
+      label:String(item?.name || "").trim(),
+      value:cleanRuleText(characteristicValue(item)).trim()
+    }))
+    .filter(item => item.value);
+
+  if (!fields.length) return null;
+
+  const preferredText = fields
+    .filter(item => !/^summary$/i.test(item.label))
+    .map(item => item.label ? item.label + ": " + item.value : item.value)
+    .join("\n\n");
+
+  const summary = fields.find(item => /^summary$/i.test(item.label))?.value || "";
+
+  return {
+    name:String(profile.name || profile.typeName || "Rule"),
+    text:preferredText || summary,
+    category:String(profile.typeName || "Rule")
+  };
+}
+
+
+function newRecruitSelectionPointTotal(selection) {
+  let total = 0;
+
+  function walk(node) {
+    if (!node || typeof node !== "object") return;
+
+    for (const cost of node.costs || []) {
+      if (!isPointsCostName(cost?.name)) continue;
+      const value = Number(cost?.value);
+      if (Number.isFinite(value)) total += value;
+    }
+
+    for (const child of node.selections || []) walk(child);
+  }
+
+  walk(selection);
+  return total;
+}
+
+function isOldWorldModelProfile(profile) {
+  if (!profile || typeof profile !== "object") return false;
+  if (normalize(profile.typeName || "") !== "model") return false;
+
+  const labels = new Set(
+    (profile.characteristics || []).map(item => normalize(item?.name || ""))
+  );
+  return ["m","ws","bs","s","t","w","i","a","ld"].every(label => labels.has(label));
+}
+
+function isOldWorldUnitMetaProfile(profile) {
+  if (!profile || normalize(profile.typeName || "") !== "unit") return false;
+  const labels = new Set(
+    (profile.characteristics || []).map(item => normalize(item?.name || ""))
+  );
+  return labels.has("troop type") || labels.has("unit size");
+}
+
+function oldWorldProfileToDisplay(profile, fallbackName = "Profile") {
+  return {
+    name:String(profile?.name || fallbackName).trim(),
+    type:String(profile?.typeName || "").trim(),
+    values:(profile?.characteristics || []).map(characteristic => ({
+      label:String(characteristic?.name || "").trim(),
+      value:characteristicValue(characteristic)
+    })).filter(item => item.label && item.value !== "")
+  };
+}
+
+function isOldWorldRuleProfile(profile) {
+  if (!profile || profile.hidden) return false;
+  const type = normalize(profile.typeName || "");
+  if (["unit","model","weapon","spell","base","ranged weapon","ranged weapons","melee weapon","melee weapons","weapons"].includes(type)) {
+    return false;
+  }
+  return (profile.characteristics || []).some(item =>
+    cleanRuleText(characteristicValue(item)).trim()
+  );
+}
+
+function oldWorldRuleProfileToRule(profile) {
+  const fields = (profile?.characteristics || [])
+    .map(item => ({
+      label:String(item?.name || "").trim(),
+      value:cleanRuleText(characteristicValue(item)).trim()
+    }))
+    .filter(item => item.value);
+
+  if (!fields.length) return null;
+
+  const text = fields.map(item =>
+    item.label && normalize(item.label) !== normalize(profile?.name || "")
+      ? item.label + ": " + item.value
+      : item.value
+  ).join("\n\n");
+
+  return {
+    name:String(profile?.name || profile?.typeName || "Rule").trim(),
+    text,
+    category:String(profile?.typeName || "Rule").trim()
+  };
+}
+
+function oldWorldSpellProfileToSpell(profile) {
+  const fields = (profile?.characteristics || [])
+    .map(item => ({
+      label:String(item?.name || "").trim(),
+      key:normalize(item?.name || ""),
+      value:cleanRuleText(characteristicValue(item)).trim()
+    }))
+    .filter(item => item.value);
+
+  const get = (...keys) => {
+    for (const key of keys) {
+      const found = fields.find(field => field.key === normalize(key));
+      if (found?.value) return found.value;
+    }
+    return "";
+  };
+
+  const reserved = new Set(["number","type","casting value","cast value","range"]);
+  const description = fields
+    .filter(field => !reserved.has(field.key))
+    .map(field => field.value)
+    .filter(Boolean)
+    .join("\n\n");
+
+  return {
+    name:String(profile?.name || "Spell").trim(),
+    number:get("Number"),
+    spellType:get("Type"),
+    castingValue:get("Casting Value","Cast Value"),
+    range:get("Range"),
+    description
+  };
+}
+
 function parseNewRecruitSelection(selection) {
   const allProfiles = collectProfiles(selection);
-  const unitProfiles = allProfiles.filter(p => p?.typeName === "Unit");
+  const oldWorldRawModels = allProfiles.filter(isOldWorldModelProfile);
+  const unitProfiles = allProfiles.filter(profile =>
+    profile?.typeName === "Unit" ||
+    isOldWorldModelProfile(profile) ||
+    isHeresyUnitProfile(profile) ||
+    isKillTeamOperativeProfile(profile) ||
+    isLegionsImperialisDetachmentProfile(profile)
+  );
   if (!unitProfiles.length) return null;
 
-  const primaryUnitProfile =
-    unitProfiles.find(p => normalize(p.name) === normalize(selection.name)) ||
-    unitProfiles[0];
+  const primaryUnitProfile = oldWorldRawModels.length
+    ? (
+        oldWorldRawModels.find(profile => normalize(profile.name) === normalize(selection.name)) ||
+        oldWorldRawModels[0]
+      )
+    : (
+        unitProfiles.find(profile => normalize(profile.name) === normalize(selection.name)) ||
+        unitProfiles[0]
+      );
+
+  const oldWorldProfile = isOldWorldModelProfile(primaryUnitProfile);
+  const heresyProfile = isHeresyUnitProfile(primaryUnitProfile);
+  const killTeamProfile = isKillTeamOperativeProfile(primaryUnitProfile);
+  const legionsImperialisProfile = isLegionsImperialisDetachmentProfile(primaryUnitProfile);
+
+  const oldWorldModelProfiles = oldWorldProfile
+    ? oldWorldRawModels.map(profile => oldWorldProfileToDisplay(profile, selection.name || "Model"))
+    : [];
+
+  const oldWorldUnitProfiles = oldWorldProfile
+    ? allProfiles
+        .filter(isOldWorldUnitMetaProfile)
+        .map(profile => oldWorldProfileToDisplay(profile, selection.name || "Unit"))
+    : [];
+
+  const oldWorldSpells = oldWorldProfile
+    ? allProfiles
+        .filter(profile => normalize(profile?.typeName || "") === "spell" && !profile.hidden)
+        .map(oldWorldSpellProfileToSpell)
+        .filter(spell => spell.name)
+    : [];
+
+  const heresyComponents = unitProfiles
+    .filter(profile => /^titan\s/i.test(String(profile?.typeName || "")))
+    .map(profile => ({
+      name:String(profile.name || profile.typeName || "Component").trim(),
+      type:String(profile.typeName || ""),
+      values:(profile.characteristics || []).map(characteristic => ({
+        label:characteristic.name || "",
+        value:characteristicValue(characteristic)
+      })).filter(item => item.label && item.value !== "")
+    }));
+
+  const heresyModelProfiles = heresyProfile
+    ? unitProfiles
+        .filter(profile => !/^titan\s/i.test(String(profile?.typeName || "")))
+        .map(profile => ({
+          name:String(profile.name || selection.name || "Model").trim(),
+          type:String(profile.typeName || ""),
+          values:(profile.characteristics || []).map(characteristic => ({
+            label:characteristic.name || "",
+            value:characteristicValue(characteristic)
+          })).filter(item => item.label && item.value !== "")
+        }))
+    : [];
+
+  const legionsImperialisProfiles = legionsImperialisProfile
+    ? unitProfiles.map(profile => ({
+        name:String(profile.name || selection.name || "Detachment").trim(),
+        values:(profile.characteristics || []).map(characteristic => ({
+          label:characteristic.name || "",
+          value:characteristicValue(characteristic)
+        })).filter(item => item.label && item.value !== "")
+      }))
+    : [];
+
+  const stats = (primaryUnitProfile.characteristics || []).map(characteristic => ({
+    label:characteristic.name || "",
+    value:characteristicValue(characteristic)
+  })).filter(item => item.label && item.value !== "");
+
+  const statLabels = new Set(stats.map(stat => normalize(stat.label)));
+  const grimdarkProfile =
+    statLabels.has("quality") &&
+    (statLabels.has("defense") || statLabels.has("defence"));
+  const aosProfile =
+    statLabels.has("move") &&
+    statLabels.has("health") &&
+    statLabels.has("save") &&
+    statLabels.has("control");
+
+  const system = legionsImperialisProfile
+    ? "legions-imperialis"
+    : killTeamProfile
+      ? "kill-team"
+      : oldWorldProfile
+        ? "old-world"
+      : heresyProfile
+        ? "heresy"
+      : aosProfile
+        ? "aos"
+        : grimdarkProfile
+          ? "opr"
+          : "40k";
 
   const weapons = mergeWeaponProfiles(
     collectWeaponProfiles(selection).map(({profile, quantity}) => ({
@@ -1225,45 +6509,142 @@ function parseNewRecruitSelection(selection) {
     }))
   );
 
-  const abilityProfiles = allProfiles
-    .filter(p => p?.typeName === "Abilities")
-    .map(p => ({
-      name: p.name || "Ability",
-      text: characteristicValue((p.characteristics || [])[0])
-    }));
+  const standardAbilityProfiles = system === "kill-team"
+    ? []
+    : allProfiles
+        .filter(profile => profile?.typeName === "Abilities")
+        .map(profile => ({
+          name:profile.name || "Ability",
+          text:characteristicValue((profile.characteristics || [])[0])
+        }));
+
+  const aosAbilityProfiles = system === "aos"
+    ? allProfiles
+        .filter(profile => isAosAbilityProfile(profile) && !profile.hidden)
+        .map(aosAbilityProfileToRule)
+    : [];
+
+  const oldWorldProfileRules = system === "old-world"
+    ? allProfiles
+        .filter(isOldWorldRuleProfile)
+        .map(oldWorldRuleProfileToRule)
+        .filter(Boolean)
+    : [];
+
+  const heresyProfileRules = system === "heresy"
+    ? allProfiles
+        .filter(isHeresyRuleProfile)
+        .map(heresyRuleProfileToRule)
+        .filter(Boolean)
+    : [];
+
+  const killTeamProfileRules = system === "kill-team"
+    ? allProfiles
+        .filter(isKillTeamRuleProfile)
+        .map(killTeamRuleProfileToRule)
+        .filter(Boolean)
+    : [];
+
+  const legionsImperialisProfileRules = system === "legions-imperialis"
+    ? allProfiles
+        .filter(isLegionsImperialisRuleProfile)
+        .map(legionsImperialisRuleProfileToRule)
+        .filter(Boolean)
+    : [];
 
   const rules = collectRules(selection);
-  const abilities = dedupeBy([...abilityProfiles, ...rules], r => normalize(r.name + "|" + r.text));
+  const abilities = dedupeBy(
+    [
+      ...standardAbilityProfiles,
+      ...aosAbilityProfiles,
+      ...oldWorldProfileRules,
+      ...heresyProfileRules,
+      ...killTeamProfileRules,
+      ...legionsImperialisProfileRules,
+      ...rules
+    ],
+    rule => normalize((rule.category || "") + "|" + rule.name + "|" + rule.text)
+  );
 
-  const stats = (primaryUnitProfile.characteristics || []).map(c => ({
-    label: c.name || "",
-    value: characteristicValue(c)
-  })).filter(x => x.label && x.value !== "");
-
-  const pts = (selection.costs || []).find(c => String(c.name).toLowerCase() === "pts")?.value;
-  if (pts != null) stats.push({label:"Pts", value:String(pts)});
+  const directPts = (selection.costs || []).find(cost => isPointsCostName(cost.name))?.value;
+  const pts = (system === "heresy" || system === "legions-imperialis" || system === "old-world")
+    ? newRecruitSelectionPointTotal(selection)
+    : directPts;
+  if (pts != null && Number(pts) !== 0) stats.push({label:"Pts", value:String(pts)});
 
   const name = selection.name || primaryUnitProfile.name || "Unit";
-  const categories = collectSelectionCategories(selection);
+  const categories = dedupeBy(
+    [
+      ...collectSelectionCategories(selection),
+      ...(system === "heresy" ? heresyTypeCategories(primaryUnitProfile) : [])
+    ],
+    value => normalize(value)
+  );
 
   return {
-    id: selection.id || primaryUnitProfile.id || name,
+    id:selection.id || primaryUnitProfile.id || name,
     name,
-    type: "Unit",
+    type:system === "legions-imperialis"
+      ? "Detachment"
+      : system === "kill-team"
+        ? "Operative"
+        : system === "heresy"
+        ? (heresyComponents.length
+            ? "Titan"
+            : normalize(primaryUnitProfile.typeName) === "profile"
+              ? "Unit"
+              : primaryUnitProfile.typeName || "Unit")
+        : "Unit",
+    system,
     categories,
     stats,
-    rules: abilities,
-    profiles: weapons,
+    rules:abilities,
+    profiles:weapons,
+    oldWorldModelProfiles,
+    oldWorldUnitProfiles,
+    oldWorldSpells,
+    heresyComponents,
+    heresyModelProfiles,
+    legionsImperialisProfiles,
     selectionIds:collectSelectionIds(selection),
     incomingAssociations:normalizeUnitAssociations(selection.incomingAssociations || []),
     outgoingAssociations:normalizeUnitAssociations(selection.associations || []),
-    searchText: normalize([
+    searchText:normalize([
       name,
       primaryUnitProfile.name,
-      weapons.map(w => w.name),
-      abilities.map(a => a.name)
-    ].flat().join(" "))
+      weapons.map(weapon => weapon.name),
+      oldWorldSpells.map(spell => spell.name),
+      abilities.map(ability => ability.name),
+      categories
+    ].flat(3).join(" "))
   };
+}
+
+function isWeaponProfile(profile) {
+  if (!profile || typeof profile !== "object") return false;
+
+  const type = normalize(profile.typeName || "");
+  if ([
+    "ranged weapon",
+    "ranged weapons",
+    "melee weapon",
+    "melee weapons",
+    "weapons"
+  ].includes(type)) return true;
+
+  if (type === "weapon" || type.endsWith(" weapon")) {
+    const labels = new Set(
+      (profile.characteristics || []).map(item => normalize(item?.name || ""))
+    );
+    return (
+      labels.has("attacks") ||
+      labels.has("a") ||
+      labels.has("range") ||
+      (labels.has("r") && (labels.has("s") || labels.has("ap")))
+    );
+  }
+
+  return false;
 }
 
 function collectWeaponProfiles(node) {
@@ -1286,10 +6667,8 @@ function collectWeaponProfiles(node) {
 
     if (Array.isArray(value.profiles)) {
       value.profiles.forEach(profile => {
-        if (!profile || typeof profile !== "object") return;
-        if (profile.typeName === "Ranged Weapons" || profile.typeName === "Melee Weapons") {
-          found.push({profile, quantity: Math.max(1, quantity || 1)});
-        }
+        if (!isWeaponProfile(profile)) return;
+        found.push({profile, quantity: Math.max(1, quantity || 1)});
       });
     }
 
@@ -1485,7 +6864,7 @@ function getImportedDetachmentRequests() {
   const requests = [];
 
   for (const roster of state.rosters) {
-    if (roster.source !== "new-recruit") continue;
+    if (roster.source !== "new-recruit" || inferRosterGameSystem(roster) !== "40k") continue;
 
     for (const detachment of roster.detachments || []) {
       requests.push({
@@ -1737,7 +7116,9 @@ async function ensureDetachmentStratagems() {
 
 function renderDetachmentSummary() {
   const requests = getImportedDetachmentRequests();
-  const importedLists = state.rosters.filter(roster => roster.source === "new-recruit");
+  const importedLists = state.rosters.filter(roster =>
+    roster.source === "new-recruit" && inferRosterGameSystem(roster) === "40k"
+  );
 
   if (!requests.length) {
     if (importedLists.some(roster => !Array.isArray(roster.detachments))) {
@@ -1850,8 +7231,74 @@ async function getUnitBrowserReferenceData(source) {
     };
   }
 
+  if (source.kind === "opr") {
+    return {
+      stratagems:[],
+      armyRules:(source.roster?.armyRules || []).filter(rule => rule?.name),
+      note:"OnePageRules list imported from Army Forge."
+    };
+  }
+
+  if (source.kind === "gyrinx") {
+    return {
+      stratagems:[],
+      armyRules:(source.roster?.armyRules || []).filter(rule => rule?.name),
+      note:"Necromunda N26 gang imported from Gyrinx."
+    };
+  }
+
+  if (source.kind === "dndbeyond") {
+    return {
+      stratagems:[],
+      armyRules:(source.roster?.armyRules || []).filter(rule => rule?.name),
+      note:"Character features imported from D&D Beyond."
+    };
+  }
+
+  if (source.kind === "li-community") {
+    return {
+      stratagems:[],
+      armyRules:(source.roster?.armyRules || []).filter(rule => rule?.name),
+      note:"Legions Imperialis list imported from Legion Companion."
+    };
+  }
+
   if (source.kind === "new-recruit") {
     const roster = source.roster;
+    const rosterGame = inferRosterGameSystem(roster);
+
+    if (rosterGame === "aos") {
+      return {
+        stratagems:[],
+        armyRules:(roster?.armyRules || []).filter(rule => rule?.name && rule?.text),
+        note:"Age of Sigmar 4th edition list imported from New Recruit."
+      };
+    }
+
+    if (rosterGame === "grimdark") {
+      const armyRules = dedupeBy(
+        [
+          ...(roster?.referenceData?.rules || []),
+          ...(roster?.units || []).flatMap(unit => unit.rules || [])
+        ].filter(rule => rule?.name && rule?.text),
+        rule => normalize(rule.name + "|" + rule.text)
+      );
+
+      return {
+        stratagems:[],
+        armyRules,
+        note:"Grimdark Future list imported from New Recruit."
+      };
+    }
+
+    if (rosterGame !== "40k") {
+      return {
+        stratagems:[],
+        armyRules:(roster?.armyRules || []).filter(rule => rule?.name),
+        note:gameSystemDisplayName(rosterGame) + " list imported from New Recruit."
+      };
+    }
+
     const localRules = (roster?.armyRules || []).filter(rule => rule?.name && rule?.text);
     const embeddedDetachmentRules = (roster?.detachmentRules || [])
       .filter(rule => rule?.name && rule?.text);
@@ -2047,8 +7494,18 @@ function renderUnitBrowserReferences(source, data = null) {
   return `
     <div id="unitBrowserReferences" class="unit-browser-references">
       ${data.note ? `<div class="roster-refresh-note">${escapeHtml(data.note)}</div>` : ""}
-      ${renderUnitBrowserReferenceSection("Stratagems", data.stratagems, "stratagem")}
-      ${renderUnitBrowserReferenceSection("Army Rules", data.armyRules, "rule")}
+      ${(source.kind === "opr" || inferRosterGameSystem(source.roster) !== "40k") ? "" : renderUnitBrowserReferenceSection("Stratagems", data.stratagems, "stratagem")}
+      ${renderUnitBrowserReferenceSection(
+        inferRosterGameSystem(source.roster) === "kill-team"
+          ? "Team Rules"
+          : inferRosterGameSystem(source.roster) === "legions-imperialis"
+            ? "Formation Rules"
+            : (source.kind === "opr" || ["grimdark","heresy"].includes(inferRosterGameSystem(source.roster)))
+              ? "Rules"
+              : "Army Rules",
+        data.armyRules,
+        "rule"
+      )}
     </div>`;
 }
 
@@ -2193,7 +7650,7 @@ async function renderSourceReferencePage(kind, query = "") {
   const source = getActiveUnitBrowserSource();
 
   if (!source) {
-    container.innerHTML = '<div class="empty-section">Import a New Recruit list or choose a whole army first.</div>';
+    container.innerHTML = '<div class="empty-section">Import a list or choose an army source first.</div>';
     return;
   }
 
@@ -2565,11 +8022,32 @@ function normalize(value) {
   return String(value || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 }
 
+function isPointsCostName(name = "") {
+  const key = normalize(name);
+  return ["pts","pt","point","points","point s"].includes(key);
+}
+
 function setVoicePrompt(page = state.currentPage) {
   if (!els.voiceHint) return;
 
   const prompts = {
-    datasheets: "Say a unit name, e.g. “Death Korps of Krieg”",
+    datasheets: isWarfleetsMode()
+      ? "Say a ship or squadron name from your Warfleets fleet"
+      : isKillTeamMode()
+        ? "Say an operative name from your Kill Team"
+        : isNecromundaMode()
+          ? "Say a fighter name from your Necromunda gang"
+          : isDndMode()
+            ? "Try “roll stealth”, “attack longsword”, “cast fireball”, “list fire spells”, or “short rest”"
+            : isLegionsImperialisMode()
+          ? "Say a detachment name from your Legions Imperialis army"
+          : isHeresyMode()
+          ? "Say a unit name from your Horus Heresy army"
+          : isOprMode()
+          ? "Say a unit name from your " + currentGameName() + " list"
+          : isAosMode()
+        ? "Say a unit name, e.g. “Annihilators”"
+        : "Say a unit name, e.g. “Death Korps of Krieg”",
     score: "T" + state.scoreTurn + ": say “Player 1 add 5 primary”",
     dice: "Say “Roll 6 dice hitting on 3”",
     strats: "Say a stratagem name",
@@ -2580,8 +8058,9 @@ function setVoicePrompt(page = state.currentPage) {
 }
 
 function switchPage(page, options = {}) {
-  const valid = ["setup","datasheets","strats","army-rules","score","dice","rules","share","updates","guide"];
+  const valid = ["setup","datasheets","strats","army-rules","score","dice","rules","share","updates","settings","guide"];
   if (!valid.includes(page)) page = "setup";
+  if (state.gameSystem !== "40k" && ["strats","score","rules"].includes(page)) page = "setup";
   if (page !== "share" && state.shareScanner) stopShareScanner();
 
   state.currentPage = page;
@@ -2594,7 +8073,7 @@ function switchPage(page, options = {}) {
   document.querySelectorAll("[data-page-target]").forEach(button => {
     button.classList.toggle("active", button.dataset.pageTarget === page);
   });
-  els.navMoreButton?.classList.toggle("active", ["rules","share","updates","guide"].includes(page));
+  els.navMoreButton?.classList.toggle("active", ["rules","share","updates","settings","guide"].includes(page));
 
   els.navMoreMenu?.classList.add("hidden");
   els.navMoreButton?.setAttribute("aria-expanded", "false");
@@ -2604,6 +8083,7 @@ function switchPage(page, options = {}) {
   if (page === "rules") renderCoreRules(els.coreRuleSearch?.value || "");
   if (page === "share") renderSharePage();
   if (page === "setup") renderDataSummary();
+  if (page === "settings") applyGameSystemUi();
   if (page === "score") renderScoreboard();
   if (page === "dice") renderDiceState();
   if (page === "datasheets") {
@@ -2630,8 +8110,11 @@ function hideApp() {
 }
 
 function renderDataSummary() {
-  const importedLists = state.rosters.filter(roster => roster.source === "new-recruit");
-  const hasFullData = state.rosters.some(roster => roster.source === "bsdata");
+  const importedLists = state.rosters.filter(roster =>
+    isImportedRosterSource(roster) &&
+    rosterMatchesSelectedGame(roster)
+  );
+  const hasFullData = state.gameSystem === "40k" && state.rosters.some(roster => roster.source === "bsdata");
 
   els.fullDataArmySection?.classList.toggle("hidden", !hasFullData);
 
@@ -2642,7 +8125,7 @@ function renderDataSummary() {
   if (!els.dataRosterSummary) return;
 
   if (!importedLists.length) {
-    els.dataRosterSummary.innerHTML = '<p class="muted-copy">No New Recruit lists loaded yet.</p>';
+    els.dataRosterSummary.innerHTML = '<p class="muted-copy">No imported lists loaded yet.</p>';
     return;
   }
 
@@ -2650,7 +8133,13 @@ function renderDataSummary() {
     <div class="data-summary-row removable-roster-row">
       <div>
         <strong>${escapeHtml(roster.name)}</strong>
-        <small>${roster.sharedFromOpponent ? "Opponent share" : "New Recruit"} · ${escapeHtml(String(roster.importFormat || "json").toUpperCase())} · ${roster.units?.length || 0} units${roster.points != null ? " · " + escapeHtml(roster.points) + " pts" : ""}</small>
+        <small>${escapeHtml(rosterSourceSummary(roster))} · ${roster.units?.length || 0} ${escapeHtml(importedRosterUnitNoun())}${
+          roster.source === "gyrinx" && roster.necromunda?.rating != null
+            ? " · Rating " + escapeHtml(roster.necromunda.rating)
+            : roster.points != null
+              ? " · " + escapeHtml(roster.points) + " pts"
+              : ""
+        }</small>
       </div>
       <button
         class="remove-roster-button"
@@ -2666,7 +8155,9 @@ function renderDataSummary() {
 }
 
 function removeImportedRoster(rosterId) {
-  const index = state.rosters.findIndex(roster => roster.id === rosterId && roster.source === "new-recruit");
+  const index = state.rosters.findIndex(roster =>
+    roster.id === rosterId && isImportedRosterSource(roster)
+  );
   if (index < 0) return;
 
   const removed = state.rosters[index];
@@ -2677,7 +8168,7 @@ function removeImportedRoster(rosterId) {
   for (const key of Object.keys(localStorage)) {
     if (
       key.includes(rosterId) &&
-      (key.startsWith("tv_status_") || key.startsWith("tv_pins_") || key.startsWith("tv_recent_") || key.startsWith("tv_voice_alias"))
+      (key.startsWith("tv_status_") || key.startsWith("tv_pins_") || key.startsWith("tv_recent_") || key.startsWith("tv_voice_alias") || key.startsWith("tv_dnd_state_"))
     ) {
       localStorage.removeItem(key);
     }
@@ -2702,6 +8193,7 @@ function removeImportedRoster(rosterId) {
 
 function renderAll() {
   showApp();
+  updateGameContextUi();
   renderActiveArmySelector();
   renderArmyPicker();
   renderDataSummary();
@@ -2729,6 +8221,7 @@ function renderAll() {
 
 function getAvailableSearchScopes() {
   const scopes = [];
+  if (state.gameSystem && state.gameSystem !== "40k") return scopes;
 
   state.rosters.forEach((roster, rosterIndex) => {
     if (roster.source !== "bsdata") return;
@@ -2802,7 +8295,7 @@ function getSearchCollections() {
   const collections = [];
 
   state.rosters.forEach((roster, rosterIndex) => {
-    if (roster.source === "new-recruit") {
+    if (["new-recruit","opr","dndbeyond"].includes(roster.source) && rosterMatchesSelectedGame(roster)) {
       collections.push({
         id:"roster:" + roster.id,
         label:roster.name,
@@ -2899,21 +8392,56 @@ function renderActiveArmySelector() {
   els.activeArmySelector.querySelector(".active-army-more")?.addEventListener("click", openArmyPicker);
 }
 
+function isImportedRosterSource(roster) {
+  return ["new-recruit","opr","li-community","gyrinx","dndbeyond"].includes(roster?.source);
+}
+
+function importedRosterUnitNoun() {
+  if (isWarfleetsMode()) return "ships/squadrons";
+  if (isKillTeamMode()) return "operatives";
+  if (isNecromundaMode()) return "fighters";
+  if (isLegionsImperialisMode()) return "detachments";
+  if (isDndMode()) return "characters";
+  return "units";
+}
+
 function getImportedRosterEntries() {
   return state.rosters
     .map((roster, index) => ({roster, index}))
-    .filter(item => item.roster.source === "new-recruit");
+    .filter(item =>
+      isImportedRosterSource(item.roster) &&
+      rosterMatchesSelectedGame(item.roster)
+    );
 }
 
 function getUnitBrowserSources() {
   const sources = [];
 
   for (const {roster, index} of getImportedRosterEntries()) {
+    const kind = roster.source === "opr"
+      ? "opr"
+      : roster.source === "gyrinx"
+        ? "gyrinx"
+        : roster.source === "li-community"
+          ? "li-community"
+          : roster.source === "dndbeyond"
+            ? "dndbeyond"
+            : "new-recruit";
+
+    const necromundaRating = roster.source === "gyrinx" && roster.necromunda?.rating != null
+      ? "Rating " + roster.necromunda.rating + " · "
+      : "";
+    const necromundaCampaign = roster.source === "gyrinx" && roster.necromunda?.campaign?.name
+      ? roster.necromunda.campaign.name + " · "
+      : "";
+
     sources.push({
       id:"roster:" + roster.id,
       label:roster.name,
-      subLabel:(roster.points != null ? roster.points + " pts · " : "") + (roster.sharedFromOpponent ? "Opponent · New Recruit" : "New Recruit"),
-      kind:"new-recruit",
+      subLabel:necromundaRating + necromundaCampaign +
+        (roster.points != null ? roster.points + " pts · " : "") +
+        rosterSourceSummary(roster),
+      kind,
       roster,
       faction:roster.faction || "",
       detachments:roster.detachments || [],
@@ -2921,7 +8449,7 @@ function getUnitBrowserSources() {
         unit,
         rosterIndex:index,
         sourceLabel:roster.name,
-        sourceKind:"new-recruit"
+        sourceKind:kind
       }))
     });
   }
@@ -2951,11 +8479,14 @@ function getUnitBrowserSources() {
   const allEntries = [];
   const seen = new Set();
 
-  // Prefer New Recruit versions where a unit exists in both a list and a whole-army source.
-  const sourceRank = source => source.kind === "new-recruit" ? 0 : 1;
+  // Prefer imported-list versions where an entry also exists in a whole-army source.
+  const sourceRank = source =>
+    ["new-recruit","opr","gyrinx","li-community","dndbeyond"].includes(source.kind) ? 0 : 1;
   for (const source of [...sources].sort((a,b) => sourceRank(a) - sourceRank(b))) {
     for (const entry of source.entries) {
-      const key = normalize(entry.unit.name);
+      const key = entry.unit.system === "warfleet"
+        ? source.id + "|" + entry.unit.id
+        : normalize(entry.unit.name);
       if (seen.has(key)) continue;
       seen.add(key);
       allEntries.push(entry);
@@ -2965,7 +8496,7 @@ function getUnitBrowserSources() {
   return [{
     id:"all",
     label:"All data",
-    subLabel:allEntries.length + " units",
+    subLabel:allEntries.length + " " + importedRosterUnitNoun(),
     kind:"all",
     entries:allEntries
   }, ...sources];
@@ -2992,7 +8523,7 @@ function setUnitBrowserSource(sourceId) {
   localStorage.setItem("tv_unit_browser_source", source.id);
   state.selected = null;
 
-  if (source.kind === "new-recruit" && source.entries[0]) {
+  if ((source.kind === "new-recruit" || source.kind === "opr") && source.entries[0]) {
     state.activeRoster = source.entries[0].rosterIndex;
   } else if (source.kind === "whole-army" && source.entries[0]) {
     state.activeRoster = source.entries[0].rosterIndex;
@@ -3013,13 +8544,79 @@ function setUnitBrowserSource(sourceId) {
 }
 
 function getUnitBrowserGroup(unit) {
-  const categories = new Set((unit.categories || []).map(category => normalize(category)));
+  const categoryList = (unit.categories || []).map(category => normalize(category));
+  const categories = new Set(categoryList);
+  const hasPrefix = prefix => categoryList.some(category => category === prefix || category.startsWith(prefix + " "));
 
-  if (categories.has("character") || categories.has("epic hero")) return "Characters";
+  if (unit?.system === "warfleet") {
+    if (categories.has("squadron")) return "Squadrons";
+    if (categories.has("heavy")) return "Heavy Ships";
+    if (categories.has("medium")) return "Medium Ships";
+    if (categories.has("light")) return "Light Ships";
+    return "Ships";
+  }
+
+  if (unit?.system === "kill-team") {
+    if (categories.has("leader")) return "Leaders";
+    return "Operatives";
+  }
+
+  if (unit?.system === "necromunda") {
+    if (categories.has("leader")) return "Leaders";
+    if (categories.has("champion")) return "Champions";
+    if (categories.has("juve") || categories.has("prospect")) return "Juves & Prospects";
+    if (categories.has("ganger")) return "Gangers";
+    if (categories.has("brute")) return "Brutes";
+    if (categories.has("hanger on")) return "Hangers-on";
+    if (categories.has("vehicle")) return "Vehicles";
+    if (categories.has("pet")) return "Pets";
+    return "Fighters";
+  }
+
+  if (unit?.system === "legions-imperialis") {
+    if (categories.has("hq")) return "HQ";
+    if (categories.has("core")) return "Core";
+    if (categories.has("support")) return "Support";
+    if (categories.has("vanguard")) return "Vanguard";
+    if (categories.has("light armour")) return "Light Armour";
+    if (categories.has("battle tank")) return "Battle Tank";
+    if (categories.has("heavy armour")) return "Heavy Armour";
+    if (categories.has("artillery")) return "Artillery";
+    if (categories.has("bastion")) return "Bastion";
+    if (categories.has("transport")) return "Transport";
+    if (categories.has("air support")) return "Air Support";
+    if (categories.has("knight") || hasPrefix("knight")) return "Knights";
+    if (categories.has("titan") || hasPrefix("titan")) return "Titans";
+    return "Other Detachments";
+  }
+
+  if (unit?.system === "heresy") {
+    if (categories.has("high command") || hasPrefix("prime high command")) return "High Command";
+    if (categories.has("command") || hasPrefix("prime command")) return "Command";
+    if (categories.has("retinue") || hasPrefix("prime retinue")) return "Retinue";
+    if (categories.has("troops") || categories.has("prime troops")) return "Troops";
+    if (categories.has("elites") || categories.has("prime elites")) return "Elites";
+    if (categories.has("recon") || categories.has("prime recon")) return "Recon";
+    if (categories.has("fast attack") || categories.has("prime fast attack")) return "Fast Attack";
+    if (categories.has("support") || categories.has("prime support")) return "Support";
+    if (categories.has("heavy assault") || categories.has("prime heavy assault")) return "Heavy Assault";
+    if (categories.has("armour") || categories.has("prime armour")) return "Armour";
+    if (categories.has("war engine") || categories.has("war-engine") || categories.has("prime war engine") || categories.has("prime war-engine")) return "War Engines";
+    if (categories.has("transport") || categories.has("heavy transport") || categories.has("prime heavy transport")) return "Transports";
+    if (categories.has("lord of war") || categories.has("prime lord of war") || categories.has("warlord or lord of war")) return "Lords of War";
+    return "Other units";
+  }
+
+  if (categories.has("character") || categories.has("epic hero") || categories.has("hero") || categories.has("heroes")) return "Characters";
   if (categories.has("battleline")) return "Battleline";
   if (categories.has("dedicated transport")) return "Transports";
-  if (categories.has("vehicle")) return "Vehicles";
-  if (categories.has("monster")) return "Monsters";
+  if (
+    categories.has("vehicle") ||
+    hasPrefix("vehicles") ||
+    categories.has("war machine") ||
+    categories.has("warmachine")
+  ) return "Vehicles";
+  if (categories.has("monster") || hasPrefix("monster")) return "Monsters";
   if (
     categories.has("mounted") ||
     categories.has("beast") ||
@@ -3089,7 +8686,7 @@ function renderResults(query = "") {
 
   for (const collection of collections) {
     for (const unit of collection.units || []) {
-      const score = scoreMatch(unit, q);
+      const score = scoreMatch(unit, q, collection.roster);
       if (score > 0) results.push({
         unit,
         roster:collection.roster,
@@ -3106,12 +8703,13 @@ function renderResults(query = "") {
 
   els.resultList.innerHTML = "";
   results.slice(0, 80).forEach(result => {
-    const {unit, rosterIndex, scopeLabel} = result;
+    const {unit, roster, rosterIndex, scopeLabel} = result;
+    const nickname = getUnitNickname(unit, roster);
     const button = document.createElement("button");
     button.className = "result-item" + (state.selected?.id === unit.id && state.activeRoster === rosterIndex ? " active" : "");
     button.innerHTML = `
       <strong>${escapeHtml(unit.name)}</strong>
-      <small>${escapeHtml(unit.type || "Unit")} · <span class="result-roster">${escapeHtml(scopeLabel)}</span></small>`;
+      <small>${nickname ? "Nickname: " + escapeHtml(nickname) + " · " : ""}${escapeHtml(unit.type || "Unit")} · <span class="result-roster">${escapeHtml(scopeLabel)}</span></small>`;
     button.addEventListener("click", () => selectUnitFromRoster(unit, rosterIndex));
     els.resultList.appendChild(button);
   });
@@ -3123,13 +8721,20 @@ function renderResults(query = "") {
   }
 }
 
-function scoreMatch(unit, q) {
+function scoreMatch(unit, q, roster = null) {
   const name = normalize(unit.name);
+  const nickname = normalize(getUnitNickname(unit, roster));
+
+  if (nickname === q) return 120;
+  if (nickname && nickname.startsWith(q)) return 95;
+  if (nickname && nickname.includes(q)) return 85;
   if (name === q) return 100;
   if (name.startsWith(q)) return 80;
   if (name.includes(q)) return 65;
+
   const words = q.split(" ");
-  const hits = words.filter(w => unit.searchText.includes(w)).length;
+  const searchable = [unit.searchText || "", nickname].filter(Boolean).join(" ");
+  const hits = words.filter(w => searchable.includes(w)).length;
   return hits ? 20 + hits * 10 : 0;
 }
 
@@ -3305,10 +8910,18 @@ function renderUnitKeywordsSection(unit) {
   const keywords = getDisplayUnitKeywords(unit);
   if (!keywords.length) return "";
 
+  const heading = unit?.system === "necromunda"
+    ? "Fighter type"
+    : unit?.system === "warfleet"
+      ? "Ship type"
+      : unit?.system === "legions-imperialis"
+        ? "Detachment type"
+        : "Unit keywords";
+
   return `
     <section class="detail-section unit-keywords-section">
       <div class="section-heading-row">
-        <h3>Unit keywords</h3>
+        <h3>${escapeHtml(heading)}</h3>
         <span class="section-count">${keywords.length}</span>
       </div>
       <div class="unit-keyword-chips">
@@ -3318,7 +8931,1080 @@ function renderUnitKeywordsSection(unit) {
 }
 
 
+function dndRosterForUnit(unit = state.selected) {
+  if (!unit) return null;
+  return state.rosters.find(roster =>
+    roster.source === "dndbeyond" &&
+    (roster.units || []).some(candidate => candidate.id === unit.id)
+  ) || null;
+}
+
+function dndRuntimeKey(unit = state.selected) {
+  const roster = dndRosterForUnit(unit);
+  return roster ? "tv_dnd_state_" + roster.id : "";
+}
+
+function getDndRuntimeState(unit = state.selected) {
+  const key = dndRuntimeKey(unit);
+  let saved = {};
+  try { saved = key ? JSON.parse(localStorage.getItem(key) || "{}") : {}; } catch {}
+  return {
+    economy:{
+      action:Boolean(saved?.economy?.action),
+      bonus:Boolean(saved?.economy?.bonus),
+      reaction:Boolean(saved?.economy?.reaction)
+    },
+    slots:dndIsRecord(saved?.slots) ? {...saved.slots} : {},
+    inventoryDeltas:dndIsRecord(saved?.inventoryDeltas) ? {...saved.inventoryDeltas} : {},
+    lastRoll:dndIsRecord(saved?.lastRoll) ? saved.lastRoll : null,
+    lastCheck:dndIsRecord(saved?.lastCheck) ? saved.lastCheck : null
+  };
+}
+
+function saveDndRuntimeState(unit, runtime) {
+  const key = dndRuntimeKey(unit);
+  if (key) localStorage.setItem(key, JSON.stringify(runtime));
+}
+
+function dndSlotUsed(unit, runtime, slot) {
+  const saved = dndNumber(runtime?.slots?.[String(slot.level)], null);
+  return saved != null ? Math.max(0, saved) : Math.max(0, Number(slot.used || 0));
+}
+
+function dndRemainingSlots(unit, runtime, slot) {
+  return Math.max(0, Number(slot.max || 0) - dndSlotUsed(unit, runtime, slot));
+}
+
+function dndMergedInventory(unit, runtime = getDndRuntimeState(unit)) {
+  const rows = new Map();
+  for (const item of unit?.dnd?.inventory || []) {
+    const key = normalize(item.name);
+    if (!key) continue;
+    const delta = dndNumber(runtime.inventoryDeltas?.[key]?.delta, 0) || 0;
+    rows.set(key, {
+      key,
+      name:item.name,
+      type:item.type || "",
+      equipped:Boolean(item.equipped),
+      imported:true,
+      quantity:Math.max(0, Number(item.quantity || 0) + delta)
+    });
+  }
+  for (const [key, change] of Object.entries(runtime.inventoryDeltas || {})) {
+    if (rows.has(key)) continue;
+    const quantity = Math.max(0, dndNumber(change?.delta, 0) || 0);
+    if (!quantity) continue;
+    rows.set(key, {
+      key,
+      name:String(change?.name || key),
+      type:"Added in Tabletop Voice",
+      equipped:false,
+      imported:false,
+      quantity
+    });
+  }
+  return [...rows.values()].filter(item => item.quantity > 0).sort((a,b) => a.name.localeCompare(b.name));
+}
+
+function adjustDndInventory(unit, rawName, delta) {
+  const name = String(rawName || "").trim();
+  const key = normalize(name);
+  if (!unit || !key || !delta) return false;
+  const runtime = getDndRuntimeState(unit);
+  const current = dndMergedInventory(unit, runtime).find(item => item.key === key);
+  const imported = (unit.dnd?.inventory || []).find(item => normalize(item.name) === key);
+  const base = Number(imported?.quantity || 0);
+  const existingDelta = dndNumber(runtime.inventoryDeltas?.[key]?.delta, 0) || 0;
+  const nextTotal = Math.max(0, base + existingDelta + delta);
+  const nextDelta = nextTotal - base;
+  runtime.inventoryDeltas[key] = {name:current?.name || imported?.name || name, delta:nextDelta};
+  if (!nextDelta && imported) delete runtime.inventoryDeltas[key];
+  if (!nextTotal && !imported) delete runtime.inventoryDeltas[key];
+  saveDndRuntimeState(unit, runtime);
+  return true;
+}
+
+function dndActionEconomyKey(action) {
+  const activation = normalize(action?.activation || "");
+  if (activation.includes("bonus")) return "bonus";
+  if (activation.includes("reaction")) return "reaction";
+  if (activation === "action" || activation.includes(" action")) return "action";
+  return "";
+}
+
+function dndRollDie(sides) {
+  const size = Math.max(2, Math.floor(Number(sides) || 6));
+  if (window.crypto?.getRandomValues) {
+    const array = new Uint32Array(1);
+    window.crypto.getRandomValues(array);
+    return (array[0] % size) + 1;
+  }
+  return Math.floor(Math.random() * size) + 1;
+}
+
+function dndRollExpression(expression) {
+  const match = String(expression || "").replace(/\s+/g, "").match(/^(\d+)d(\d+)([+-]\d+)?$/i);
+  if (!match) return null;
+  const count = Math.min(100, Math.max(1, Number(match[1])));
+  const sides = Math.max(2, Number(match[2]));
+  const bonus = Number(match[3] || 0);
+  const rolls = Array.from({length:count}, () => dndRollDie(sides));
+  return {rolls, bonus, total:rolls.reduce((sum, value) => sum + value, 0) + bonus, expression:String(expression)};
+}
+
+
+function showDndRollModal({
+  eyebrow = "ROLL RESULT",
+  title = "Roll",
+  total = "—",
+  subtitle = "",
+  breakdown = []
+} = {}) {
+  if (!els.dndRollModal) return;
+
+  els.dndRollEyebrow.textContent = String(eyebrow || "ROLL RESULT");
+  els.dndRollTitle.textContent = String(title || "Roll");
+  els.dndRollTotal.textContent = String(total ?? "—");
+  els.dndRollSubtitle.textContent = String(subtitle || "");
+  els.dndRollSubtitle.classList.toggle("hidden", !subtitle);
+
+  const rows = Array.isArray(breakdown)
+    ? breakdown.filter(Boolean)
+    : [breakdown].filter(Boolean);
+  els.dndRollBreakdown.innerHTML = rows
+    .map(row => `<div>${escapeHtml(String(row))}</div>`)
+    .join("");
+  els.dndRollBreakdown.classList.toggle("hidden", !rows.length);
+
+  els.dndRollModal.classList.remove("hidden");
+  els.dndRollModal.classList.remove("celebrate");
+  requestAnimationFrame(() => els.dndRollModal?.classList.add("celebrate"));
+}
+
+function getDndAudioContext() {
+  try {
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextClass) return null;
+    if (!state.dndAudioContext) state.dndAudioContext = new AudioContextClass();
+    if (state.dndAudioContext.state === "suspended") {
+      state.dndAudioContext.resume().catch(() => {});
+    }
+    return state.dndAudioContext;
+  } catch {
+    return null;
+  }
+}
+
+function playDndActionSound(kind = "attack") {
+  const context = getDndAudioContext();
+  if (!context) return;
+
+  try {
+    const now = context.currentTime;
+    const master = context.createGain();
+    master.gain.setValueAtTime(0.0001, now);
+    master.gain.exponentialRampToValueAtTime(kind === "spell" ? 0.075 : 0.055, now + 0.008);
+    master.gain.exponentialRampToValueAtTime(0.0001, now + (kind === "spell" ? 0.42 : 0.18));
+    master.connect(context.destination);
+
+    if (kind === "spell") {
+      [440, 660, 880].forEach((frequency, index) => {
+        const oscillator = context.createOscillator();
+        const gain = context.createGain();
+        oscillator.type = index === 0 ? "sine" : "triangle";
+        oscillator.frequency.setValueAtTime(frequency, now);
+        oscillator.frequency.exponentialRampToValueAtTime(frequency * 1.25, now + 0.34);
+        gain.gain.setValueAtTime(index === 0 ? 0.8 : 0.42, now);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.38);
+        oscillator.connect(gain);
+        gain.connect(master);
+        oscillator.start(now + index * 0.025);
+        oscillator.stop(now + 0.4);
+      });
+      return;
+    }
+
+    const impact = context.createOscillator();
+    const impactGain = context.createGain();
+    impact.type = "square";
+    impact.frequency.setValueAtTime(190, now);
+    impact.frequency.exponentialRampToValueAtTime(72, now + 0.14);
+    impactGain.gain.setValueAtTime(0.7, now);
+    impactGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.15);
+    impact.connect(impactGain);
+    impactGain.connect(master);
+    impact.start(now);
+    impact.stop(now + 0.16);
+
+    const ring = context.createOscillator();
+    const ringGain = context.createGain();
+    ring.type = "triangle";
+    ring.frequency.setValueAtTime(980, now);
+    ring.frequency.exponentialRampToValueAtTime(620, now + 0.13);
+    ringGain.gain.setValueAtTime(0.28, now);
+    ringGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.16);
+    ring.connect(ringGain);
+    ringGain.connect(master);
+    ring.start(now + 0.012);
+    ring.stop(now + 0.17);
+  } catch {}
+}
+
+function renderDndAbilityScores(unit) {
+  const scores = unit?.dnd?.scores || {};
+  const runtime = getDndRuntimeState(unit);
+  return `
+    <section class="detail-section dnd-ability-section">
+      <div class="section-heading-row">
+        <h3>Ability scores</h3>
+        <small>Tap any score to roll an ability check</small>
+      </div>
+      <div class="dnd-ability-grid">
+        ${Object.entries(DND_ABILITY_LABELS).map(([key,label]) => {
+          const check = runtime.lastCheck?.key === "ability:" + key ? runtime.lastCheck : null;
+          return `
+            <button class="dnd-ability${check ? " rolled" : ""}" type="button" data-dnd-ability-check="${key}">
+              <span>${label}</span>
+              <strong>${escapeHtml(scores[key] ?? "—")}</strong>
+              <small>${escapeHtml(dndSigned(dndModifier(scores[key] ?? 10)))}</small>
+              ${check ? `<em>${check.total}</em>` : ""}
+            </button>`;
+        }).join("")}
+      </div>
+    </section>`;
+}
+
+function renderDndSkills(unit) {
+  const skills = unit?.dnd?.skills || [];
+  const runtime = getDndRuntimeState(unit);
+  if (!skills.length) return "";
+
+  return `
+    <section class="detail-section dnd-skills-section">
+      <div class="section-heading-row">
+        <h3>Skills</h3>
+        <small>Tap to roll</small>
+      </div>
+      <div class="dnd-skill-grid">
+        ${skills.map(skill => {
+          const check = runtime.lastCheck?.key === "skill:" + skill.key ? runtime.lastCheck : null;
+          return `
+            <button class="dnd-skill-row${check ? " rolled" : ""}" type="button" data-dnd-skill-roll="${escapeHtml(skill.key)}">
+              <div>
+                <strong>${escapeHtml(skill.name)}</strong>
+                <small>
+                  ${escapeHtml(String(skill.ability || "").toUpperCase())}
+                  ${skill.proficiencyLabel ? " · " + escapeHtml(skill.proficiencyLabel) : ""}
+                </small>
+              </div>
+              <span>${escapeHtml(dndSigned(skill.bonus))}</span>
+              ${check ? `<em>${check.total}</em>` : ""}
+            </button>`;
+        }).join("")}
+      </div>
+      ${runtime.lastCheck ? `
+        <div class="dnd-check-result">
+          <strong>${escapeHtml(runtime.lastCheck.label || "Check")} ${runtime.lastCheck.total}</strong>
+          <small>d20 ${runtime.lastCheck.d20} ${escapeHtml(dndSigned(runtime.lastCheck.bonus || 0))}</small>
+        </div>` : ""}
+    </section>`;
+}
+
+function dndRollCheck(unit, kind, key) {
+  const runtime = getDndRuntimeState(unit);
+  let label = "";
+  let bonus = 0;
+  let checkKey = "";
+
+  if (kind === "skill") {
+    const skill = (unit?.dnd?.skills || []).find(item => item.key === key);
+    if (!skill) return;
+    label = skill.name;
+    bonus = Number(skill.bonus || 0);
+    checkKey = "skill:" + skill.key;
+  } else {
+    const score = unit?.dnd?.scores?.[key];
+    if (score == null) return;
+    label = (DND_ABILITY_NAMES[key] || key).replace(/^./, char => char.toUpperCase()) + " check";
+    bonus = dndModifier(score);
+    checkKey = "ability:" + key;
+  }
+
+  const d20 = dndRollDie(20);
+  runtime.lastCheck = {
+    key:checkKey,
+    label,
+    d20,
+    bonus,
+    total:d20 + bonus,
+    at:Date.now()
+  };
+  saveDndRuntimeState(unit, runtime);
+  renderDetail(unit);
+  showDndRollModal({
+    eyebrow:kind === "skill" ? "SKILL CHECK" : "ABILITY CHECK",
+    title:label,
+    total:runtime.lastCheck.total,
+    subtitle:"d20 " + d20 + " " + dndSigned(bonus),
+    breakdown:[bonus ? "Modifier " + dndSigned(bonus) : "No modifier"]
+  });
+  toast(label + " " + runtime.lastCheck.total);
+}
+
+function renderDndActionEconomy(unit) {
+  const runtime = getDndRuntimeState(unit);
+  const rows = [["action","Action"],["bonus","Bonus Action"],["reaction","Reaction"]];
+  return `
+    <section class="detail-section dnd-economy-section">
+      <div class="section-heading-row">
+        <h3>Action economy</h3>
+      </div>
+      <div class="dnd-economy-grid">
+        ${rows.map(([key,label]) => `
+          <button class="dnd-economy-button${runtime.economy[key] ? " used" : ""}"
+            type="button" data-dnd-economy="${key}" aria-pressed="${runtime.economy[key] ? "true" : "false"}">
+            <span>${escapeHtml(label)}</span>
+            <strong>${runtime.economy[key] ? "USED" : "READY"}</strong>
+          </button>`).join("")}
+      </div>
+    </section>`;
+}
+
+function renderDndSpellSlots(unit) {
+  const slots = unit?.dnd?.spellSlots || [];
+  if (!slots.length) return "";
+  const runtime = getDndRuntimeState(unit);
+  return `
+    <section class="detail-section dnd-slot-section">
+      <div class="section-heading-row"><h3>Spell slots</h3></div>
+      <div class="dnd-slot-grid">
+        ${slots.map(slot => {
+          const used = dndSlotUsed(unit, runtime, slot);
+          const remaining = Math.max(0, Number(slot.max || 0) - used);
+          return `
+            <div class="dnd-slot-card">
+              <span>Level ${slot.level}</span>
+              <strong>${remaining}/${slot.max}</strong>
+              <div>
+                <button type="button" data-dnd-slot-use="${slot.level}" aria-label="Use level ${slot.level} spell slot">−</button>
+                <button type="button" data-dnd-slot-restore="${slot.level}" aria-label="Restore level ${slot.level} spell slot">+</button>
+              </div>
+            </div>`;
+        }).join("")}
+      </div>
+    </section>`;
+}
+
+function dndActionMeta(action) {
+  const items = [];
+  if (action.activation) items.push(action.activation);
+  if (action.kind === "spell") items.push(action.level ? "Level " + action.level : "Cantrip");
+  if (action.range) items.push(action.range);
+  if (action.toHit != null) items.push(dndSigned(action.toHit) + " to hit");
+  if (action.saveDc != null) {
+    items.push("DC " + action.saveDc + (action.saveAbility ? " " + String(action.saveAbility).toUpperCase() : "") + " save");
+  }
+  if (action.damage) items.push(action.damage + (action.damageType ? " " + action.damageType : ""));
+  if (action.healing) items.push(action.healing + " healing");
+
+  if (action.kind === "spell") {
+    for (const scaling of action.upcastScaling || []) {
+      const interval = Math.max(1, Number(scaling.interval || 1));
+      items.push(
+        "Upcast +" + scaling.expression +
+        (scaling.damageType ? " " + scaling.damageType : "") +
+        (interval === 1 ? " per slot level" : " every " + interval + " slot levels")
+      );
+    }
+    for (const scaling of action.upcastHealingScaling || []) {
+      const interval = Math.max(1, Number(scaling.interval || 1));
+      items.push(
+        "Upcast +" + scaling.expression + " healing" +
+        (interval === 1 ? " per slot level" : " every " + interval + " slot levels")
+      );
+    }
+  }
+  if (action.concentration) items.push("Concentration");
+  if (action.ritual) items.push("Ritual");
+  if (action.components) items.push(action.components);
+  return items;
+}
+
+function dndSpellCastOptions(unit, action, runtime) {
+  if (action?.kind !== "spell" || action.level <= 0 || action.usesSpellSlot === false) return [];
+
+  const minimum = Math.max(
+    Number(action.level || 1),
+    Number(action.castAtLevel || 0)
+  );
+
+  return (unit?.dnd?.spellSlots || [])
+    .filter(slot => slot.level >= minimum && Number(slot.max || 0) > 0)
+    .map(slot => ({
+      level:slot.level,
+      remaining:dndRemainingSlots(unit, runtime, slot)
+    }));
+}
+
+const DND_ELEMENTAL_DAMAGE_TYPES = new Set(["acid","cold","fire","lightning","thunder"]);
+
+function dndActionMatchesListFilter(action, filter = state.dndListFilter) {
+  const query = normalize(filter || "");
+  if (!query) return true;
+
+  const damageType = normalize(action?.damageType || "");
+  if (query === "elemental" || query === "elements") {
+    return DND_ELEMENTAL_DAMAGE_TYPES.has(damageType);
+  }
+  if (query === "damage" || query === "damaging") {
+    return Boolean(action?.damage);
+  }
+  if (query === "melee") {
+    return action?.kind === "attack" &&
+      (!action.range || normalize(action.range).includes("5 ft") || normalize(action.range).includes("reach"));
+  }
+  if (query === "ranged" || query === "range") {
+    return action?.kind === "attack" &&
+      Boolean(action.range) &&
+      !normalize(action.range).includes("5 ft");
+  }
+
+  return [
+    action?.name,
+    action?.damageType,
+    action?.school,
+    action?.description,
+    action?.source
+  ].some(value => normalize(value || "").includes(query));
+}
+
+function renderDndListFilter(kind, count) {
+  if (!state.dndListFilter || state.dndListKind !== kind) return "";
+  return `
+    <div class="dnd-list-filter">
+      <span>LIST: <strong>${escapeHtml(state.dndListFilter)}</strong> · ${count} match${count === 1 ? "" : "es"}</span>
+      <button class="ghost-button compact" type="button" data-dnd-clear-list>Clear</button>
+    </div>`;
+}
+
+function renderDndActionCard(unit, action, runtime, focused = false) {
+  const last = runtime.lastRoll?.actionId === action.id ? runtime.lastRoll : null;
+  const actionLabel = action.kind === "spell"
+    ? action.level > 0 ? "SPELL · LEVEL " + action.level : "CANTRIP"
+    : "ATTACK";
+  const buttonLabel = action.kind === "spell"
+    ? (action.toHit != null || action.damage || action.healing ? "Cast / roll" : "Cast")
+    : "Roll attack";
+  const castOptions = dndSpellCastOptions(unit, action, runtime);
+  const defaultCast = castOptions.find(option => option.remaining > 0)?.level ?? castOptions[0]?.level ?? action.level;
+
+  return `
+    <article class="dnd-action-card${focused ? " focused" : ""}" data-dnd-action-card="${escapeHtml(action.id)}">
+      <div class="dnd-action-heading">
+        <div><span>${escapeHtml(actionLabel)}</span><h4>${escapeHtml(action.name)}</h4></div>
+        <div class="dnd-action-controls">
+          ${castOptions.length ? `
+            <label class="dnd-cast-level">
+              <span>Cast at</span>
+              <select data-dnd-cast-level aria-label="Cast ${escapeHtml(action.name)} at spell level">
+                ${castOptions.map(option => `
+                  <option value="${option.level}"${option.level === defaultCast ? " selected" : ""}${option.remaining <= 0 ? " disabled" : ""}>
+                    L${option.level} · ${option.remaining} left
+                  </option>`).join("")}
+              </select>
+            </label>` : ""}
+          <button class="primary-button compact" type="button" data-dnd-use-action="${escapeHtml(action.id)}">${escapeHtml(buttonLabel)}</button>
+        </div>
+      </div>
+      <div class="dnd-action-meta">${dndActionMeta(action).map(item => `<span>${escapeHtml(item)}</span>`).join("")}</div>
+      ${action.description ? `<div class="dnd-action-description">${escapeHtml(action.description)}</div>` : ""}
+      ${action.derived ? `<small class="dnd-derived-note">Attack values derived from the imported equipped weapon.</small>` : ""}
+      ${last ? `<div class="dnd-roll-result"><strong>${escapeHtml(last.summary || "")}</strong>${last.detail ? `<small>${escapeHtml(last.detail)}</small>` : ""}</div>` : ""}
+    </article>`;
+}
+
+function renderDndActions(unit, kind = "all") {
+  const runtime = getDndRuntimeState(unit);
+  const focused = state.dndFocusedActionId;
+  const applyFilter = list =>
+    state.dndListFilter && state.dndListKind === kind
+      ? list.filter(action => dndActionMatchesListFilter(action))
+      : list;
+  const attacks = applyFilter(unit?.dnd?.attacks || []);
+  const spells = applyFilter(unit?.dnd?.spells || []);
+  const sortStable = list => [...list].sort((a,b) => {
+    if ((a.level ?? 0) !== (b.level ?? 0)) return (a.level ?? 0) - (b.level ?? 0);
+    return a.name.localeCompare(b.name);
+  });
+  const showAttacks = kind === "all" || kind === "attack";
+  const showSpells = kind === "all" || kind === "spell";
+
+  return `
+    ${showAttacks ? `<section class="detail-section dnd-actions-section">
+      <div class="section-heading-row"><h3>Attacks</h3><span class="section-count">${attacks.length}</span></div>
+      ${renderDndListFilter("attack", attacks.length)}
+      <div class="dnd-action-list">${attacks.length
+        ? sortStable(attacks).map(action => renderDndActionCard(unit, action, runtime, action.id === focused)).join("")
+        : '<div class="empty-section">No matching attacks.</div>'}</div>
+    </section>` : ""}
+    ${showSpells ? `<section class="detail-section dnd-actions-section">
+      <div class="section-heading-row"><h3>Spells</h3><span class="section-count">${spells.length}</span></div>
+      ${renderDndListFilter("spell", spells.length)}
+      <div class="dnd-action-list">${spells.length
+        ? sortStable(spells).map(action => renderDndActionCard(unit, action, runtime, action.id === focused)).join("")
+        : '<div class="empty-section">No matching spells.</div>'}</div>
+    </section>` : ""}`;
+}
+
+function renderDndInventory(unit) {
+  const runtime = getDndRuntimeState(unit);
+  const items = dndMergedInventory(unit, runtime);
+  return `
+    <section class="detail-section dnd-inventory-section">
+      <div class="section-heading-row"><h3>Inventory</h3><span class="section-count">${items.length}</span></div>
+      <div class="dnd-inventory-add">
+        <input type="text" data-dnd-inventory-input autocomplete="off" placeholder="Add item, e.g. Hempen Rope">
+        <button class="ghost-button compact" type="button" data-dnd-inventory-add>Add item</button>
+      </div>
+      <div class="dnd-inventory-list">
+        ${items.length ? items.map(item => `
+          <div class="dnd-inventory-row">
+            <div><strong>${escapeHtml(item.name)}</strong><small>${escapeHtml(item.type || (item.equipped ? "Equipped" : "Item"))}${item.equipped ? " · Equipped" : ""}</small></div>
+            <div class="dnd-inventory-quantity">
+              <button type="button" data-dnd-inventory-minus="${escapeHtml(item.key)}" aria-label="Remove one ${escapeHtml(item.name)}">−</button>
+              <strong>${item.quantity}</strong>
+              <button type="button" data-dnd-inventory-plus="${escapeHtml(item.key)}" aria-label="Add one ${escapeHtml(item.name)}">+</button>
+            </div>
+          </div>`).join("") : '<div class="empty-section">No carried items.</div>'}
+      </div>
+    </section>`;
+}
+
+function dndCharacterTabs(unit) {
+  const hasSpells = Boolean((unit?.dnd?.spells || []).length || (unit?.dnd?.spellSlots || []).length);
+  const tabs = [
+    {id:"actions", label:"Actions"},
+    ...(hasSpells ? [{id:"spells", label:"Spells"}] : []),
+    {id:"inventory", label:"Inventory"}
+  ];
+
+  if (!tabs.some(tab => tab.id === state.dndDetailTab)) {
+    state.dndDetailTab = tabs[0].id;
+  }
+  return tabs;
+}
+
+function renderDndRestControls(unit) {
+  const pactSlots = (unit?.dnd?.spellSlots || []).filter(slot =>
+    (slot.pools || []).includes("pact") && !(slot.pools || []).includes("spell")
+  ).length;
+
+  return `
+    <div class="dnd-rest-bar">
+      <div>
+        <span>SESSION</span>
+        <strong>Turn & rest</strong>
+      </div>
+      <div class="dnd-rest-actions">
+        <button class="ghost-button compact" type="button" data-dnd-reset-turn>New turn</button>
+        <button class="ghost-button compact" type="button" data-dnd-short-rest>
+          Short rest${pactSlots ? " · pact slots" : ""}
+        </button>
+        <button class="ghost-button compact" type="button" data-dnd-long-rest>Long rest</button>
+      </div>
+    </div>`;
+}
+
+function renderDndTabBar(unit) {
+  const tabs = dndCharacterTabs(unit);
+  return `
+    <nav class="dnd-mini-tabs" role="tablist" aria-label="Character sections">
+      ${tabs.map(tab => {
+        const active = tab.id === state.dndDetailTab;
+        return `<button
+          class="dnd-mini-tab${active ? " active" : ""}"
+          type="button"
+          role="tab"
+          aria-selected="${active ? "true" : "false"}"
+          data-dnd-tab="${tab.id}">${escapeHtml(tab.label)}</button>`;
+      }).join("")}
+    </nav>`;
+}
+
+function renderDndTabPanel(id, content) {
+  const active = state.dndDetailTab === id;
+  return `
+    <div class="dnd-tab-panel${active ? "" : " hidden"}" data-dnd-panel="${id}" role="tabpanel">
+      ${content || '<div class="empty-section">Nothing to show here yet.</div>'}
+    </div>`;
+}
+
+function renderDndCharacterSections(unit) {
+  return [
+    renderDndAbilityScores(unit),
+    renderDndSkills(unit),
+    renderDndRestControls(unit),
+    renderDndTabBar(unit),
+    renderDndTabPanel("actions", [
+      renderDndActionEconomy(unit),
+      renderDndActions(unit, "attack")
+    ].filter(Boolean).join("")),
+    renderDndTabPanel("spells", [
+      renderDndSpellSlots(unit),
+      renderDndActions(unit, "spell")
+    ].filter(Boolean).join("")),
+    renderDndTabPanel("inventory", renderDndInventory(unit)),
+    renderUnitKeywordsSection(unit)
+  ].filter(Boolean).join("");
+}
+
+function dndFindAction(unit, actionId) {
+  return [...(unit?.dnd?.attacks || []), ...(unit?.dnd?.spells || [])]
+    .find(action => String(action.id) === String(actionId)) || null;
+}
+
+function dndRollScalingParts(action, scalingRows, castLevel, fallbackType = "") {
+  const parts = [];
+
+  for (const scaling of scalingRows || []) {
+    const interval = Math.max(1, Number(scaling.interval || 1));
+    const baseLevel = Math.max(
+      0,
+      Number(scaling.baseLevel ?? action?.level ?? 0)
+    );
+    const delta = Math.max(0, Number(castLevel || 0) - baseLevel);
+    const steps = Math.floor(delta / interval);
+    if (steps <= 0) continue;
+
+    const rolls = [];
+    for (let index = 0; index < steps; index++) {
+      const roll = dndRollExpression(scaling.expression);
+      if (roll) rolls.push(roll);
+    }
+    if (!rolls.length) continue;
+
+    parts.push({
+      expression:scaling.expression,
+      damageType:scaling.damageType || fallbackType || "",
+      steps,
+      total:rolls.reduce((sum, roll) => sum + roll.total, 0),
+      rolls
+    });
+  }
+
+  return parts;
+}
+
+
+function dndCombinedRollExpression(baseExpression, scalingParts = []) {
+  const parse = expression => {
+    const match = String(expression || "").replace(/\s+/g, "").match(/^(\d+)d(\d+)([+-]\d+)?$/i);
+    if (!match) return null;
+    return {
+      count:Number(match[1]),
+      sides:Number(match[2]),
+      bonus:Number(match[3] || 0)
+    };
+  };
+
+  const base = parse(baseExpression);
+  if (!base) return "";
+
+  let count = base.count;
+  let bonus = base.bonus;
+
+  for (const part of scalingParts || []) {
+    const parsed = parse(part.expression);
+    if (!parsed || parsed.sides !== base.sides) return "";
+    const steps = Math.max(1, Number(part.steps || 1));
+    count += parsed.count * steps;
+    bonus += parsed.bonus * steps;
+  }
+
+  return count + "d" + base.sides + (bonus ? (bonus > 0 ? "+" : "") + bonus : "");
+}
+
+function dndUseAction(unit, actionId, requestedCastLevel = null) {
+  const action = dndFindAction(unit, actionId);
+  if (!action) return;
+
+  const runtime = getDndRuntimeState(unit);
+  let castLevel = action.kind === "spell" ? Number(action.level || 0) : 0;
+
+  if (action.kind === "spell" && action.level > 0 && action.usesSpellSlot !== false) {
+    const minimum = Math.max(Number(action.level || 1), Number(action.castAtLevel || 0));
+    const desired = Math.max(minimum, Number(requestedCastLevel || minimum));
+    const slot = (unit.dnd?.spellSlots || []).find(item => item.level === desired);
+
+    if (!slot || dndRemainingSlots(unit, runtime, slot) <= 0) {
+      toast("No level " + desired + " spell slot is available.");
+      return;
+    }
+
+    runtime.slots[String(slot.level)] = dndSlotUsed(unit, runtime, slot) + 1;
+    castLevel = slot.level;
+  }
+
+  const economyKey = dndActionEconomyKey(action);
+  if (economyKey) runtime.economy[economyKey] = true;
+
+  let summary = action.kind === "spell"
+    ? "Cast " + action.name + (castLevel > 0 ? " · L" + castLevel : "")
+    : action.name;
+  const details = [];
+
+  const popup = {
+    eyebrow:action.kind === "spell" ? "SPELL" : "ATTACK",
+    title:action.name,
+    total:"",
+    subtitle:castLevel > 0 ? "Cast at level " + castLevel : "",
+    breakdown:[]
+  };
+
+  if (action.kind === "spell" && castLevel > 0) {
+    details.push("Cast at level " + castLevel);
+  }
+
+  if (action.toHit != null) {
+    const d20 = dndRollDie(20);
+    const total = d20 + Number(action.toHit || 0);
+    summary = "Attack roll " + total +
+      (action.kind === "spell" && castLevel > 0 ? " · L" + castLevel : "");
+    details.push("d20 " + d20 + " " + dndSigned(action.toHit));
+
+    popup.eyebrow = action.kind === "spell" ? "SPELL ATTACK" : "ATTACK ROLL";
+    popup.total = String(total);
+    popup.subtitle = "d20 " + d20 + " " + dndSigned(action.toHit);
+  } else if (action.saveDc != null) {
+    summary = "DC " + action.saveDc +
+      (action.saveAbility ? " " + String(action.saveAbility).toUpperCase() : "") +
+      " save" +
+      (action.kind === "spell" && castLevel > 0 ? " · L" + castLevel : "");
+
+    popup.eyebrow = "SPELL SAVE";
+    popup.subtitle =
+      "DC " + action.saveDc + " " +
+      (action.saveAbility ? String(action.saveAbility).toUpperCase() + " save" : "saving throw") +
+      (castLevel > 0 ? " · cast at level " + castLevel : "");
+  }
+
+  if (action.damage) {
+    const baseDamage = dndRollExpression(action.damage);
+    const upcastParts = dndRollScalingParts(
+      action,
+      action.upcastScaling,
+      castLevel,
+      action.damageType
+    );
+
+    if (baseDamage) {
+      const sameDamageType = upcastParts.every(part =>
+        !part.damageType ||
+        !action.damageType ||
+        normalize(part.damageType) === normalize(action.damageType)
+      );
+
+      if (sameDamageType) {
+        const extraTotal = upcastParts.reduce((sum, part) => sum + part.total, 0);
+        const total = baseDamage.total + extraTotal;
+        const rollParts = [
+          action.damage + "=" + baseDamage.total,
+          ...upcastParts.map(part =>
+            (part.steps > 1 ? part.steps + "×" : "") +
+            part.expression + "=" + part.total
+          )
+        ];
+
+        const damageLine =
+          "Damage " + total +
+          " (" + rollParts.join(" + ") + ")" +
+          (action.damageType ? " " + action.damageType : "");
+        details.push(damageLine);
+
+        if (!popup.total) {
+          popup.eyebrow = action.kind === "spell" ? "SPELL DAMAGE" : "DAMAGE ROLL";
+          popup.total = String(total);
+          const combinedExpression = dndCombinedRollExpression(action.damage, upcastParts);
+          popup.subtitle = [
+            combinedExpression
+              ? combinedExpression + (action.damageType ? " " + action.damageType + " damage" : " damage")
+              : (action.damageType ? action.damageType + " damage" : "Damage"),
+            popup.subtitle
+          ].filter(Boolean).join(" · ");
+        } else {
+          popup.breakdown.push(damageLine);
+        }
+      } else {
+        const baseLine =
+          "Damage " + baseDamage.total +
+          " (" + action.damage + ")" +
+          (action.damageType ? " " + action.damageType : "");
+        details.push(baseLine);
+        popup.breakdown.push(baseLine);
+
+        for (const part of upcastParts) {
+          const extraLine =
+            "Upcast +" + part.total +
+            " (" + (part.steps > 1 ? part.steps + "×" : "") + part.expression + ")" +
+            (part.damageType ? " " + part.damageType : "");
+          details.push(extraLine);
+          popup.breakdown.push(extraLine);
+        }
+
+        if (!popup.total) {
+          popup.eyebrow = "DAMAGE ROLL";
+          popup.total = String(baseDamage.total);
+        }
+      }
+    }
+  }
+
+  if (action.healing) {
+    const baseHealing = dndRollExpression(action.healing);
+    const upcastParts = dndRollScalingParts(
+      action,
+      action.upcastHealingScaling,
+      castLevel,
+      ""
+    );
+
+    if (baseHealing) {
+      const extraTotal = upcastParts.reduce((sum, part) => sum + part.total, 0);
+      const total = baseHealing.total + extraTotal;
+      const rollParts = [
+        action.healing + "=" + baseHealing.total,
+        ...upcastParts.map(part =>
+          (part.steps > 1 ? part.steps + "×" : "") +
+          part.expression + "=" + part.total
+        )
+      ];
+      const healingLine =
+        "Healing " + total +
+        " (" + rollParts.join(" + ") + ")";
+      details.push(healingLine);
+
+      if (!popup.total) {
+        popup.eyebrow = "HEALING ROLL";
+        popup.total = String(total);
+        const combinedExpression = dndCombinedRollExpression(action.healing, upcastParts);
+        popup.subtitle = [
+          combinedExpression ? combinedExpression + " healing" : "Healing",
+          castLevel > 0 ? "Cast at level " + castLevel : ""
+        ].filter(Boolean).join(" · ");
+      } else {
+        popup.breakdown.push(healingLine);
+      }
+    }
+  }
+
+  if (!popup.total) {
+    if (action.saveDc != null) {
+      popup.total = "DC " + action.saveDc;
+      popup.eyebrow = "SPELL SAVE";
+    } else {
+      popup.total = action.kind === "spell" ? "CAST" : "USED";
+      popup.eyebrow = action.kind === "spell" ? "SPELL CAST" : "ACTION";
+    }
+  }
+
+  runtime.lastRoll = {
+    actionId:action.id,
+    castLevel,
+    summary,
+    detail:details.join(" · "),
+    at:Date.now()
+  };
+  saveDndRuntimeState(unit, runtime);
+
+  state.dndFocusedActionId = action.id;
+  state.dndDetailTab = action.kind === "spell" ? "spells" : "actions";
+  state.dndListFilter = "";
+  state.dndListKind = "";
+
+  playDndActionSound(action.kind);
+  renderDetail(unit);
+  showDndRollModal(popup);
+}
+
+function dndApplyRest(unit, type) {
+  const runtime = getDndRuntimeState(unit);
+  runtime.economy = {action:false, bonus:false, reaction:false};
+  runtime.lastRoll = null;
+
+  if (type === "long") {
+    for (const slot of unit?.dnd?.spellSlots || []) {
+      runtime.slots[String(slot.level)] = 0;
+    }
+    saveDndRuntimeState(unit, runtime);
+    renderDetail(unit);
+    toast("Long rest — spell slots restored");
+    return;
+  }
+
+  let restoredPactLevels = 0;
+  for (const slot of unit?.dnd?.spellSlots || []) {
+    const pools = slot.pools || [];
+    if (pools.includes("pact") && !pools.includes("spell")) {
+      runtime.slots[String(slot.level)] = 0;
+      restoredPactLevels++;
+    }
+  }
+  saveDndRuntimeState(unit, runtime);
+  renderDetail(unit);
+  toast(restoredPactLevels
+    ? "Short rest — pact slots restored"
+    : "Short rest");
+}
+
+function bindDndDetailControls(unit = state.selected) {
+  if (!unit || unit.system !== "dnd" || !els.detailSections) return;
+
+  els.detailSections.querySelectorAll("[data-dnd-tab]").forEach(button => {
+    button.addEventListener("click", () => {
+      const tab = button.dataset.dndTab;
+      state.dndDetailTab = tab;
+      state.dndListFilter = "";
+      state.dndListKind = "";
+
+      els.detailSections.querySelectorAll("[data-dnd-tab]").forEach(tabButton => {
+        const active = tabButton.dataset.dndTab === tab;
+        tabButton.classList.toggle("active", active);
+        tabButton.setAttribute("aria-selected", active ? "true" : "false");
+      });
+
+      els.detailSections.querySelectorAll("[data-dnd-panel]").forEach(panel => {
+        panel.classList.toggle("hidden", panel.dataset.dndPanel !== tab);
+      });
+    });
+  });
+
+  els.detailSections.querySelectorAll("[data-dnd-ability-check]").forEach(button => {
+    button.addEventListener("click", () => {
+      dndRollCheck(unit, "ability", button.dataset.dndAbilityCheck);
+    });
+  });
+
+  els.detailSections.querySelectorAll("[data-dnd-skill-roll]").forEach(button => {
+    button.addEventListener("click", () => {
+      dndRollCheck(unit, "skill", button.dataset.dndSkillRoll);
+    });
+  });
+
+  els.detailSections.querySelectorAll("[data-dnd-economy]").forEach(button => {
+    button.addEventListener("click", () => {
+      const runtime = getDndRuntimeState(unit);
+      const key = button.dataset.dndEconomy;
+      runtime.economy[key] = !runtime.economy[key];
+      saveDndRuntimeState(unit, runtime);
+      renderDetail(unit);
+    });
+  });
+
+  els.detailSections.querySelector("[data-dnd-reset-turn]")?.addEventListener("click", () => {
+    const runtime = getDndRuntimeState(unit);
+    runtime.economy = {action:false, bonus:false, reaction:false};
+    runtime.lastRoll = null;
+    saveDndRuntimeState(unit, runtime);
+    renderDetail(unit);
+    toast("New turn — action economy reset");
+  });
+
+  els.detailSections.querySelector("[data-dnd-short-rest]")?.addEventListener("click", () => {
+    dndApplyRest(unit, "short");
+  });
+
+  els.detailSections.querySelector("[data-dnd-long-rest]")?.addEventListener("click", () => {
+    dndApplyRest(unit, "long");
+  });
+
+  els.detailSections.querySelectorAll("[data-dnd-clear-list]").forEach(button => {
+    button.addEventListener("click", () => {
+      state.dndListFilter = "";
+      state.dndListKind = "";
+      renderDetail(unit);
+    });
+  });
+
+  els.detailSections.querySelectorAll("[data-dnd-slot-use]").forEach(button => {
+    button.addEventListener("click", () => {
+      const level = Number(button.dataset.dndSlotUse);
+      const slot = (unit.dnd?.spellSlots || []).find(item => item.level === level);
+      if (!slot) return;
+      const runtime = getDndRuntimeState(unit);
+      const used = dndSlotUsed(unit, runtime, slot);
+      if (used >= slot.max) return toast("No level " + level + " slots remaining.");
+      runtime.slots[String(level)] = used + 1;
+      saveDndRuntimeState(unit, runtime);
+      renderDetail(unit);
+    });
+  });
+
+  els.detailSections.querySelectorAll("[data-dnd-slot-restore]").forEach(button => {
+    button.addEventListener("click", () => {
+      const level = Number(button.dataset.dndSlotRestore);
+      const slot = (unit.dnd?.spellSlots || []).find(item => item.level === level);
+      if (!slot) return;
+      const runtime = getDndRuntimeState(unit);
+      runtime.slots[String(level)] = Math.max(0, dndSlotUsed(unit, runtime, slot) - 1);
+      saveDndRuntimeState(unit, runtime);
+      renderDetail(unit);
+    });
+  });
+
+  els.detailSections.querySelectorAll("[data-dnd-use-action]").forEach(button => {
+    button.addEventListener("click", () => {
+      const card = button.closest("[data-dnd-action-card]");
+      const castLevel = Number(card?.querySelector("[data-dnd-cast-level]")?.value || 0) || null;
+      dndUseAction(unit, button.dataset.dndUseAction, castLevel);
+    });
+  });
+
+  const addItem = () => {
+    const input = els.detailSections.querySelector("[data-dnd-inventory-input]");
+    const name = input?.value?.trim();
+    if (!name) return;
+    adjustDndInventory(unit, name, 1);
+    renderDetail(unit);
+    toast("Added " + name);
+  };
+  els.detailSections.querySelector("[data-dnd-inventory-add]")?.addEventListener("click", addItem);
+  els.detailSections.querySelector("[data-dnd-inventory-input]")?.addEventListener("keydown", event => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      addItem();
+    }
+  });
+
+  els.detailSections.querySelectorAll("[data-dnd-inventory-plus]").forEach(button => {
+    button.addEventListener("click", () => {
+      const item = dndMergedInventory(unit).find(row => row.key === button.dataset.dndInventoryPlus);
+      if (!item) return;
+      adjustDndInventory(unit, item.name, 1);
+      renderDetail(unit);
+    });
+  });
+  els.detailSections.querySelectorAll("[data-dnd-inventory-minus]").forEach(button => {
+    button.addEventListener("click", () => {
+      const item = dndMergedInventory(unit).find(row => row.key === button.dataset.dndInventoryMinus);
+      if (!item) return;
+      adjustDndInventory(unit, item.name, -1);
+      renderDetail(unit);
+    });
+  });
+
+  if (state.dndFocusedActionId && state.dndScrollToFocusedAction) {
+    state.dndScrollToFocusedAction = false;
+    requestAnimationFrame(() => {
+      const card = [...els.detailSections.querySelectorAll("[data-dnd-action-card]")]
+        .find(item => item.dataset.dndActionCard === state.dndFocusedActionId);
+      card?.scrollIntoView({block:"center", behavior:"smooth"});
+    });
+  }
+}
+
 function renderDetail(unit) {
+  updateGameContextUi(unit);
+
   if (!unit) {
     els.emptyDetail?.classList.add("hidden");
     els.detailCard?.classList.add("hidden");
@@ -3337,7 +10023,29 @@ function renderDetail(unit) {
   updateLinkedUnitButton(sourceUnit);
   updatePinButton();
 
-  const statOrder = ["m","t","sv","w","ld","oc","insv"];
+  const necromundaVehicle = unit.system === "necromunda" &&
+    (unit.categories || []).some(category => normalize(category) === "vehicle");
+
+  const statOrder = unit.system === "dnd"
+    ? ["hp","ac","speed","init","pb","level"]
+    : unit.system === "necromunda"
+    ? necromundaVehicle
+      ? ["m","fr","front toughness","sd","side toughness","rr","rear toughness","hp","hit points","hnd","handling","cl"]
+      : ["m","ws","bs","s","t","w","i","a","ld","cl","wil","int"]
+    : unit.system === "legions-imperialis"
+      ? ["move","sv","caf","morale","w"]
+      : unit.system === "kill-team"
+      ? ["apl","move","save","wounds"]
+      : unit.system === "old-world"
+      ? ["m","ws","bs","s","t","w","i","a","ld"]
+    : unit.system === "heresy"
+      ? [
+          "m","ws","bs","s","t","w","i","a","ld","cl","wp","in","sav","inv",
+          "front armour","side armour","rear armour","front","rear",
+          "primary armour","exposed armour","primary","exposed","hp",
+          "transport capacity","transport","access points"
+        ]
+      : ["m","t","sv","w","ld","oc","insv"];
   const statMap = new Map((unit.stats || []).map(stat => [normalize(stat.label), stat]));
   let displayStats = statOrder.map(key => statMap.get(key)).filter(Boolean);
 
@@ -3347,6 +10055,28 @@ function renderDetail(unit) {
       .slice(0, 7);
   }
 
+  if (
+    unit.system === "old-world" &&
+    unit.oldWorldModelProfiles?.length > 1
+  ) {
+    displayStats = [];
+  }
+
+  if (
+    unit.system === "heresy" &&
+    (unit.heresyModelProfiles?.length > 1 || unit.heresyComponents?.length)
+  ) {
+    displayStats = [];
+  }
+
+  if (
+    unit.system === "legions-imperialis" &&
+    unit.legionsImperialisProfiles?.length > 1
+  ) {
+    displayStats = [];
+  }
+
+  els.detailStats?.classList.toggle("hidden", !displayStats.length);
   els.detailStats.innerHTML = displayStats.length
     ? displayStats.map(stat => `
         <div class="stat">
@@ -3355,22 +10085,106 @@ function renderDetail(unit) {
         </div>`).join("")
     : "";
 
+  if (unit.system === "dnd") {
+    els.detailSections.innerHTML = renderDndCharacterSections(unit);
+    bindDndDetailControls(unit);
+    return;
+  }
+
   const sections = [];
 
+  if (unit.system === "necromunda") {
+    sections.push(renderNecromundaCampaignSection(unit));
+  }
+
+  if (unit.system === "old-world") {
+    sections.push(renderOldWorldUnitInfoSection(unit));
+    if (unit.oldWorldModelProfiles?.length > 1) {
+      sections.push(renderOldWorldModelProfileSection(unit.oldWorldModelProfiles));
+    }
+    if (unit.oldWorldSpells?.length) {
+      sections.push(renderOldWorldSpellSection(unit.oldWorldSpells));
+    }
+  }
+
+  if (unit.system === "legions-imperialis" && unit.legionsImperialisProfiles?.length > 1) {
+    sections.push(renderLegionsImperialisProfileSection(unit.legionsImperialisProfiles));
+  }
+
+  if (unit.system === "heresy" && unit.heresyModelProfiles?.length > 1) {
+    sections.push(renderHeresyModelProfileSection(unit.heresyModelProfiles));
+  }
+
+  if (unit.system === "heresy" && unit.heresyComponents?.length) {
+    sections.push(renderHeresyComponentSection(unit.heresyComponents));
+  }
+
   if (unit.profiles?.length) {
-    const rangedWeapons = unit.profiles.filter(profile => profile.type === "Ranged Weapons");
-    const meleeWeapons = unit.profiles.filter(profile => profile.type === "Melee Weapons");
+    const rangedWeapons = unit.profiles.filter(profile => normalize(profile.type || "").includes("ranged"));
+    const meleeWeapons = unit.profiles.filter(profile => normalize(profile.type || "").includes("melee"));
     const otherWeapons = unit.profiles.filter(profile =>
-      profile.type !== "Ranged Weapons" && profile.type !== "Melee Weapons"
+      !normalize(profile.type || "").includes("ranged") &&
+      !normalize(profile.type || "").includes("melee")
     );
 
-    if (rangedWeapons.length) sections.push(renderWeaponSection(rangedWeapons, "Ranged weapons"));
-    if (meleeWeapons.length) sections.push(renderWeaponSection(meleeWeapons, "Melee weapons"));
-    if (otherWeapons.length) sections.push(renderWeaponSection(otherWeapons, "Weapons"));
+    if (unit.system === "warfleet") {
+      sections.push(renderWarfleetsWeaponSection(unit.profiles, "Weapons"));
+    } else if (unit.system === "necromunda") {
+      sections.push(renderNecromundaWeaponSection(unit.profiles, "Weapons"));
+    } else if (unit.system === "legions-imperialis") {
+      sections.push(renderLegionsImperialisWeaponSection(unit.profiles, "Weapons"));
+    } else if (unit.system === "kill-team") {
+      const ranged = unit.profiles.filter(profile => killTeamWeaponKind(profile) === "ranged");
+      const melee = unit.profiles.filter(profile => killTeamWeaponKind(profile) === "melee");
+      const unknown = unit.profiles.filter(profile => killTeamWeaponKind(profile) === "other");
+      if (ranged.length) sections.push(renderKillTeamWeaponSection(ranged, "Ranged weapons"));
+      if (melee.length) sections.push(renderKillTeamWeaponSection(melee, "Melee weapons"));
+      if (unknown.length) sections.push(renderKillTeamWeaponSection(unknown, "Weapons"));
+    } else if (unit.system === "old-world") {
+      sections.push(renderOldWorldWeaponSection(unit.profiles, "Weapons"));
+    } else if (unit.system === "heresy") {
+      if (rangedWeapons.length) sections.push(renderHeresyWeaponSection(rangedWeapons, "Ranged weapons", "ranged"));
+      if (meleeWeapons.length) sections.push(renderHeresyWeaponSection(meleeWeapons, "Melee weapons", "melee"));
+      if (otherWeapons.length) sections.push(renderHeresyWeaponSection(otherWeapons, "Weapons", "other"));
+    } else if (unit.system === "opr") {
+      if (rangedWeapons.length) sections.push(renderOprWeaponSection(rangedWeapons, "Ranged weapons"));
+      if (meleeWeapons.length) sections.push(renderOprWeaponSection(meleeWeapons, "Melee weapons"));
+      if (otherWeapons.length) sections.push(renderOprWeaponSection(otherWeapons, "Weapons"));
+    } else if (unit.system === "aos") {
+      if (rangedWeapons.length) sections.push(renderAosWeaponSection(rangedWeapons, "Ranged weapons"));
+      if (meleeWeapons.length) sections.push(renderAosWeaponSection(meleeWeapons, "Melee weapons"));
+      if (otherWeapons.length) sections.push(renderAosWeaponSection(otherWeapons, "Weapons"));
+    } else {
+      const fortyKRanged = unit.profiles.filter(profile => profile.type === "Ranged Weapons");
+      const fortyKMelee = unit.profiles.filter(profile => profile.type === "Melee Weapons");
+      const fortyKOther = unit.profiles.filter(profile =>
+        profile.type !== "Ranged Weapons" && profile.type !== "Melee Weapons"
+      );
+
+      if (fortyKRanged.length) sections.push(renderWeaponSection(fortyKRanged, "Ranged weapons"));
+      if (fortyKMelee.length) sections.push(renderWeaponSection(fortyKMelee, "Melee weapons"));
+      if (fortyKOther.length) sections.push(renderWeaponSection(fortyKOther, "Weapons"));
+    }
   }
 
   if (unit.rules?.length) {
-    sections.push(renderAbilitySection(unit.rules));
+    sections.push(
+      (unit.system === "opr" || unit.system === "warfleet")
+        ? renderOprAbilitySection(unit.rules, unit.system === "warfleet" ? "Rules & systems" : "Special rules")
+        : unit.system === "necromunda"
+          ? renderOprAbilitySection(unit.rules, "Skills, rules & gear")
+          : unit.system === "legions-imperialis"
+            ? renderOprAbilitySection(unit.rules, "Special rules")
+            : unit.system === "kill-team"
+            ? renderOprAbilitySection(unit.rules, "Abilities, actions & equipment")
+            : unit.system === "heresy"
+            ? renderOprAbilitySection(unit.rules, "Wargear, reactions & rules")
+            : unit.system === "old-world"
+              ? renderOprAbilitySection(unit.rules, "Rules, items & abilities")
+            : unit.system === "aos"
+          ? renderAosAbilitySection(unit.rules)
+          : renderAbilitySection(unit.rules)
+    );
   }
 
   if (sourceUnit.importFormat === "txt") {
@@ -3391,6 +10205,86 @@ function renderDetail(unit) {
   els.detailSections.innerHTML = sections.filter(Boolean).join("") ||
     '<section class="detail-section"><div class="empty-section">No additional profiles were found in this entry.</div></section>';
   bindDynamicDetailControls();
+}
+
+function unitRosterContext(unit = state.selected) {
+  if (!unit) return null;
+
+  if (state.selectedRosterId) {
+    const exact = state.rosters.find(roster =>
+      roster.id === state.selectedRosterId &&
+      (roster.units || []).some(candidate => candidate.id === unit.id)
+    );
+    if (exact) return exact;
+  }
+
+  const active = state.rosters[state.activeRoster];
+  if (active && (active.units || []).some(candidate => candidate.id === unit.id)) return active;
+
+  return state.rosters.find(roster =>
+    (roster.units || []).some(candidate => candidate.id === unit.id)
+  ) || null;
+}
+
+function unitNicknameKey(rosterId, unitId) {
+  return "tv_unit_nickname_" + rosterId + "_" + unitId;
+}
+
+function getUnitNickname(unit = state.selected, roster = null) {
+  if (!unit) return "";
+  const context = roster || unitRosterContext(unit);
+  if (!context?.id) return "";
+  return String(localStorage.getItem(unitNicknameKey(context.id, unit.id)) || "").trim();
+}
+
+function setUnitNickname(unit, nickname, roster = null) {
+  if (!unit) return "";
+  const context = roster || unitRosterContext(unit);
+  if (!context?.id) return "";
+
+  const cleaned = String(nickname || "").replace(/\s+/g, " ").trim().slice(0, 48);
+  const key = unitNicknameKey(context.id, unit.id);
+
+  if (cleaned) localStorage.setItem(key, cleaned);
+  else localStorage.removeItem(key);
+
+  return cleaned;
+}
+
+function openUnitNicknameModal() {
+  if (!state.selected || !els.unitNicknameModal || !els.unitNicknameInput) return;
+  const nickname = getUnitNickname(state.selected);
+  els.unitNicknameUnitName.textContent = state.selected.name || "Unit";
+  els.unitNicknameInput.value = nickname;
+  els.unitNicknameModal.classList.remove("hidden");
+  requestAnimationFrame(() => {
+    els.unitNicknameInput.focus();
+    els.unitNicknameInput.select();
+  });
+}
+
+function closeUnitNicknameModal() {
+  els.unitNicknameModal?.classList.add("hidden");
+}
+
+function saveUnitNicknameFromModal() {
+  if (!state.selected || !els.unitNicknameInput) return;
+  const nickname = setUnitNickname(state.selected, els.unitNicknameInput.value);
+  closeUnitNicknameModal();
+  updateUnitTopStatuses(state.selected);
+  if (nickname) toast("Nickname saved: " + nickname);
+  else toast("Nickname cleared");
+  if (normalize(els.searchInput?.value || "")) renderResults(els.searchInput.value);
+}
+
+function clearUnitNicknameFromModal() {
+  if (!state.selected) return;
+  setUnitNickname(state.selected, "");
+  if (els.unitNicknameInput) els.unitNicknameInput.value = "";
+  closeUnitNicknameModal();
+  updateUnitTopStatuses(state.selected);
+  if (normalize(els.searchInput?.value || "")) renderResults(els.searchInput.value);
+  toast("Nickname cleared");
 }
 
 const STATUS_OPTIONS = ["Battle-shocked","Once-per-game used"];
@@ -3428,6 +10322,10 @@ function toggleStatus(status) {
 }
 
 function updateUnitTopStatuses(unit = state.selected) {
+  const non40k = state.gameSystem !== "40k" || (unit && unit.system !== "40k");
+  els.battleShockToggle?.classList.toggle("hidden", non40k);
+  els.oncePerGameToggle?.classList.toggle("hidden", non40k);
+
   const active = new Set(unit ? getStatuses(unit) : []);
   const battleShocked = active.has("Battle-shocked");
   const onceUsed = active.has("Once-per-game used");
@@ -3442,6 +10340,16 @@ function updateUnitTopStatuses(unit = state.selected) {
     els.oncePerGameToggle.classList.toggle("active", onceUsed);
     els.oncePerGameToggle.setAttribute("aria-pressed", onceUsed ? "true" : "false");
     els.oncePerGameToggle.textContent = "Once-per-game used";
+  }
+
+  if (els.unitNicknameButton) {
+    const nickname = unit ? getUnitNickname(unit) : "";
+    els.unitNicknameButton.classList.toggle("hidden", !unit);
+    els.unitNicknameButton.classList.toggle("active", Boolean(nickname));
+    els.unitNicknameButton.textContent = nickname ? "Nickname: " + nickname : "Nickname";
+    els.unitNicknameButton.title = nickname
+      ? "Voice/search nickname: " + nickname
+      : "Add a quick nickname for voice and text search";
   }
 }
 
@@ -3497,6 +10405,466 @@ function cleanUniqueRuleText(text = "") {
   return cleanRuleText(text)
     .replace(/\s+/g, " ")
     .trim();
+}
+
+
+
+
+
+
+
+function renderNecromundaCampaignSection(unit) {
+  const data = unit?.necromunda || {};
+  const rows = [
+    ["Profile", data.profileName || data.typeLine || ""],
+    ["Status", data.status || "Active"],
+    ["XP", data.xp || ""],
+    ["Rating", data.rating != null ? data.rating + "cr" : ""],
+    ...(data.counters || []).map(counter => [counter.label, counter.value])
+  ].filter(([,value]) => value !== null && value !== undefined && value !== "");
+
+  if (!rows.length) return "";
+
+  return '<section class="detail-section necromunda-campaign-section">' +
+    '<div class="section-heading-row"><h3>Fighter status</h3></div>' +
+    '<div class="necromunda-campaign-grid">' +
+      rows.map(([label,value]) =>
+        '<div class="necromunda-campaign-row">' +
+          '<span>' + escapeHtml(label) + '</span>' +
+          '<strong>' + escapeHtml(value) + '</strong>' +
+        '</div>'
+      ).join("") +
+    '</div></section>';
+}
+
+function renderNecromundaWeaponSection(profiles, title = "Weapons") {
+  const columns = ["SR","LR","Str","AP","L","Traits"];
+  const aliases = {
+    sr:["sr","short range"],
+    lr:["lr","long range"],
+    str:["str","strength"],
+    ap:["ap","armour piercing","armor piercing"],
+    l:["l","lethality"],
+    traits:["traits","trait"]
+  };
+
+  function valueFor(values, column) {
+    const choices = aliases[normalize(column)] || [normalize(column)];
+    for (const choice of choices) {
+      if (values.has(choice)) return values.get(choice);
+    }
+    return "—";
+  }
+
+  const rows = (profiles || []).map(profile => {
+    const values = new Map(
+      (profile.values || []).map(item => [normalize(item.label), item.value ?? ""])
+    );
+    return {
+      name:profile.name || "Weapon",
+      values:columns.map(column => valueFor(values, column) || "—")
+    };
+  });
+
+  const head = columns.map(column => "<th>" + escapeHtml(column) + "</th>").join("");
+  const body = rows.map(row => {
+    const cells = row.values.map((value,index) =>
+      '<td data-label="' + escapeHtml(columns[index]) + '" class="' +
+      (index === 5 ? "necromunda-weapon-traits" : "weapon-number") + '">' +
+      escapeHtml(value) + '</td>'
+    ).join("");
+
+    return '<tr class="weapon-row weapon-stat-row">' +
+      '<td class="weapon-name"><strong>' + escapeHtml(row.name) + '</strong></td>' +
+      cells +
+      '</tr>';
+  }).join("");
+
+  return '<section class="detail-section weapon-section necromunda-weapon-section">' +
+    '<div class="section-heading-row"><h3>' + escapeHtml(title) + '</h3>' +
+    '<span class="section-count">' + rows.length + '</span></div>' +
+    '<div class="weapon-table-wrap"><table class="weapon-table compact-weapon-table necromunda-weapon-table">' +
+    '<thead><tr><th class="weapon-name-column">Weapon</th>' + head + '</tr></thead>' +
+    '<tbody>' + body + '</tbody></table></div></section>';
+}
+
+function renderLegionsImperialisProfileSection(profiles = []) {
+  const columns = ["Move","Sv","CAF","Morale","W"];
+  const rows = (profiles || []).map(profile => {
+    const values = new Map(
+      (profile.values || []).map(item => [normalize(item.label), item.value ?? ""])
+    );
+    return {
+      name:profile.name || "Model",
+      values:columns.map(column => values.get(normalize(column)) || "—")
+    };
+  });
+
+  const head = columns.map(column => "<th>" + escapeHtml(column) + "</th>").join("");
+  const body = rows.map(row => {
+    const cells = row.values.map((value,index) =>
+      '<td data-label="' + escapeHtml(columns[index]) + '" class="weapon-number">' +
+      escapeHtml(value) + '</td>'
+    ).join("");
+
+    return '<tr class="weapon-row weapon-stat-row">' +
+      '<td class="weapon-name"><strong>' + escapeHtml(row.name) + '</strong></td>' +
+      cells +
+      '</tr>';
+  }).join("");
+
+  return '<section class="detail-section weapon-section legions-imperialis-profile-section">' +
+    '<div class="section-heading-row"><h3>Detachment profiles</h3>' +
+    '<span class="section-count">' + rows.length + '</span></div>' +
+    '<div class="weapon-table-wrap"><table class="weapon-table compact-weapon-table legions-imperialis-profile-table">' +
+    '<thead><tr><th class="weapon-name-column">Model</th>' + head + '</tr></thead>' +
+    '<tbody>' + body + '</tbody></table></div></section>';
+}
+
+function renderLegionsImperialisWeaponSection(profiles, title = "Weapons") {
+  const columns = ["Range","Dice","To Hit","AP","Traits"];
+  const rows = (profiles || []).map(profile => {
+    const values = new Map(
+      (profile.values || []).map(item => [normalize(item.label), item.value ?? ""])
+    );
+    return {
+      name:profile.name || "Weapon",
+      quantity:Number.isFinite(Number(profile.quantity)) ? Math.max(1, Number(profile.quantity)) : null,
+      values:columns.map(column => values.get(normalize(column)) || "—")
+    };
+  });
+
+  const head = columns.map(column => "<th>" + escapeHtml(column) + "</th>").join("");
+  const body = rows.map(row => {
+    const cells = row.values.map((value,index) =>
+      '<td data-label="' + escapeHtml(columns[index]) + '" class="' +
+      (index === 4 ? "legions-imperialis-traits" : "weapon-number") + '">' +
+      escapeHtml(value) + '</td>'
+    ).join("");
+
+    return '<tr class="weapon-row weapon-stat-row">' +
+      '<td class="weapon-name"><div class="weapon-title-line">' +
+      (row.quantity != null ? '<span class="weapon-quantity">' + row.quantity + '×</span>' : '') +
+      '<strong>' + escapeHtml(row.name) + '</strong></div></td>' +
+      cells +
+      '</tr>';
+  }).join("");
+
+  return '<section class="detail-section weapon-section legions-imperialis-weapon-section">' +
+    '<div class="section-heading-row"><h3>' + escapeHtml(title) + '</h3>' +
+    '<span class="section-count">' + rows.length + '</span></div>' +
+    '<div class="weapon-table-wrap"><table class="weapon-table compact-weapon-table legions-imperialis-weapon-table">' +
+    '<thead><tr><th class="weapon-name-column">Weapon</th>' + head + '</tr></thead>' +
+    '<tbody>' + body + '</tbody></table></div></section>';
+}
+
+function killTeamWeaponKind(profile = {}) {
+  const name = String(profile.name || "").trim();
+  if (name.startsWith("⌖")) return "ranged";
+  if (name.startsWith("⚔")) return "melee";
+  return "other";
+}
+
+function renderKillTeamWeaponSection(profiles, title = "Weapons") {
+  const columns = ["ATK","HIT","DMG","WR"];
+
+  const rows = (profiles || []).map(profile => {
+    const values = new Map(
+      (profile.values || []).map(item => [normalize(item.label), item.value ?? ""])
+    );
+    return {
+      name:String(profile.name || "Weapon").replace(/^[⌖⚔]\s*/, ""),
+      quantity:Number.isFinite(Number(profile.quantity)) ? Math.max(1, Number(profile.quantity)) : null,
+      values:columns.map(column => values.get(normalize(column)) || "—")
+    };
+  });
+
+  const head = columns.map(column => "<th>" + escapeHtml(column) + "</th>").join("");
+  const body = rows.map(row => {
+    const cells = row.values.map((value, index) =>
+      '<td data-label="' + escapeHtml(columns[index]) + '" class="' +
+      (index === 3 ? "kill-team-weapon-rules" : "weapon-number") + '">' +
+      escapeHtml(value) + '</td>'
+    ).join("");
+
+    return '<tr class="weapon-row weapon-stat-row">' +
+      '<td class="weapon-name"><div class="weapon-title-line">' +
+      (row.quantity != null ? '<span class="weapon-quantity">' + row.quantity + '×</span>' : '') +
+      '<strong>' + escapeHtml(row.name) + '</strong></div></td>' +
+      cells +
+      '</tr>';
+  }).join("");
+
+  return '<section class="detail-section weapon-section kill-team-weapon-section">' +
+    '<div class="section-heading-row"><h3>' + escapeHtml(title) + '</h3>' +
+    '<span class="section-count">' + rows.length + '</span></div>' +
+    '<div class="weapon-table-wrap"><table class="weapon-table compact-weapon-table kill-team-weapon-table">' +
+    '<thead><tr><th class="weapon-name-column">Weapon</th>' + head + '</tr></thead>' +
+    '<tbody>' + body + '</tbody></table></div></section>';
+}
+
+function renderOldWorldUnitInfoSection(unit) {
+  const profile = unit?.oldWorldUnitProfiles?.[0];
+  const values = new Map(
+    (profile?.values || []).map(item => [normalize(item.label), item.value ?? ""])
+  );
+  const rows = [
+    ["Troop Type", values.get("troop type") || ""],
+    ["Unit Size", values.get("unit size") || ""],
+    ["Points", (unit?.stats || []).find(stat => normalize(stat.label) === "pts")?.value || ""]
+  ].filter(([,value]) => value !== "" && value != null);
+
+  if (!rows.length) return "";
+
+  return `
+    <section class="detail-section old-world-unit-info">
+      <div class="section-heading-row"><h3>Unit</h3></div>
+      <div class="stat-grid old-world-unit-meta">
+        ${rows.map(([label,value]) => `
+          <div class="stat">
+            <span>${escapeHtml(label)}</span>
+            <strong>${escapeHtml(value)}</strong>
+          </div>`).join("")}
+      </div>
+    </section>`;
+}
+
+function renderOldWorldModelProfileSection(profiles = []) {
+  if (profiles.length < 2) return "";
+
+  const columns = ["M","WS","BS","S","T","W","I","A","Ld"];
+  const rows = profiles.map(profile => {
+    const values = new Map(
+      (profile.values || []).map(item => [normalize(item.label), item.value ?? ""])
+    );
+    return {
+      name:profile.name || "Model",
+      values:columns.map(column => values.get(normalize(column)) || "—")
+    };
+  });
+
+  return `
+    <section class="detail-section weapon-section old-world-profile-section">
+      <div class="section-heading-row">
+        <h3>Model profiles</h3>
+        <span class="section-count">${rows.length}</span>
+      </div>
+      <div class="weapon-table-wrap">
+        <table class="weapon-table compact-weapon-table old-world-profile-table">
+          <thead>
+            <tr>
+              <th class="weapon-name-column">Model</th>
+              ${columns.map(column => `<th>${escapeHtml(column)}</th>`).join("")}
+            </tr>
+          </thead>
+          <tbody>
+            ${rows.map(row => `
+              <tr class="weapon-row weapon-stat-row">
+                <td class="weapon-name"><strong>${escapeHtml(row.name)}</strong></td>
+                ${row.values.map((value,index) => `
+                  <td data-label="${escapeHtml(columns[index])}" class="weapon-number">${escapeHtml(value)}</td>
+                `).join("")}
+              </tr>`).join("")}
+          </tbody>
+        </table>
+      </div>
+    </section>`;
+}
+
+function renderOldWorldWeaponSection(profiles = [], title = "Weapons") {
+  const columns = ["R","S","AP","Special Rules","Notes"];
+  const rows = (profiles || []).map(profile => {
+    const values = new Map(
+      (profile.values || []).map(item => [normalize(item.label), item.value ?? ""])
+    );
+    return {
+      name:profile.name || "Weapon",
+      quantity:Number.isFinite(Number(profile.quantity)) ? Math.max(1, Number(profile.quantity)) : null,
+      values:columns.map(column => {
+        const value = values.get(normalize(column));
+        return value !== undefined && value !== "" ? value : "—";
+      })
+    };
+  });
+
+  return `
+    <section class="detail-section weapon-section old-world-weapon-section">
+      <div class="section-heading-row">
+        <h3>${escapeHtml(title)}</h3>
+        <span class="section-count">${rows.length}</span>
+      </div>
+      <div class="weapon-table-wrap">
+        <table class="weapon-table compact-weapon-table old-world-weapon-table">
+          <thead>
+            <tr>
+              <th class="weapon-name-column">Weapon</th>
+              ${columns.map(column => `<th>${escapeHtml(column)}</th>`).join("")}
+            </tr>
+          </thead>
+          <tbody>
+            ${rows.map(row => `
+              <tr class="weapon-row weapon-stat-row">
+                <td class="weapon-name">
+                  <div class="weapon-title-line">
+                    ${row.quantity != null ? `<span class="weapon-quantity">${row.quantity}×</span>` : ""}
+                    <strong>${escapeHtml(row.name)}</strong>
+                  </div>
+                </td>
+                ${row.values.map((value,index) => `
+                  <td data-label="${escapeHtml(columns[index])}" class="${index >= 3 ? "old-world-weapon-text" : "weapon-number"}">${escapeHtml(value)}</td>
+                `).join("")}
+              </tr>`).join("")}
+          </tbody>
+        </table>
+      </div>
+    </section>`;
+}
+
+function renderOldWorldSpellSection(spells = []) {
+  if (!spells.length) return "";
+
+  return `
+    <section class="detail-section ability-section old-world-spell-section">
+      <div class="section-heading-row">
+        <h3>Spells</h3>
+        <span class="section-count">${spells.length}</span>
+      </div>
+      <div class="ability-list">
+        ${spells.map(spell => {
+          const meta = [
+            spell.number ? "#" + spell.number : "",
+            spell.spellType || "",
+            spell.castingValue ? "Cast " + spell.castingValue : "",
+            spell.range ? "Range " + spell.range : ""
+          ].filter(Boolean);
+
+          return `
+            <article class="ability-card unique-rule-card old-world-spell-card">
+              <h4>${escapeHtml(spell.name || "Spell")}</h4>
+              ${meta.length ? `<div class="dnd-action-meta">${meta.map(item => `<span>${escapeHtml(item)}</span>`).join("")}</div>` : ""}
+              ${spell.description ? `<div class="ability-text unique-rule-text">${formatRuleText(spell.description)}</div>` : ""}
+            </article>`;
+        }).join("")}
+      </div>
+    </section>`;
+}
+
+function renderHeresyModelProfileSection(profiles = []) {
+  if (profiles.length < 2) return "";
+
+  const order = [
+    "M","WS","BS","S","T","W","I","A","LD","CL","WP","IN","SAV","INV",
+    "Front Armour","Side Armour","Rear Armour","Front","Rear","HP"
+  ];
+
+  const maps = profiles.map(profile => new Map(
+    (profile.values || []).map(item => [normalize(item.label), item.value ?? ""])
+  ));
+  const columns = order.filter(column =>
+    maps.some(values => values.has(normalize(column)))
+  );
+
+  const head = columns.map(column => "<th>" + escapeHtml(column) + "</th>").join("");
+  const body = profiles.map((profile, rowIndex) => {
+    const values = maps[rowIndex];
+    const type = values.get("type") || "";
+    const cells = columns.map(column =>
+      '<td data-label="' + escapeHtml(column) + '" class="weapon-number">' +
+      escapeHtml(values.get(normalize(column)) || "—") + '</td>'
+    ).join("");
+
+    return '<tr class="weapon-row weapon-stat-row">' +
+      '<td class="weapon-name"><strong>' + escapeHtml(profile.name) + '</strong>' +
+      (type ? '<small>' + escapeHtml(type) + '</small>' : '') + '</td>' +
+      cells +
+      '</tr>';
+  }).join("");
+
+  return '<section class="detail-section weapon-section heresy-profile-section">' +
+    '<div class="section-heading-row"><h3>Model profiles</h3>' +
+    '<span class="section-count">' + profiles.length + '</span></div>' +
+    '<div class="weapon-table-wrap"><table class="weapon-table compact-weapon-table heresy-profile-table">' +
+    '<thead><tr><th class="weapon-name-column">Model</th>' + head + '</tr></thead>' +
+    '<tbody>' + body + '</tbody></table></div></section>';
+}
+
+function renderHeresyComponentSection(components = []) {
+  if (!components.length) return "";
+
+  const columns = ["M","BS","Primary Armour","Exposed Armour","HP","Transport Capacity"];
+  const rows = components.map(component => {
+    const values = new Map(
+      (component.values || []).map(item => [normalize(item.label), item.value ?? ""])
+    );
+    return {
+      name:component.name || component.type || "Component",
+      values:columns.map(column => values.get(normalize(column)) || "—")
+    };
+  });
+
+  const head = columns.map(column => "<th>" + escapeHtml(column) + "</th>").join("");
+  const body = rows.map(row => {
+    const cells = row.values.map((value, index) =>
+      '<td data-label="' + escapeHtml(columns[index]) + '" class="weapon-number">' +
+      escapeHtml(value) + '</td>'
+    ).join("");
+
+    return '<tr class="weapon-row weapon-stat-row">' +
+      '<td class="weapon-name"><strong>' + escapeHtml(row.name) + '</strong></td>' +
+      cells +
+      '</tr>';
+  }).join("");
+
+  return '<section class="detail-section weapon-section heresy-component-section">' +
+    '<div class="section-heading-row"><h3>Titan structure</h3>' +
+    '<span class="section-count">' + rows.length + '</span></div>' +
+    '<div class="weapon-table-wrap"><table class="weapon-table compact-weapon-table heresy-component-table">' +
+    '<thead><tr><th class="weapon-name-column">Section</th>' + head + '</tr></thead>' +
+    '<tbody>' + body + '</tbody></table></div></section>';
+}
+
+function renderHeresyWeaponSection(profiles, title = "Weapons", kind = "ranged") {
+  const melee = kind === "melee";
+  const columns = melee
+    ? ["IM","AM","SM","AP","D","Special Rules","Traits"]
+    : ["R","FP","RS","AP","D","Special Rules","Traits"];
+
+  const rows = (profiles || []).map(profile => {
+    const values = new Map(
+      (profile.values || []).map(item => [normalize(item.label), item.value ?? ""])
+    );
+    return {
+      name:profile.name || "Weapon",
+      quantity:Number.isFinite(Number(profile.quantity)) ? Math.max(1, Number(profile.quantity)) : null,
+      values:columns.map(column => {
+        const value = values.get(normalize(column));
+        return value !== undefined && value !== "" ? value : "—";
+      })
+    };
+  });
+
+  const head = columns.map(column => "<th>" + escapeHtml(column) + "</th>").join("");
+  const body = rows.map(row => {
+    const cells = row.values.map((value, index) =>
+      '<td data-label="' + escapeHtml(columns[index]) + '" class="' +
+      (index >= 5 ? "heresy-weapon-text" : "weapon-number") + '">' +
+      escapeHtml(value) + '</td>'
+    ).join("");
+
+    return '<tr class="weapon-row weapon-stat-row">' +
+      '<td class="weapon-name"><div class="weapon-title-line">' +
+      (row.quantity != null ? '<span class="weapon-quantity">' + row.quantity + '×</span>' : '') +
+      '<strong>' + escapeHtml(row.name) + '</strong></div></td>' +
+      cells +
+      '</tr>';
+  }).join("");
+
+  return '<section class="detail-section weapon-section heresy-weapon-section">' +
+    '<div class="section-heading-row"><h3>' + escapeHtml(title) + '</h3>' +
+    '<span class="section-count">' + rows.length + '</span></div>' +
+    '<div class="weapon-table-wrap"><table class="weapon-table compact-weapon-table heresy-weapon-table">' +
+    '<thead><tr><th class="weapon-name-column">Weapon</th>' + head + '</tr></thead>' +
+    '<tbody>' + body + '</tbody></table></div></section>';
 }
 
 function renderWeaponSection(profiles, title = "Weapons") {
@@ -3575,6 +10943,232 @@ function renderWeaponSection(profiles, title = "Weapons") {
               </tr>`).join("")}
           </tbody>
         </table>
+      </div>
+    </section>`;
+}
+
+function renderAosWeaponSection(profiles, title = "Weapons") {
+  const rows = (profiles || []).map(profile => {
+    const values = new Map(
+      (profile.values || []).map(item => [normalize(item.label), item.value ?? ""])
+    );
+
+    const ranged = normalize(profile.type || "").includes("ranged");
+    const range = ranged
+      ? (values.get("rng") || values.get("range") || "—")
+      : "Melee";
+
+    return {
+      name:profile.name || "Weapon",
+      quantity:Number.isFinite(Number(profile.quantity)) ? Math.max(1, Number(profile.quantity)) : null,
+      range,
+      attacks:values.get("atk") || values.get("attacks") || values.get("a") || "—",
+      hit:values.get("hit") || "—",
+      wound:values.get("wnd") || values.get("wound") || "—",
+      rend:values.get("rnd") || values.get("rend") || "—",
+      damage:values.get("dmg") || values.get("damage") || "—",
+      ability:values.get("ability") || "—"
+    };
+  });
+
+  return `
+    <section class="detail-section weapon-section aos-weapon-section">
+      <div class="section-heading-row">
+        <h3>${escapeHtml(title)}</h3>
+        <span class="section-count">${rows.length}</span>
+      </div>
+      <div class="weapon-table-wrap">
+        <table class="weapon-table aos-weapon-table">
+          <thead>
+            <tr>
+              <th class="weapon-name-column">Weapon</th>
+              <th>Range</th>
+              <th>Atk</th>
+              <th>Hit</th>
+              <th>Wnd</th>
+              <th>Rnd</th>
+              <th>Dmg</th>
+              <th>Ability</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows.map(row => `
+              <tr class="weapon-row weapon-stat-row">
+                <td class="weapon-name">
+                  <div class="weapon-title-line">
+                    ${row.quantity != null ? `<span class="weapon-quantity">${row.quantity}×</span>` : ""}
+                    <strong>${escapeHtml(row.name)}</strong>
+                  </div>
+                </td>
+                <td data-label="Range" class="weapon-range-text">${escapeHtml(row.range)}</td>
+                <td data-label="Atk" class="weapon-number">${escapeHtml(row.attacks)}</td>
+                <td data-label="Hit" class="weapon-number">${escapeHtml(row.hit)}</td>
+                <td data-label="Wnd" class="weapon-number">${escapeHtml(row.wound)}</td>
+                <td data-label="Rnd" class="weapon-number">${escapeHtml(row.rend)}</td>
+                <td data-label="Dmg" class="weapon-number">${escapeHtml(row.damage)}</td>
+                <td data-label="Ability" class="aos-weapon-ability">${escapeHtml(row.ability)}</td>
+              </tr>`).join("")}
+          </tbody>
+        </table>
+      </div>
+    </section>`;
+}
+
+function renderAosAbilitySection(rules) {
+  if (!rules?.length) return "";
+
+  return `
+    <section class="detail-section ability-section aos-ability-section">
+      <div class="section-heading-row">
+        <h3>Abilities</h3>
+        <span class="section-count">${rules.length}</span>
+      </div>
+      <div class="ability-list">
+        ${rules.map(rule => {
+          const fields = Array.isArray(rule.fields) ? rule.fields.filter(field => field?.value) : [];
+          return `
+            <article class="ability-card aos-ability-card">
+              <div class="aos-ability-heading">
+                <h4>${escapeHtml(cleanRuleText(rule.name || "Ability"))}</h4>
+                ${rule.category ? `<span>${escapeHtml(rule.category)}</span>` : ""}
+              </div>
+              ${fields.length
+                ? `<div class="aos-ability-fields">
+                    ${fields.map(field => `
+                      <div class="aos-ability-field">
+                        <strong>${escapeHtml(field.label)}</strong>
+                        <div class="ability-text">${formatRuleText(field.value)}</div>
+                      </div>`).join("")}
+                  </div>`
+                : rule.text
+                  ? `<div class="ability-text unique-rule-text">${formatRuleText(rule.text)}</div>`
+                  : ""}
+            </article>`;
+        }).join("")}
+      </div>
+    </section>`;
+}
+
+
+function renderWarfleetsWeaponSection(profiles, title = "Weapons") {
+  const rows = (profiles || []).map(profile => {
+    const values = new Map(
+      (profile.values || []).map(item => [normalize(item.label), item.value ?? ""])
+    );
+
+    return {
+      name:profile.name || "Weapon",
+      facing:values.get("facing") || "—",
+      range:values.get("range") || "—",
+      attacks:values.get("a") || values.get("attacks") || "—",
+      strength:values.get("str") || values.get("strength") || "—",
+      special:values.get("special") || values.get("special rules") || "—"
+    };
+  });
+
+  const body = rows.map(row =>
+    '<tr class="weapon-row weapon-stat-row">' +
+      '<td class="weapon-name"><strong>' + escapeHtml(row.name) + '</strong></td>' +
+      '<td data-label="Facing" class="warfleet-facing">' + escapeHtml(row.facing) + '</td>' +
+      '<td data-label="Range" class="weapon-range-text">' + escapeHtml(row.range) + '</td>' +
+      '<td data-label="A" class="weapon-number">' + escapeHtml(row.attacks) + '</td>' +
+      '<td data-label="Str" class="weapon-number">' + escapeHtml(row.strength) + '</td>' +
+      '<td data-label="Special" class="opr-weapon-special">' + escapeHtml(row.special) + '</td>' +
+    '</tr>'
+  ).join("");
+
+  return (
+    '<section class="detail-section weapon-section warfleets-weapon-section">' +
+      '<div class="section-heading-row">' +
+        '<h3>' + escapeHtml(title) + '</h3>' +
+        '<span class="section-count">' + rows.length + '</span>' +
+      '</div>' +
+      '<div class="weapon-table-wrap">' +
+        '<table class="weapon-table compact-weapon-table warfleets-weapon-table">' +
+          '<thead><tr>' +
+            '<th class="weapon-name-column">Weapon</th>' +
+            '<th>Facing</th>' +
+            '<th>Range</th>' +
+            '<th>A</th>' +
+            '<th>Str</th>' +
+            '<th>Special</th>' +
+          '</tr></thead>' +
+          '<tbody>' + body + '</tbody>' +
+        '</table>' +
+      '</div>' +
+    '</section>'
+  );
+}
+
+function renderOprWeaponSection(profiles, title = "Weapons") {
+  const rows = (profiles || []).map(profile => {
+    const values = new Map(
+      (profile.values || []).map(item => [normalize(item.label), item.value ?? ""])
+    );
+    const rangeRaw = values.get("range");
+    const range = rangeRaw && /^\d+(?:\.\d+)?$/.test(String(rangeRaw).trim())
+      ? String(rangeRaw).trim() + '\"'
+      : (rangeRaw || (/melee/i.test(profile.type || "") ? "Melee" : "—"));
+
+    return {
+      name:profile.name || "Weapon",
+      quantity:Number.isFinite(Number(profile.quantity)) ? Math.max(1, Number(profile.quantity)) : null,
+      range,
+      attacks:values.get("a") || values.get("attacks") || "—",
+      special:values.get("special") || values.get("special rules") || values.get("keywords") || "—"
+    };
+  });
+
+  return `
+    <section class="detail-section weapon-section opr-weapon-section">
+      <div class="section-heading-row">
+        <h3>${escapeHtml(title)}</h3>
+        <span class="section-count">${rows.length}</span>
+      </div>
+      <div class="weapon-table-wrap">
+        <table class="weapon-table compact-weapon-table opr-weapon-table">
+          <thead>
+            <tr>
+              <th class="weapon-name-column">Weapon</th>
+              <th>Range</th>
+              <th>A</th>
+              <th>Special rules</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows.map(row => `
+              <tr class="weapon-row weapon-stat-row">
+                <td class="weapon-name">
+                  <div class="weapon-title-line">
+                    ${row.quantity != null ? `<span class="weapon-quantity">${row.quantity}×</span>` : ""}
+                    <strong>${escapeHtml(row.name)}</strong>
+                  </div>
+                </td>
+                <td data-label="Range" class="weapon-range-text">${escapeHtml(row.range)}</td>
+                <td data-label="A" class="weapon-number">${escapeHtml(row.attacks)}</td>
+                <td data-label="Special rules" class="opr-weapon-special">${escapeHtml(row.special)}</td>
+              </tr>`).join("")}
+          </tbody>
+        </table>
+      </div>
+    </section>`;
+}
+
+function renderOprAbilitySection(rules, title = "Special rules") {
+  if (!rules?.length) return "";
+
+  return `
+    <section class="detail-section ability-section">
+      <div class="section-heading-row">
+        <h3>${escapeHtml(title)}</h3>
+        <span class="section-count">${rules.length}</span>
+      </div>
+      <div class="ability-list">
+        ${rules.map(rule => `
+          <article class="ability-card unique-rule-card">
+            <h4>${escapeHtml(cleanRuleText(rule.name || "Rule"))}</h4>
+            ${rule.text ? `<div class="ability-text unique-rule-text">${formatRuleText(rule.text)}</div>` : ""}
+          </article>`).join("")}
       </div>
     </section>`;
 }
@@ -3684,7 +11278,7 @@ function sourceCpStorageKey(sourceId) {
 
 function getActiveCpSource() {
   const source = getActiveUnitBrowserSource();
-  if (!source || source.id === "all") return null;
+  if (state.gameSystem !== "40k" || !source || source.id === "all" || source.kind === "opr") return null;
   return source;
 }
 
@@ -3824,6 +11418,162 @@ function adjustTurnScore(player, type, delta) {
   renderScoreboard();
 }
 
+function updateGameContextUi(unit = state.selected) {
+  const opr = isOprMode();
+  const aos = isAosMode();
+  const heresy = isHeresyMode();
+  const oldWorld = isOldWorldMode();
+  const killTeam = isKillTeamMode();
+  const legionsImperialis = isLegionsImperialisMode();
+  const necromunda = isNecromundaMode();
+  const dnd = isDndMode();
+  const non40k = state.gameSystem !== "40k";
+
+  els.appNav?.classList.toggle("opr-context", non40k);
+
+  const stratButton = els.appNav?.querySelector('[data-page-target="strats"]');
+  const scoreButton = els.appNav?.querySelector('[data-page-target="score"]');
+  const armyRulesButton = els.appNav?.querySelector('[data-page-target="army-rules"]');
+  const coreRulesButton = els.navMoreMenu?.querySelector('[data-page-target="rules"]');
+
+  stratButton?.classList.toggle("hidden", non40k);
+  scoreButton?.classList.toggle("hidden", non40k);
+  coreRulesButton?.classList.toggle("hidden", non40k);
+
+  const unitButton = els.appNav?.querySelector('[data-page-target="datasheets"]');
+  const unitLabel = unitButton?.querySelector("span:last-child");
+  if (unitLabel) {
+    unitLabel.textContent = isWarfleetsMode()
+      ? "Fleet"
+      : killTeam
+        ? "Operatives"
+        : necromunda
+          ? "Fighters"
+          : dnd
+            ? "Characters"
+            : legionsImperialis
+              ? "Detachments"
+              : "Units";
+  }
+
+  const browserEyebrow = els.rosterBrowser?.querySelector(".roster-browser-heading .eyebrow");
+  const browserTitle = els.rosterBrowser?.querySelector(".roster-browser-heading h1");
+  if (browserEyebrow) {
+    browserEyebrow.textContent = isWarfleetsMode()
+      ? "FLEET BROWSER"
+      : killTeam
+        ? "KILL TEAM"
+        : necromunda
+          ? "GANG ROSTER"
+          : dnd
+            ? "CHARACTERS"
+            : legionsImperialis
+              ? "DETACHMENT BROWSER"
+              : "UNIT BROWSER";
+  }
+  if (browserTitle) {
+    browserTitle.textContent = isWarfleetsMode()
+      ? "Choose a ship or squadron."
+      : killTeam
+        ? "Choose an operative."
+        : necromunda
+          ? "Choose a fighter."
+          : dnd
+            ? "Choose a character."
+            : legionsImperialis
+              ? "Choose a detachment."
+              : "Choose a unit.";
+  }
+  if (els.searchInput) {
+    els.searchInput.placeholder = isWarfleetsMode()
+      ? "Type a ship or squadron name…"
+      : killTeam
+        ? "Type an operative name…"
+        : necromunda
+          ? "Type a fighter name…"
+          : dnd
+            ? "Type a character, attack or spell…"
+            : legionsImperialis
+              ? "Type a detachment name…"
+              : "Type a unit name…";
+  }
+
+  const armyRulesLabel = armyRulesButton?.querySelector("span:last-child");
+  if (armyRulesLabel) {
+    armyRulesLabel.textContent = killTeam
+      ? "Team Rules"
+      : necromunda
+        ? "Gang Rules"
+        : dnd
+          ? "Features"
+          : legionsImperialis
+            ? "Formation Rules"
+            : (opr || heresy)
+              ? "Rules"
+              : "Army Rules";
+  }
+
+  const heading = els.pageArmyRules?.querySelector("h1");
+  const copy = els.pageArmyRules?.querySelector(".page-heading > p:last-child");
+  const eyebrow = els.pageArmyRules?.querySelector(".eyebrow");
+
+  if (heading) {
+    heading.textContent = killTeam
+      ? "Team Rules"
+      : necromunda
+        ? "Gang Rules"
+        : dnd
+          ? "Features"
+          : legionsImperialis
+            ? "Formation Rules"
+            : (opr || heresy)
+              ? "Rules"
+              : "Army Rules";
+  }
+
+  if (eyebrow) {
+    eyebrow.textContent = opr
+      ? currentGameName().toUpperCase() + " REFERENCE"
+      : killTeam
+        ? "KILL TEAM REFERENCE"
+        : necromunda
+          ? "NECROMUNDA REFERENCE"
+          : dnd
+            ? "D&D CHARACTER REFERENCE"
+            : legionsImperialis
+              ? "LEGIONS IMPERIALIS REFERENCE"
+              : heresy
+                ? "HORUS HERESY REFERENCE"
+                : oldWorld
+                  ? "THE OLD WORLD REFERENCE"
+                : aos
+                  ? "AGE OF SIGMAR REFERENCE"
+                  : "ARMY REFERENCE";
+  }
+
+  if (copy) {
+    copy.textContent = opr
+      ? isWarfleetsMode()
+        ? "Ship rules and systems referenced by the active Warfleets fleet."
+        : "Special rules" + (isOprFantasyMode() ? " and spells" : "") + " referenced by the active " + currentGameName() + (isOprQuestMode() ? " campaign." : " list.")
+      : killTeam
+        ? "Team-wide abilities, equipment and selected rules imported with the active Kill Team. Operative-specific abilities and unique actions are shown on each operative."
+        : necromunda
+          ? "Gang-wide rules and current campaign state imported from Gyrinx. Fighter-specific skills, powers, gear, injuries and status are shown on each fighter."
+          : dnd
+            ? "Species traits, class features and feats imported with the active D&D Beyond character. Attacks, spells, slots and inventory are on the character page."
+            : legionsImperialis
+              ? "Formation rules imported with the active Legions Imperialis army. Detachment-specific special rules are shown on each detachment."
+              : heresy
+                ? "Army rules imported with the active Horus Heresy list. Unit-specific wargear, reactions and traits are shown on each unit profile."
+                : oldWorld
+                  ? "Army rules imported with the active Old World list. Unit profiles, equipment, special rules and selected spells are shown on each unit."
+                : aos
+                  ? "Battle traits, spells, prayers and other army-level abilities imported with the active Age of Sigmar list."
+                  : "Rules that apply to the selected imported list or whole army.";
+  }
+}
+
 function renderMatchTools() {
   const match = getMatchState();
   const cpSource = getActiveCpSource();
@@ -3873,18 +11623,48 @@ function resetScores() {
   toast("Scores reset");
 }
 
-function resetMatchState() {
-  if (!confirm("Reset scoring, CP, turn and Guide checklist?")) return;
+function resetGame() {
+  if (!confirm(
+    "Reset this game? This clears unit states, both players' scores, CP and the current turn. Loaded lists and pins will stay."
+  )) return;
 
-  ["tv_match_cp","tv_match_turn","tv_score_state","tv_score_turn"].forEach(key => localStorage.removeItem(key));
   for (const key of Object.keys(localStorage)) {
-    if (key.startsWith("tv_source_cp_")) localStorage.removeItem(key);
+    if (
+      key.startsWith("tv_status_") ||
+      key.startsWith("tv_destroyed_") ||
+      key.startsWith("tv_unit_destroyed_") ||
+      key.startsWith("tv_source_cp_")
+    ) {
+      localStorage.removeItem(key);
+    }
+
+    if (key.startsWith("tv_dnd_state_")) {
+      let saved = {};
+      try { saved = JSON.parse(localStorage.getItem(key) || "{}"); } catch {}
+      const inventoryDeltas = dndIsRecord(saved?.inventoryDeltas) ? saved.inventoryDeltas : {};
+      localStorage.setItem(key, JSON.stringify({
+        economy:{action:false, bonus:false, reaction:false},
+        slots:{},
+        inventoryDeltas,
+        lastRoll:null
+      }));
+    }
   }
+
+  ["tv_match_cp","tv_match_turn","tv_score_state","tv_score_turn"].forEach(key =>
+    localStorage.removeItem(key)
+  );
+
   state.scoreTurn = 1;
-  document.querySelectorAll("[data-setup-check]").forEach(input => input.checked = false);
-  persistSetupChecks();
+  updateUnitTopStatuses(state.selected);
   renderScoreboard();
-  toast("Match reset");
+  renderMatchTools();
+  renderAll();
+  toast("Game reset");
+}
+
+function resetMatchState() {
+  resetGame();
 }
 
 function setSetupCheck(name, checked = true) {
@@ -4426,8 +12206,9 @@ function rankVoiceCandidates(alternatives) {
   for (const collection of getSearchCollections()) {
     const {roster, rosterIndex} = collection;
     for (const unit of collection.units || []) {
+      const nickname = getUnitNickname(unit, roster);
       const aliases = getVoiceAliases(roster.id, unit.id);
-      const candidates = [unit.name, ...aliases];
+      const candidates = [unit.name, ...(nickname ? [nickname] : []), ...aliases];
       let bestScore = 0;
       let bestTranscript = alternatives[0]?.transcript || "";
       let matchedAlias = false;
@@ -4460,6 +12241,230 @@ function rankVoiceCandidates(alternatives) {
 
   return [...results.values()]
     .sort((a,b) => b.score - a.score || a.unit.name.localeCompare(b.unit.name));
+}
+
+
+function getDndCharacterContexts() {
+  return state.rosters.flatMap((roster, rosterIndex) => {
+    if (roster.source !== "dndbeyond" || !rosterMatchesSelectedGame(roster)) return [];
+    return (roster.units || [])
+      .filter(unit => unit.system === "dnd")
+      .map(unit => ({roster, rosterIndex, unit}));
+  });
+}
+
+function activeDndCharacterContext() {
+  const contexts = getDndCharacterContexts();
+  return contexts.find(item =>
+    state.selected?.id === item.unit.id ||
+    state.selectedRosterId === item.roster.id
+  ) || contexts[0] || null;
+}
+
+function focusDndAction(context, action) {
+  if (!context || !action) return false;
+  state.activeRoster = context.rosterIndex;
+  state.selectedRosterId = context.roster.id;
+  state.selected = context.unit;
+  state.dndFocusedActionId = action.id;
+  state.dndDetailTab = action.kind === "spell" ? "spells" : "actions";
+  state.dndScrollToFocusedAction = true;
+  state.dndListFilter = "";
+  state.dndListKind = "";
+  state.unitBrowserSourceId = "roster:" + context.roster.id;
+  localStorage.setItem("tv_unit_browser_source", state.unitBrowserSourceId);
+  rememberRecentUnit(context.unit);
+  switchPage("datasheets", {silent:true});
+  renderAll();
+  renderDetail(context.unit);
+  if (els.voiceHint) els.voiceHint.textContent = action.name;
+  toast(action.name);
+  return true;
+}
+
+function handleDndVoiceCommand(primary, alternatives = []) {
+  if (!isDndMode()) return false;
+  const contexts = getDndCharacterContexts();
+  if (!contexts.length) return false;
+
+  const raw = String(primary || "").trim();
+  const q = normalize(raw);
+  if (!q) return false;
+
+  const context = activeDndCharacterContext();
+
+  if (/^(short rest|take a short rest)$/.test(q) && context) {
+    state.dndDetailTab = "actions";
+    state.dndScrollToFocusedAction = false;
+    dndApplyRest(context.unit, "short");
+    return true;
+  }
+
+  if (/^(long rest|take a long rest)$/.test(q) && context) {
+    state.dndDetailTab = "actions";
+    state.dndScrollToFocusedAction = false;
+    dndApplyRest(context.unit, "long");
+    return true;
+  }
+
+  const checkMatch = raw.match(/^\s*(?:roll|check)\s+(.+?)\s*$/i);
+  if (checkMatch && context) {
+    const query = checkMatch[1].trim();
+    const candidates = [
+      ...(context.unit.dnd?.skills || []).map(skill => ({
+        kind:"skill",
+        key:skill.key,
+        name:skill.name
+      })),
+      ...Object.entries(DND_ABILITY_NAMES).map(([key,name]) => ({
+        kind:"ability",
+        key,
+        name
+      }))
+    ]
+      .map(candidate => ({
+        ...candidate,
+        score:scoreVoicePhrase(query, candidate.name)
+      }))
+      .sort((a,b) => b.score - a.score);
+
+    const best = candidates[0];
+    if (best && best.score >= .72) {
+      state.activeRoster = context.rosterIndex;
+      state.selectedRosterId = context.roster.id;
+      state.selected = context.unit;
+      state.dndFocusedActionId = "";
+      state.dndScrollToFocusedAction = false;
+      switchPage("datasheets", {silent:true});
+      dndRollCheck(context.unit, best.kind, best.key);
+      return true;
+    }
+  }
+
+  if (/^list\b/.test(q) && context) {
+    let phrase = q.replace(/^list\s+(?:all\s+)?/, "").trim();
+    let listKind = "";
+
+    if (/\bspells?$/.test(phrase)) {
+      listKind = "spell";
+      phrase = phrase.replace(/\bspells?$/, "").trim();
+    } else if (/\b(?:actions?|attacks?)$/.test(phrase)) {
+      listKind = "attack";
+      phrase = phrase.replace(/\b(?:actions?|attacks?)$/, "").trim();
+    }
+
+    if (phrase === "all") phrase = "";
+    if (phrase !== "damage" && phrase !== "damaging") {
+      phrase = phrase.replace(/\bdamage(?:\s+type)?\b/g, "").trim();
+    }
+
+    const spellMatches = (context.unit.dnd?.spells || []).filter(action =>
+      dndActionMatchesListFilter(action, phrase)
+    );
+    const attackMatches = (context.unit.dnd?.attacks || []).filter(action =>
+      dndActionMatchesListFilter(action, phrase)
+    );
+
+    if (!listKind) {
+      listKind = spellMatches.length ? "spell" : "attack";
+    }
+
+    const matches = listKind === "spell" ? spellMatches : attackMatches;
+    state.activeRoster = context.rosterIndex;
+    state.selectedRosterId = context.roster.id;
+    state.selected = context.unit;
+    state.dndFocusedActionId = "";
+    state.dndDetailTab = listKind === "spell" ? "spells" : "actions";
+    state.dndScrollToFocusedAction = false;
+    state.dndListFilter = phrase;
+    state.dndListKind = listKind;
+    switchPage("datasheets", {silent:true});
+    renderDetail(context.unit);
+
+    const label = listKind === "spell" ? "spells" : "attacks";
+    toast(
+      (phrase ? phrase + " " : "") +
+      label + " · " + matches.length
+    );
+    return true;
+  }
+
+  const inventoryMatch = raw.match(/^\s*(add|remove|drop|delete)\s+(?:(\d+)\s+)?(.+?)\s*$/i);
+  if (inventoryMatch && context) {
+    const verb = inventoryMatch[1].toLowerCase();
+    const amount = Math.max(1, Number(inventoryMatch[2] || 1));
+    const name = inventoryMatch[3].trim();
+    const delta = /remove|drop|delete/.test(verb) ? -amount : amount;
+    if (adjustDndInventory(context.unit, name, delta)) {
+      state.activeRoster = context.rosterIndex;
+      state.selectedRosterId = context.roster.id;
+      state.selected = context.unit;
+      state.dndFocusedActionId = "";
+      state.dndDetailTab = "inventory";
+      state.dndScrollToFocusedAction = false;
+      switchPage("datasheets", {silent:true});
+      renderDetail(context.unit);
+      toast((delta > 0 ? "Added " : "Removed ") + amount + " " + name);
+      return true;
+    }
+  }
+
+  if (/^(new turn|reset turn|start turn)$/.test(q) && context) {
+    const runtime = getDndRuntimeState(context.unit);
+    runtime.economy = {action:false, bonus:false, reaction:false};
+    saveDndRuntimeState(context.unit, runtime);
+    state.dndDetailTab = "actions";
+    state.dndScrollToFocusedAction = false;
+    renderDetail(context.unit);
+    toast("New turn — action economy reset");
+    return true;
+  }
+
+  let kind = "";
+  let query = raw;
+  if (/^\s*(attack|strike|shoot)\b/i.test(raw)) {
+    kind = "attack";
+    query = raw.replace(/^\s*(?:attack|strike|shoot)(?:\s+with)?\s+/i, "");
+  } else if (/^\s*cast\b/i.test(raw)) {
+    kind = "spell";
+    query = raw.replace(/^\s*cast\s+/i, "");
+  } else if (/^\s*use\b/i.test(raw)) {
+    query = raw.replace(/^\s*use\s+/i, "");
+  }
+
+  const spoken = [
+    query,
+    ...alternatives.slice(1).map(item =>
+      String(item?.transcript || "")
+        .replace(/^\s*(?:attack|strike|shoot)(?:\s+with)?\s+/i, "")
+        .replace(/^\s*cast\s+/i, "")
+        .replace(/^\s*use\s+/i, "")
+    )
+  ].filter(Boolean);
+
+  const ranked = [];
+  for (const item of contexts) {
+    const actions = [
+      ...(item.unit.dnd?.attacks || []),
+      ...(item.unit.dnd?.spells || [])
+    ].filter(action => !kind || action.kind === kind);
+
+    for (const action of actions) {
+      const score = Math.max(...spoken.map(value => scoreVoicePhrase(value, action.name)));
+      ranked.push({...item, action, score});
+    }
+  }
+
+  ranked.sort((a,b) => b.score - a.score || a.action.name.localeCompare(b.action.name));
+  const top = ranked[0];
+  const second = ranked[1];
+  if (!top || top.score < .52) return false;
+
+  const margin = top.score - (second?.score || 0);
+  const exact = spoken.some(value => normalize(value) === normalize(top.action.name));
+  if (!exact && top.score < .72 && margin < .12) return false;
+
+  return focusDndAction(top, top.action);
 }
 
 function chooseBestVoiceMatch(input) {
@@ -4497,6 +12502,7 @@ function chooseBestVoiceMatch(input) {
 
   if (state.currentPage !== "datasheets") return;
 
+  if (isDndMode() && handleDndVoiceCommand(primary, alternatives)) return;
   if (handleDatasheetVoiceCommand(q)) return;
 
   if (!state.rosters.length) {
@@ -4517,7 +12523,11 @@ function chooseBestVoiceMatch(input) {
     return;
   }
 
-  const primaryTopScore = scoreVoicePhrase(primary, top.unit.name);
+  const topNickname = getUnitNickname(top.unit, top.roster);
+  const primaryTopScore = Math.max(
+    scoreVoicePhrase(primary, top.unit.name),
+    topNickname ? scoreVoicePhrase(primary, topNickname) : 0
+  );
   const strongSoundMatch =
     speechCompact(primary).length >= 6 &&
     (prefixCoverage(primary, top.unit.name) >= .90 ||
@@ -4532,7 +12542,7 @@ function chooseBestVoiceMatch(input) {
   if (decisive) {
     closeVoiceShortlist();
     selectUnitFromRoster(top.unit, top.rosterIndex);
-    if (els.voiceHint) els.voiceHint.textContent = top.unit.name;
+    if (els.voiceHint) els.voiceHint.textContent = getUnitNickname(top.unit, top.roster) || top.unit.name;
     return;
   }
 
@@ -4814,17 +12824,57 @@ function renderQuickLists() {
     return;
   }
 
-  const groupOrder = [
-    "Characters",
-    "Battleline",
-    "Infantry",
-    "Fast / Mounted",
-    "Vehicles",
-    "Monsters",
-    "Transports",
-    "Fortifications",
-    "Other units"
-  ];
+  const groupOrder = isWarfleetsMode()
+    ? ["Heavy Ships","Medium Ships","Light Ships","Ships","Squadrons"]
+    : isKillTeamMode()
+      ? ["Leaders","Operatives"]
+      : isNecromundaMode()
+        ? ["Leaders","Champions","Gangers","Juves & Prospects","Brutes","Hangers-on","Vehicles","Pets","Fighters"]
+        : isLegionsImperialisMode()
+        ? [
+            "HQ",
+            "Core",
+            "Support",
+            "Vanguard",
+            "Light Armour",
+            "Battle Tank",
+            "Heavy Armour",
+            "Artillery",
+            "Bastion",
+            "Transport",
+            "Air Support",
+            "Knights",
+            "Titans",
+            "Other Detachments"
+          ]
+        : isHeresyMode()
+        ? [
+          "High Command",
+          "Command",
+          "Retinue",
+          "Troops",
+          "Elites",
+          "Recon",
+          "Fast Attack",
+          "Support",
+          "Heavy Assault",
+          "Armour",
+          "War Engines",
+          "Transports",
+          "Lords of War",
+          "Other units"
+        ]
+      : [
+          "Characters",
+          "Battleline",
+          "Infantry",
+          "Fast / Mounted",
+          "Vehicles",
+          "Monsters",
+          "Transports",
+          "Fortifications",
+          "Other units"
+        ];
 
   const groups = new Map(groupOrder.map(name => [name, []]));
 
@@ -4861,13 +12911,20 @@ function renderQuickLists() {
         <div class="roster-unit-grid">
           ${entries.map(entry => {
             const pts = (entry.unit.stats || []).find(stat => normalize(stat.label) === "pts")?.value;
+            const rating = entry.unit.system === "necromunda"
+              ? (entry.unit.stats || []).find(stat => normalize(stat.label) === "rating")?.value
+              : null;
             return `
               <button class="roster-unit-button" type="button" data-entry-index="${entry.entryIndex}">
                 <span class="roster-unit-copy">
                   <strong>${escapeHtml(entry.unit.name)}</strong>
                   ${source.kind === "all" ? `<small>${escapeHtml(entry.sourceLabel)}</small>` : ""}
                 </span>
-                ${pts != null ? `<small class="roster-unit-points">${escapeHtml(pts)} pts</small>` : ""}
+                ${rating != null
+                  ? `<small class="roster-unit-points">${escapeHtml(rating)}</small>`
+                  : pts != null
+                    ? `<small class="roster-unit-points">${escapeHtml(pts)} pts</small>`
+                    : ""}
               </button>`;
           }).join("")}
         </div>
@@ -4875,7 +12932,17 @@ function renderQuickLists() {
   }
 
   els.quickLists.innerHTML = html.join("") ||
-    '<div class="empty-section">No units were found in this data source.</div>';
+    '<div class="empty-section">' +
+      (isWarfleetsMode()
+        ? "No ships or squadrons were found in this fleet."
+        : isKillTeamMode()
+          ? "No operatives were found in this kill team."
+          : isNecromundaMode()
+            ? "No fighters were found in this gang."
+            : isLegionsImperialisMode()
+              ? "No detachments were found in this army."
+              : "No units were found in this data source.") +
+    '</div>';
 
   els.quickLists.querySelectorAll("[data-entry-index]").forEach(button => {
     button.addEventListener("click", () => {
@@ -4972,7 +13039,10 @@ async function stopShareScanner() {
 }
 
 function renderSharePage() {
-  const rosters = state.rosters.filter(roster => roster.source === "new-recruit");
+  const rosters = state.rosters.filter(roster =>
+    (roster.source === "new-recruit" || roster.source === "opr") &&
+    rosterMatchesSelectedGame(roster)
+  );
   if (!els.shareRosterSelect || !els.createAppShareButton) return;
 
   els.shareRosterSelect.innerHTML = rosters.length
@@ -5021,7 +13091,9 @@ function removeSelectedShareRoster() {
 function getRosterForAppShare() {
   const rosterId = els.shareRosterSelect?.value;
   return state.rosters.find(roster =>
-    roster.source === "new-recruit" && roster.id === rosterId
+    (roster.source === "new-recruit" || roster.source === "opr") &&
+    rosterMatchesSelectedGame(roster) &&
+    roster.id === rosterId
   ) || null;
 }
 
@@ -5175,13 +13247,13 @@ function importSharedRosterPackage(pack) {
   const roster = {
     ...incoming,
     id:crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random()),
-    source:"new-recruit",
+    source:incoming.source === "opr" ? "opr" : "new-recruit",
     sharedFromOpponent:true,
     importedAt:Date.now()
   };
 
   const duplicateIndex = state.rosters.findIndex(existing =>
-    existing.source === "new-recruit" &&
+    existing.source === roster.source &&
     existing.sharedFromOpponent &&
     normalize(existing.name) === normalize(roster.name) &&
     normalize(existing.faction) === normalize(roster.faction)
@@ -5369,11 +13441,59 @@ function restore() {
 
     state.rosters = JSON.parse(localStorage.getItem("tv_rosters") || "[]");
     state.rosters.forEach(roster => {
+      if (roster.source === "opr") {
+        const migratedOprKey = oprGameSystemKey(roster.gameSystem);
+        if (migratedOprKey) roster.gameSystemKey = migratedOprKey;
+        (roster.units || []).forEach(unit => {
+          if (unit?.system === "opr" && migratedOprKey) unit.gameSystemKey = migratedOprKey;
+        });
+      }
+
       if (roster.source === "new-recruit" && Array.isArray(roster.units)) {
+        roster.units.forEach(unit => {
+          if (unit.system) return;
+          const detected = inferUnitGameSystem(unit);
+          unit.system = detected === "grimdark" ? "opr" : detected;
+        });
+      }
+
+      if (
+        roster.source === "new-recruit" &&
+        roster.gameSystemKey === "grimdark"
+      ) {
+        const metadata = normalize([
+          roster.gameSystemName,
+          roster.gameSystem,
+          roster.name,
+          roster.faction
+        ].filter(Boolean).join(" "));
+
+        if (metadata.includes("grimdark future star quest")) roster.gameSystemKey = "opr-star-quest";
+        else if (metadata.includes("grimdark future firefight")) roster.gameSystemKey = "grimdark-firefight";
+        else if (metadata.includes("age of fantasy quest")) roster.gameSystemKey = "aof-quest";
+        else if (metadata.includes("age of fantasy regiments")) roster.gameSystemKey = "aof-regiments";
+        else if (metadata.includes("age of fantasy skirmish")) roster.gameSystemKey = "aof-skirmish";
+        else if (metadata.includes("age of fantasy")) roster.gameSystemKey = "aof";
+      }
+
+      if (!roster.gameSystemKey) roster.gameSystemKey = inferRosterGameSystem(roster);
+
+      if (roster.source === "new-recruit" && isOprMode(roster.gameSystemKey)) {
+        (roster.units || []).forEach(unit => {
+          if (unit?.system === "opr") unit.gameSystemKey = roster.gameSystemKey;
+        });
+      }
+
+      if (
+        roster.source === "new-recruit" &&
+        roster.gameSystemKey === "40k" &&
+        Array.isArray(roster.units)
+      ) {
         resolveRosterAttachments(roster.units);
       }
     });
     state.activeRoster = Math.min(Number(localStorage.getItem("tv_activeRoster") || 0), Math.max(0, state.rosters.length - 1));
+    ensureActiveRosterForGame();
   } catch {
     state.rosters = [];
   }
@@ -5392,6 +13512,9 @@ function clearRosters() {
   localStorage.removeItem("tv_active_search_rosters");
   localStorage.removeItem("tv_active_search_scopes");
   localStorage.removeItem(CORE_REFERENCE_STORAGE_KEY);
+  for (const key of Object.keys(localStorage)) {
+    if (key.startsWith("tv_dnd_state_")) localStorage.removeItem(key);
+  }
   if (els.searchInput) els.searchInput.value = "";
   els.datasheetResultsShell?.classList.add("hidden");
   renderAll();
