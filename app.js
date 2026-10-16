@@ -572,7 +572,7 @@ const GAME_PROVIDERS = [
       {id:"40k", name:"Warhammer 40,000", detail:"New Recruit, 40K references, scoring and table tools", available:true},
       {id:"aos", name:"Warhammer Age of Sigmar", detail:"AoS 4th · New Recruit roster support", available:true, beta:true},
       {id:"heresy", name:"Warhammer: The Horus Heresy", detail:"3rd Edition · New Recruit roster support", available:true, beta:true},
-      {id:"old-world", name:"Warhammer: The Old World", detail:"Planned", available:false},
+      {id:"old-world", name:"Warhammer: The Old World", detail:"New Recruit roster support", available:true, beta:true},
       {id:"kill-team", name:"Kill Team", detail:"2024 · New Recruit roster support", available:true, beta:true},
       {id:"necromunda", name:"Necromunda", detail:"N26 · Gyrinx shared gang", available:true, beta:true},
       {id:"warcry", name:"Warcry", detail:"Planned", available:false},
@@ -629,6 +629,7 @@ const GAME_SYSTEM_ROUTES = {
   "40k":"/40k",
   aos:"/aos",
   heresy:"/horus-heresy",
+  "old-world":"/old-world",
   "kill-team":"/kill-team",
   necromunda:"/necromunda",
   "legions-imperialis":"/legions-imperialis",
@@ -791,6 +792,10 @@ function isHeresyMode(gameSystem = state.gameSystem) {
   return gameSystem === "heresy";
 }
 
+function isOldWorldMode(gameSystem = state.gameSystem) {
+  return gameSystem === "old-world";
+}
+
 function isKillTeamMode(gameSystem = state.gameSystem) {
   return gameSystem === "kill-team";
 }
@@ -913,6 +918,7 @@ function inferUnitGameSystem(unit) {
   if (unit?.gameSystemKey && GAME_SYSTEMS[unit.gameSystemKey]) return unit.gameSystemKey;
   if (unit?.system === "aos") return "aos";
   if (unit?.system === "heresy") return "heresy";
+  if (unit?.system === "old-world") return "old-world";
   if (unit?.system === "kill-team") return "kill-team";
   if (unit?.system === "legions-imperialis") return "legions-imperialis";
   if (unit?.system === "necromunda") return "necromunda";
@@ -929,6 +935,12 @@ function inferUnitGameSystem(unit) {
     labels.has("control")
   ) {
     return "aos";
+  }
+
+  if (
+    ["m","ws","bs","s","t","w","i","a","ld"].every(label => labels.has(label))
+  ) {
+    return "old-world";
   }
 
   if (labels.has("quality") && (labels.has("defense") || labels.has("defence"))) {
@@ -959,6 +971,11 @@ function inferRosterGameSystem(roster) {
 
   if (metadata.includes("age of sigmar")) return "aos";
   if (
+    metadata.includes("warhammer the old world") ||
+    metadata.includes("warhammer old world") ||
+    metadata.includes("the old world")
+  ) return "old-world";
+  if (
     metadata.includes("kill team") ||
     metadata.includes("c521 ad27 44df f959")
   ) return "kill-team";
@@ -979,7 +996,7 @@ function inferRosterGameSystem(roster) {
   if (metadata.includes("grimdark future firefight")) return "grimdark-firefight";
   if (metadata.includes("grimdark future")) return "grimdark";
 
-  const counts = {aos:0, grimdark:0, "40k":0};
+  const counts = {aos:0, "old-world":0, grimdark:0, "40k":0};
   for (const unit of roster.units || []) {
     const system = inferUnitGameSystem(unit);
     if (counts[system] != null) counts[system]++;
@@ -1042,6 +1059,7 @@ function applyGameSystemUi() {
   const opr = isOprMode();
   const aos = isAosMode();
   const heresy = isHeresyMode();
+  const oldWorld = isOldWorldMode();
   const killTeam = isKillTeamMode();
   const legionsImperialis = isLegionsImperialisMode();
   const necromunda = isNecromundaMode();
@@ -1052,6 +1070,7 @@ function applyGameSystemUi() {
   document.body.classList.toggle("game-opr", opr);
   document.body.classList.toggle("game-aos", aos);
   document.body.classList.toggle("game-heresy", heresy);
+  document.body.classList.toggle("game-old-world", oldWorld);
   document.body.classList.toggle("game-kill-team", killTeam);
   document.body.classList.toggle("game-legions-imperialis", legionsImperialis);
   document.body.classList.toggle("game-necromunda", necromunda);
@@ -1137,6 +1156,8 @@ function applyGameSystemUi() {
         ? "Export your Age of Sigmar 4th edition roster from New Recruit, then choose the JSON, ROS or ROSZ file here."
         : heresy
           ? "Export your Horus Heresy 3rd Edition roster from New Recruit, then choose the JSON, ROS or ROSZ file here."
+          : oldWorld
+            ? "Export your Warhammer: The Old World roster from New Recruit, then choose the JSON, ROS or ROSZ file here."
           : killTeam
             ? "Export your Kill Team 2024 roster from New Recruit, then choose the JSON, ROS or ROSZ file here."
             : legionsImperialis
@@ -1169,6 +1190,8 @@ function applyGameSystemUi() {
         ? "Import your Age of Sigmar army from New Recruit, then use Tabletop Voice for warscroll lookup at the table."
         : heresy
           ? "Import your Horus Heresy army from New Recruit for profiles, weapons, reactions, wargear and rules at the table."
+          : oldWorld
+            ? "Import your Old World army from New Recruit for model profiles, weapons, special rules and spells at the table."
           : killTeam
             ? "Import your Kill Team from New Recruit for operative profiles, weapons, abilities and team rules at the table."
             : legionsImperialis
@@ -5399,6 +5422,11 @@ function detectNewRecruitGameSystem(root, units = []) {
 
   if (systemName.includes("age of sigmar")) return "aos";
   if (
+    systemName.includes("warhammer the old world") ||
+    systemName.includes("warhammer old world") ||
+    systemName.includes("the old world")
+  ) return "old-world";
+  if (
     systemName.includes("kill team") ||
     systemName.includes("c521 ad27 44df f959")
   ) return "kill-team";
@@ -5424,7 +5452,7 @@ function detectNewRecruitGameSystem(root, units = []) {
     systemName === "40k"
   ) return "40k";
 
-  const counts = {aos:0, grimdark:0, "40k":0};
+  const counts = {aos:0, "old-world":0, grimdark:0, "40k":0};
   for (const unit of units) {
     const system = inferUnitGameSystem(unit);
     if (counts[system] != null) counts[system]++;
@@ -11069,6 +11097,7 @@ function updateGameContextUi(unit = state.selected) {
   const opr = isOprMode();
   const aos = isAosMode();
   const heresy = isHeresyMode();
+  const oldWorld = isOldWorldMode();
   const killTeam = isKillTeamMode();
   const legionsImperialis = isLegionsImperialisMode();
   const necromunda = isNecromundaMode();
@@ -11190,6 +11219,8 @@ function updateGameContextUi(unit = state.selected) {
               ? "LEGIONS IMPERIALIS REFERENCE"
               : heresy
                 ? "HORUS HERESY REFERENCE"
+                : oldWorld
+                  ? "THE OLD WORLD REFERENCE"
                 : aos
                   ? "AGE OF SIGMAR REFERENCE"
                   : "ARMY REFERENCE";
@@ -11210,6 +11241,8 @@ function updateGameContextUi(unit = state.selected) {
               ? "Formation rules imported with the active Legions Imperialis army. Detachment-specific special rules are shown on each detachment."
               : heresy
                 ? "Army rules imported with the active Horus Heresy list. Unit-specific wargear, reactions and traits are shown on each unit profile."
+                : oldWorld
+                  ? "Army rules imported with the active Old World list. Unit profiles, equipment, special rules and selected spells are shown on each unit."
                 : aos
                   ? "Battle traits, spells, prayers and other army-level abilities imported with the active Age of Sigmar list."
                   : "Rules that apply to the selected imported list or whole army.";
