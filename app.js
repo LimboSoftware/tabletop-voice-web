@@ -5344,6 +5344,8 @@ function buildRosterFromNewRecruitRoot(root, fileName, importFormat = "json") {
       ? collectKillTeamOperativeSelections(force.selections || [])
       : metadataGameSystem === "legions-imperialis"
         ? collectLegionsImperialisDetachmentSelections(force.selections || [])
+        : metadataGameSystem === "trench-crusade"
+          ? collectTrenchCrusadeUnitSelections(force.selections || [])
         : (force.selections || []);
 
     for (const selection of selections) {
@@ -5360,6 +5362,12 @@ function buildRosterFromNewRecruitRoot(root, fileName, importFormat = "json") {
   if (gameSystemKey === "40k") resolveRosterAttachments(uniqueUnits);
 
   const pts = (root.costs || []).find(cost => isPointsCostName(cost.name))?.value;
+  const trenchCosts = gameSystemKey === "trench-crusade"
+    ? {
+        ducats:Number((root.costs || []).find(cost => normalize(cost.name) === "ducats")?.value || 0),
+        glory:Number((root.costs || []).find(cost => normalize(cost.name) === "glory points")?.value || 0)
+      }
+    : null;
   const firstFactionForce =
     allForces.find(force => String(force.catalogueName || "").trim()) ||
     allForces[0];
@@ -5381,6 +5389,10 @@ function buildRosterFromNewRecruitRoot(root, fileName, importFormat = "json") {
     if (gameSystemKey === "old-world") {
       unit.system = "old-world";
       unit.gameSystemKey = "old-world";
+    }
+    if (gameSystemKey === "trench-crusade") {
+      unit.system = "trench-crusade";
+      unit.gameSystemKey = "trench-crusade";
     }
     if (gameSystemKey === "heresy") {
       unit.system = "heresy";
@@ -5406,6 +5418,7 @@ function buildRosterFromNewRecruitRoot(root, fileName, importFormat = "json") {
     importFormat,
     detachmentParserVersion:4,
     points:pts ?? null,
+    trenchCosts,
     detachments:gameSystemKey === "40k" ? extractSelectedDetachments(root) : [],
     selectedDetachmentStratagems:gameSystemKey === "40k" ? extractSelectedDetachmentStratagems(root) : [],
     detachmentRules:gameSystemKey === "40k" ? extractSelectedDetachmentRules(root) : [],
@@ -6299,6 +6312,65 @@ function heresyRuleProfileToRule(profile) {
 }
 
 
+function newRecruitSelectionCostTotal(selection, acceptedNames = []) {
+  const accepted = new Set(acceptedNames.map(name => normalize(name)));
+  let total = 0;
+
+  function walk(node) {
+    if (!node || typeof node !== "object") return;
+    for (const cost of node.costs || []) {
+      if (!accepted.has(normalize(cost?.name || ""))) continue;
+      const value = Number(cost?.value);
+      if (Number.isFinite(value)) total += value;
+    }
+    for (const child of node.selections || []) walk(child);
+  }
+
+  walk(selection);
+  return total;
+}
+
+function isTrenchCrusadeUnitProfile(profile) {
+  if (!profile || normalize(profile.typeName || "") !== "unit") return false;
+  const labels = new Set(
+    (profile.characteristics || []).map(item => normalize(item?.name || ""))
+  );
+  return ["movement","ranged","melee","armour","base"].every(label => labels.has(label));
+}
+
+function isTrenchCrusadeBattlekitProfile(profile) {
+  return normalize(profile?.typeName || "") === "battlekit";
+}
+
+function trenchCrusadeAbilityProfileToRule(profile) {
+  const text = cleanRuleText(
+    characteristicValue((profile?.characteristics || [])[0])
+  ).trim();
+  if (!text) return null;
+  return {
+    name:String(profile?.name || "Ability").trim(),
+    text,
+    category:"Ability"
+  };
+}
+
+function collectTrenchCrusadeUnitSelections(selections = []) {
+  const found = [];
+
+  function walk(selection) {
+    if (!selection || typeof selection !== "object") return;
+    const directUnit = (selection.profiles || []).some(isTrenchCrusadeUnitProfile);
+    if (directUnit) {
+      found.push(selection);
+      return;
+    }
+    for (const child of selection.selections || []) walk(child);
+  }
+
+  for (const selection of selections || []) walk(selection);
+  return found;
+}
+
 function newRecruitSelectionPointTotal(selection) {
   let total = 0;
 
@@ -6418,8 +6490,10 @@ function oldWorldSpellProfileToSpell(profile) {
 function parseNewRecruitSelection(selection) {
   const allProfiles = collectProfiles(selection);
   const oldWorldRawModels = allProfiles.filter(isOldWorldModelProfile);
+  const trenchUnitProfiles = allProfiles.filter(isTrenchCrusadeUnitProfile);
   const unitProfiles = allProfiles.filter(profile =>
     profile?.typeName === "Unit" ||
+    isTrenchCrusadeUnitProfile(profile) ||
     isOldWorldModelProfile(profile) ||
     isHeresyUnitProfile(profile) ||
     isKillTeamOperativeProfile(profile) ||
@@ -6432,15 +6506,34 @@ function parseNewRecruitSelection(selection) {
         oldWorldRawModels.find(profile => normalize(profile.name) === normalize(selection.name)) ||
         oldWorldRawModels[0]
       )
-    : (
-        unitProfiles.find(profile => normalize(profile.name) === normalize(selection.name)) ||
-        unitProfiles[0]
-      );
+    : trenchUnitProfiles.length
+      ? (
+          trenchUnitProfiles.find(profile => normalize(profile.name) === normalize(selection.name)) ||
+          trenchUnitProfiles[0]
+        )
+      : (
+          unitProfiles.find(profile => normalize(profile.name) === normalize(selection.name)) ||
+          unitProfiles[0]
+        );
 
+  const trenchCrusadeProfile = isTrenchCrusadeUnitProfile(primaryUnitProfile);
   const oldWorldProfile = isOldWorldModelProfile(primaryUnitProfile);
   const heresyProfile = isHeresyUnitProfile(primaryUnitProfile);
   const killTeamProfile = isKillTeamOperativeProfile(primaryUnitProfile);
   const legionsImperialisProfile = isLegionsImperialisDetachmentProfile(primaryUnitProfile);
+
+  const trenchBattlekitProfiles = trenchCrusadeProfile
+    ? allProfiles
+        .filter(profile => isTrenchCrusadeBattlekitProfile(profile) && !profile.hidden)
+        .map(profileToDisplay)
+    : [];
+
+  const trenchAbilityProfiles = trenchCrusadeProfile
+    ? allProfiles
+        .filter(profile => normalize(profile?.typeName || "") === "ability" && !profile.hidden)
+        .map(trenchCrusadeAbilityProfileToRule)
+        .filter(Boolean)
+    : [];
 
   const oldWorldModelProfiles = oldWorldProfile
     ? oldWorldRawModels.map(profile => oldWorldProfileToDisplay(profile, selection.name || "Model"))
@@ -6510,6 +6603,8 @@ function parseNewRecruitSelection(selection) {
 
   const system = legionsImperialisProfile
     ? "legions-imperialis"
+    : trenchCrusadeProfile
+      ? "trench-crusade"
     : killTeamProfile
       ? "kill-team"
       : oldWorldProfile
@@ -6576,6 +6671,7 @@ function parseNewRecruitSelection(selection) {
   const abilities = dedupeBy(
     [
       ...standardAbilityProfiles,
+      ...trenchAbilityProfiles,
       ...aosAbilityProfiles,
       ...oldWorldProfileRules,
       ...heresyProfileRules,
@@ -6591,6 +6687,13 @@ function parseNewRecruitSelection(selection) {
     ? newRecruitSelectionPointTotal(selection)
     : directPts;
   if (pts != null && Number(pts) !== 0) stats.push({label:"Pts", value:String(pts)});
+
+  if (system === "trench-crusade") {
+    const ducats = newRecruitSelectionCostTotal(selection, ["Ducats"]);
+    const glory = newRecruitSelectionCostTotal(selection, ["Glory Points"]);
+    if (ducats) stats.push({label:"Ducats", value:String(ducats)});
+    if (glory) stats.push({label:"Glory", value:String(glory)});
+  }
 
   const name = selection.name || primaryUnitProfile.name || "Unit";
   const categories = dedupeBy(
@@ -6620,6 +6723,7 @@ function parseNewRecruitSelection(selection) {
     stats,
     rules:abilities,
     profiles:weapons,
+    trenchBattlekitProfiles,
     oldWorldModelProfiles,
     oldWorldUnitProfiles,
     oldWorldSpells,
@@ -6633,6 +6737,7 @@ function parseNewRecruitSelection(selection) {
       name,
       primaryUnitProfile.name,
       weapons.map(weapon => weapon.name),
+      trenchBattlekitProfiles.map(item => item.name),
       oldWorldSpells.map(spell => spell.name),
       abilities.map(ability => ability.name),
       categories
