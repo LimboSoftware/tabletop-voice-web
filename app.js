@@ -973,7 +973,8 @@ function inferRosterGameSystem(roster) {
   if (
     metadata.includes("warhammer the old world") ||
     metadata.includes("warhammer old world") ||
-    metadata.includes("the old world")
+    metadata.includes("the old world") ||
+    metadata.includes("sys 31d1 bf57 53ea ad55")
   ) return "old-world";
   if (
     metadata.includes("kill team") ||
@@ -5428,7 +5429,8 @@ function detectNewRecruitGameSystem(root, units = []) {
   if (
     systemName.includes("warhammer the old world") ||
     systemName.includes("warhammer old world") ||
-    systemName.includes("the old world")
+    systemName.includes("the old world") ||
+    systemName.includes("sys 31d1 bf57 53ea ad55")
   ) return "old-world";
   if (
     systemName.includes("kill team") ||
