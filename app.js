@@ -5361,6 +5361,10 @@ function buildRosterFromNewRecruitRoot(root, fileName, importFormat = "json") {
 
   uniqueUnits.forEach(unit => {
     if (unit?.system === "opr") unit.gameSystemKey = gameSystemKey;
+    if (gameSystemKey === "old-world") {
+      unit.system = "old-world";
+      unit.gameSystemKey = "old-world";
+    }
     if (gameSystemKey === "heresy") {
       unit.system = "heresy";
       unit.gameSystemKey = "heresy";
@@ -6292,23 +6296,147 @@ function newRecruitSelectionPointTotal(selection) {
   return total;
 }
 
+function isOldWorldModelProfile(profile) {
+  if (!profile || typeof profile !== "object") return false;
+  if (normalize(profile.typeName || "") !== "model") return false;
+
+  const labels = new Set(
+    (profile.characteristics || []).map(item => normalize(item?.name || ""))
+  );
+  return ["m","ws","bs","s","t","w","i","a","ld"].every(label => labels.has(label));
+}
+
+function isOldWorldUnitMetaProfile(profile) {
+  if (!profile || normalize(profile.typeName || "") !== "unit") return false;
+  const labels = new Set(
+    (profile.characteristics || []).map(item => normalize(item?.name || ""))
+  );
+  return labels.has("troop type") || labels.has("unit size");
+}
+
+function oldWorldProfileToDisplay(profile, fallbackName = "Profile") {
+  return {
+    name:String(profile?.name || fallbackName).trim(),
+    type:String(profile?.typeName || "").trim(),
+    values:(profile?.characteristics || []).map(characteristic => ({
+      label:String(characteristic?.name || "").trim(),
+      value:characteristicValue(characteristic)
+    })).filter(item => item.label && item.value !== "")
+  };
+}
+
+function isOldWorldRuleProfile(profile) {
+  if (!profile || profile.hidden) return false;
+  const type = normalize(profile.typeName || "");
+  if (["unit","model","weapon","spell","base","ranged weapon","ranged weapons","melee weapon","melee weapons","weapons"].includes(type)) {
+    return false;
+  }
+  return (profile.characteristics || []).some(item =>
+    cleanRuleText(characteristicValue(item)).trim()
+  );
+}
+
+function oldWorldRuleProfileToRule(profile) {
+  const fields = (profile?.characteristics || [])
+    .map(item => ({
+      label:String(item?.name || "").trim(),
+      value:cleanRuleText(characteristicValue(item)).trim()
+    }))
+    .filter(item => item.value);
+
+  if (!fields.length) return null;
+
+  const text = fields.map(item =>
+    item.label && normalize(item.label) !== normalize(profile?.name || "")
+      ? item.label + ": " + item.value
+      : item.value
+  ).join("\n\n");
+
+  return {
+    name:String(profile?.name || profile?.typeName || "Rule").trim(),
+    text,
+    category:String(profile?.typeName || "Rule").trim()
+  };
+}
+
+function oldWorldSpellProfileToSpell(profile) {
+  const fields = (profile?.characteristics || [])
+    .map(item => ({
+      label:String(item?.name || "").trim(),
+      key:normalize(item?.name || ""),
+      value:cleanRuleText(characteristicValue(item)).trim()
+    }))
+    .filter(item => item.value);
+
+  const get = (...keys) => {
+    for (const key of keys) {
+      const found = fields.find(field => field.key === normalize(key));
+      if (found?.value) return found.value;
+    }
+    return "";
+  };
+
+  const reserved = new Set(["number","type","casting value","cast value","range"]);
+  const description = fields
+    .filter(field => !reserved.has(field.key))
+    .map(field => field.value)
+    .filter(Boolean)
+    .join("\n\n");
+
+  return {
+    name:String(profile?.name || "Spell").trim(),
+    number:get("Number"),
+    spellType:get("Type"),
+    castingValue:get("Casting Value","Cast Value"),
+    range:get("Range"),
+    description
+  };
+}
+
 function parseNewRecruitSelection(selection) {
   const allProfiles = collectProfiles(selection);
+  const oldWorldRawModels = allProfiles.filter(isOldWorldModelProfile);
   const unitProfiles = allProfiles.filter(profile =>
     profile?.typeName === "Unit" ||
+    isOldWorldModelProfile(profile) ||
     isHeresyUnitProfile(profile) ||
     isKillTeamOperativeProfile(profile) ||
     isLegionsImperialisDetachmentProfile(profile)
   );
   if (!unitProfiles.length) return null;
 
-  const primaryUnitProfile =
-    unitProfiles.find(profile => normalize(profile.name) === normalize(selection.name)) ||
-    unitProfiles[0];
+  const primaryUnitProfile = oldWorldRawModels.length
+    ? (
+        oldWorldRawModels.find(profile => normalize(profile.name) === normalize(selection.name)) ||
+        oldWorldRawModels[0]
+      )
+    : (
+        unitProfiles.find(profile => normalize(profile.name) === normalize(selection.name)) ||
+        unitProfiles[0]
+      );
 
+  const oldWorldProfile = isOldWorldModelProfile(primaryUnitProfile);
   const heresyProfile = isHeresyUnitProfile(primaryUnitProfile);
   const killTeamProfile = isKillTeamOperativeProfile(primaryUnitProfile);
   const legionsImperialisProfile = isLegionsImperialisDetachmentProfile(primaryUnitProfile);
+
+  const oldWorldModelProfiles = oldWorldProfile
+    ? oldWorldRawModels.map(profile => oldWorldProfileToDisplay(profile, selection.name || "Model"))
+    : [];
+
+  const oldWorldUnitProfiles = oldWorldProfile
+    ? allProfiles
+        .filter(isOldWorldUnitMetaProfile)
+        .map(profile => oldWorldProfileToDisplay(profile, selection.name || "Unit"))
+    : [];
+
+  const oldWorldSpells = oldWorldProfile
+    ? allProfiles
+        .filter(profile => normalize(profile?.typeName || "") === "spell" && !profile.hidden)
+        .map(oldWorldSpellProfileToSpell)
+        .filter(spell => spell.name)
+    : [];
+
   const heresyComponents = unitProfiles
     .filter(profile => /^titan\s/i.test(String(profile?.typeName || "")))
     .map(profile => ({
@@ -6362,8 +6490,10 @@ function parseNewRecruitSelection(selection) {
     ? "legions-imperialis"
     : killTeamProfile
       ? "kill-team"
+      : oldWorldProfile
+        ? "old-world"
       : heresyProfile
-      ? "heresy"
+        ? "heresy"
       : aosProfile
         ? "aos"
         : grimdarkProfile
@@ -6392,6 +6522,13 @@ function parseNewRecruitSelection(selection) {
         .map(aosAbilityProfileToRule)
     : [];
 
+  const oldWorldProfileRules = system === "old-world"
+    ? allProfiles
+        .filter(isOldWorldRuleProfile)
+        .map(oldWorldRuleProfileToRule)
+        .filter(Boolean)
+    : [];
+
   const heresyProfileRules = system === "heresy"
     ? allProfiles
         .filter(isHeresyRuleProfile)
@@ -6415,12 +6552,20 @@ function parseNewRecruitSelection(selection) {
 
   const rules = collectRules(selection);
   const abilities = dedupeBy(
-    [...standardAbilityProfiles, ...aosAbilityProfiles, ...heresyProfileRules, ...killTeamProfileRules, ...legionsImperialisProfileRules, ...rules],
+    [
+      ...standardAbilityProfiles,
+      ...aosAbilityProfiles,
+      ...oldWorldProfileRules,
+      ...heresyProfileRules,
+      ...killTeamProfileRules,
+      ...legionsImperialisProfileRules,
+      ...rules
+    ],
     rule => normalize((rule.category || "") + "|" + rule.name + "|" + rule.text)
   );
 
   const directPts = (selection.costs || []).find(cost => isPointsCostName(cost.name))?.value;
-  const pts = (system === "heresy" || system === "legions-imperialis")
+  const pts = (system === "heresy" || system === "legions-imperialis" || system === "old-world")
     ? newRecruitSelectionPointTotal(selection)
     : directPts;
   if (pts != null && Number(pts) !== 0) stats.push({label:"Pts", value:String(pts)});
@@ -6453,6 +6598,9 @@ function parseNewRecruitSelection(selection) {
     stats,
     rules:abilities,
     profiles:weapons,
+    oldWorldModelProfiles,
+    oldWorldUnitProfiles,
+    oldWorldSpells,
     heresyComponents,
     heresyModelProfiles,
     legionsImperialisProfiles,
@@ -6463,6 +6611,7 @@ function parseNewRecruitSelection(selection) {
       name,
       primaryUnitProfile.name,
       weapons.map(weapon => weapon.name),
+      oldWorldSpells.map(spell => spell.name),
       abilities.map(ability => ability.name),
       categories
     ].flat(3).join(" "))
@@ -6485,7 +6634,12 @@ function isWeaponProfile(profile) {
     const labels = new Set(
       (profile.characteristics || []).map(item => normalize(item?.name || ""))
     );
-    return labels.has("attacks") || labels.has("a") || labels.has("range");
+    return (
+      labels.has("attacks") ||
+      labels.has("a") ||
+      labels.has("range") ||
+      (labels.has("r") && (labels.has("s") || labels.has("ap")))
+    );
   }
 
   return false;
