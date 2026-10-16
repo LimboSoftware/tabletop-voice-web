@@ -6836,3 +6836,25 @@ body.game-dnd .stat-grid {
     min-width: 0;
   }
 }
+
+
+/* Trench Crusade */
+.trench-crusade-profile-table .trench-crusade-profile-text {
+  min-width: 11rem;
+  white-space: normal;
+  line-height: 1.4;
+}
+
+.trench-crusade-cost-grid {
+  margin-top: .25rem;
+}
+
+body.game-trench-crusade .roster-unit-points {
+  white-space: nowrap;
+}
+
+@media (max-width: 720px) {
+  .trench-crusade-profile-table .trench-crusade-profile-text {
+    min-width: 0;
+  }
+}
