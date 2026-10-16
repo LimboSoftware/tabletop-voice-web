@@ -10034,7 +10034,9 @@ function renderDetail(unit) {
       ? ["move","sv","caf","morale","w"]
       : unit.system === "kill-team"
       ? ["apl","move","save","wounds"]
-      : unit.system === "heresy"
+      : unit.system === "old-world"
+      ? ["m","ws","bs","s","t","w","i","a","ld"]
+    : unit.system === "heresy"
       ? [
           "m","ws","bs","s","t","w","i","a","ld","cl","wp","in","sav","inv",
           "front armour","side armour","rear armour","front","rear",
@@ -10049,6 +10051,13 @@ function renderDetail(unit) {
     displayStats = (unit.stats || [])
       .filter(stat => !/crusade|blackstone|commendation|logistics|enhancement|detachment|pts|points/i.test(stat.label))
       .slice(0, 7);
+  }
+
+  if (
+    unit.system === "old-world" &&
+    unit.oldWorldModelProfiles?.length > 1
+  ) {
+    displayStats = [];
   }
 
   if (
@@ -10086,6 +10095,16 @@ function renderDetail(unit) {
     sections.push(renderNecromundaCampaignSection(unit));
   }
 
+  if (unit.system === "old-world") {
+    sections.push(renderOldWorldUnitInfoSection(unit));
+    if (unit.oldWorldModelProfiles?.length > 1) {
+      sections.push(renderOldWorldModelProfileSection(unit.oldWorldModelProfiles));
+    }
+    if (unit.oldWorldSpells?.length) {
+      sections.push(renderOldWorldSpellSection(unit.oldWorldSpells));
+    }
+  }
+
   if (unit.system === "legions-imperialis" && unit.legionsImperialisProfiles?.length > 1) {
     sections.push(renderLegionsImperialisProfileSection(unit.legionsImperialisProfiles));
   }
@@ -10119,6 +10138,8 @@ function renderDetail(unit) {
       if (ranged.length) sections.push(renderKillTeamWeaponSection(ranged, "Ranged weapons"));
       if (melee.length) sections.push(renderKillTeamWeaponSection(melee, "Melee weapons"));
       if (unknown.length) sections.push(renderKillTeamWeaponSection(unknown, "Weapons"));
+    } else if (unit.system === "old-world") {
+      sections.push(renderOldWorldWeaponSection(unit.profiles, "Weapons"));
     } else if (unit.system === "heresy") {
       if (rangedWeapons.length) sections.push(renderHeresyWeaponSection(rangedWeapons, "Ranged weapons", "ranged"));
       if (meleeWeapons.length) sections.push(renderHeresyWeaponSection(meleeWeapons, "Melee weapons", "melee"));
@@ -10156,6 +10177,8 @@ function renderDetail(unit) {
             ? renderOprAbilitySection(unit.rules, "Abilities, actions & equipment")
             : unit.system === "heresy"
             ? renderOprAbilitySection(unit.rules, "Wargear, reactions & rules")
+            : unit.system === "old-world"
+              ? renderOprAbilitySection(unit.rules, "Rules, items & abilities")
             : unit.system === "aos"
           ? renderAosAbilitySection(unit.rules)
           : renderAbilitySection(unit.rules)
@@ -10576,6 +10599,152 @@ function renderKillTeamWeaponSection(profiles, title = "Weapons") {
     '<div class="weapon-table-wrap"><table class="weapon-table compact-weapon-table kill-team-weapon-table">' +
     '<thead><tr><th class="weapon-name-column">Weapon</th>' + head + '</tr></thead>' +
     '<tbody>' + body + '</tbody></table></div></section>';
+}
+
+function renderOldWorldUnitInfoSection(unit) {
+  const profile = unit?.oldWorldUnitProfiles?.[0];
+  const values = new Map(
+    (profile?.values || []).map(item => [normalize(item.label), item.value ?? ""])
+  );
+  const rows = [
+    ["Troop Type", values.get("troop type") || ""],
+    ["Unit Size", values.get("unit size") || ""],
+    ["Points", (unit?.stats || []).find(stat => normalize(stat.label) === "pts")?.value || ""]
+  ].filter(([,value]) => value !== "" && value != null);
+
+  if (!rows.length) return "";
+
+  return `
+    <section class="detail-section old-world-unit-info">
+      <div class="section-heading-row"><h3>Unit</h3></div>
+      <div class="stat-grid old-world-unit-meta">
+        ${rows.map(([label,value]) => `
+          <div class="stat">
+            <span>${escapeHtml(label)}</span>
+            <strong>${escapeHtml(value)}</strong>
+          </div>`).join("")}
+      </div>
+    </section>`;
+}
+
+function renderOldWorldModelProfileSection(profiles = []) {
+  if (profiles.length < 2) return "";
+
+  const columns = ["M","WS","BS","S","T","W","I","A","Ld"];
+  const rows = profiles.map(profile => {
+    const values = new Map(
+      (profile.values || []).map(item => [normalize(item.label), item.value ?? ""])
+    );
+    return {
+      name:profile.name || "Model",
+      values:columns.map(column => values.get(normalize(column)) || "—")
+    };
+  });
+
+  return `
+    <section class="detail-section weapon-section old-world-profile-section">
+      <div class="section-heading-row">
+        <h3>Model profiles</h3>
+        <span class="section-count">${rows.length}</span>
+      </div>
+      <div class="weapon-table-wrap">
+        <table class="weapon-table compact-weapon-table old-world-profile-table">
+          <thead>
+            <tr>
+              <th class="weapon-name-column">Model</th>
+              ${columns.map(column => `<th>${escapeHtml(column)}</th>`).join("")}
+            </tr>
+          </thead>
+          <tbody>
+            ${rows.map(row => `
+              <tr class="weapon-row weapon-stat-row">
+                <td class="weapon-name"><strong>${escapeHtml(row.name)}</strong></td>
+                ${row.values.map((value,index) => `
+                  <td data-label="${escapeHtml(columns[index])}" class="weapon-number">${escapeHtml(value)}</td>
+                `).join("")}
+              </tr>`).join("")}
+          </tbody>
+        </table>
+      </div>
+    </section>`;
+}
+
+function renderOldWorldWeaponSection(profiles = [], title = "Weapons") {
+  const columns = ["R","S","AP","Special Rules","Notes"];
+  const rows = (profiles || []).map(profile => {
+    const values = new Map(
+      (profile.values || []).map(item => [normalize(item.label), item.value ?? ""])
+    );
+    return {
+      name:profile.name || "Weapon",
+      quantity:Number.isFinite(Number(profile.quantity)) ? Math.max(1, Number(profile.quantity)) : null,
+      values:columns.map(column => {
+        const value = values.get(normalize(column));
+        return value !== undefined && value !== "" ? value : "—";
+      })
+    };
+  });
+
+  return `
+    <section class="detail-section weapon-section old-world-weapon-section">
+      <div class="section-heading-row">
+        <h3>${escapeHtml(title)}</h3>
+        <span class="section-count">${rows.length}</span>
+      </div>
+      <div class="weapon-table-wrap">
+        <table class="weapon-table compact-weapon-table old-world-weapon-table">
+          <thead>
+            <tr>
+              <th class="weapon-name-column">Weapon</th>
+              ${columns.map(column => `<th>${escapeHtml(column)}</th>`).join("")}
+            </tr>
+          </thead>
+          <tbody>
+            ${rows.map(row => `
+              <tr class="weapon-row weapon-stat-row">
+                <td class="weapon-name">
+                  <div class="weapon-title-line">
+                    ${row.quantity != null ? `<span class="weapon-quantity">${row.quantity}×</span>` : ""}
+                    <strong>${escapeHtml(row.name)}</strong>
+                  </div>
+                </td>
+                ${row.values.map((value,index) => `
+                  <td data-label="${escapeHtml(columns[index])}" class="${index >= 3 ? "old-world-weapon-text" : "weapon-number"}">${escapeHtml(value)}</td>
+                `).join("")}
+              </tr>`).join("")}
+          </tbody>
+        </table>
+      </div>
+    </section>`;
+}
+
+function renderOldWorldSpellSection(spells = []) {
+  if (!spells.length) return "";
+
+  return `
+    <section class="detail-section ability-section old-world-spell-section">
+      <div class="section-heading-row">
+        <h3>Spells</h3>
+        <span class="section-count">${spells.length}</span>
+      </div>
+      <div class="ability-list">
+        ${spells.map(spell => {
+          const meta = [
+            spell.number ? "#" + spell.number : "",
+            spell.spellType || "",
+            spell.castingValue ? "Cast " + spell.castingValue : "",
+            spell.range ? "Range " + spell.range : ""
+          ].filter(Boolean);
+
+          return `
+            <article class="ability-card unique-rule-card old-world-spell-card">
+              <h4>${escapeHtml(spell.name || "Spell")}</h4>
+              ${meta.length ? `<div class="dnd-action-meta">${meta.map(item => `<span>${escapeHtml(item)}</span>`).join("")}</div>` : ""}
+              ${spell.description ? `<div class="ability-text unique-rule-text">${formatRuleText(spell.description)}</div>` : ""}
+            </article>`;
+        }).join("")}
+      </div>
+    </section>`;
 }
 
 function renderHeresyModelProfileSection(profiles = []) {
