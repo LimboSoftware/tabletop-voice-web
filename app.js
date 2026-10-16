@@ -8271,6 +8271,11 @@ function renderDataSummary() {
         <small>${escapeHtml(rosterSourceSummary(roster))} · ${roster.units?.length || 0} ${escapeHtml(importedRosterUnitNoun())}${
           roster.source === "gyrinx" && roster.necromunda?.rating != null
             ? " · Rating " + escapeHtml(roster.necromunda.rating)
+            : roster.gameSystemKey === "trench-crusade" && roster.trenchCosts
+              ? [
+                  roster.trenchCosts.ducats ? " · " + escapeHtml(roster.trenchCosts.ducats) + " Ducats" : "",
+                  roster.trenchCosts.glory ? " · " + escapeHtml(roster.trenchCosts.glory) + " Glory" : ""
+                ].join("")
             : roster.points != null
               ? " · " + escapeHtml(roster.points) + " pts"
               : ""
@@ -8695,6 +8700,14 @@ function getUnitBrowserGroup(unit) {
   if (unit?.system === "kill-team") {
     if (categories.has("leader")) return "Leaders";
     return "Operatives";
+  }
+
+  if (unit?.system === "trench-crusade") {
+    if (categories.has("leader")) return "Leaders";
+    if (categories.has("elite")) return "Elites";
+    if (categories.has("mercenary")) return "Mercenaries";
+    if (categories.has("troop")) return "Troops";
+    return "Other Models";
   }
 
   if (unit?.system === "necromunda") {
@@ -10172,6 +10185,8 @@ function renderDetail(unit) {
       ? ["move","sv","caf","morale","w"]
       : unit.system === "kill-team"
       ? ["apl","move","save","wounds"]
+      : unit.system === "trench-crusade"
+        ? ["movement","ranged","melee","armour","base"]
       : unit.system === "old-world"
       ? ["m","ws","bs","s","t","w","i","a","ld"]
     : unit.system === "heresy"
@@ -10233,6 +10248,13 @@ function renderDetail(unit) {
     sections.push(renderNecromundaCampaignSection(unit));
   }
 
+  if (unit.system === "trench-crusade") {
+    sections.push(renderTrenchCrusadeCostSection(unit));
+    if (unit.trenchBattlekitProfiles?.length) {
+      sections.push(renderTrenchCrusadeProfileTable(unit.trenchBattlekitProfiles, "Battlekit"));
+    }
+  }
+
   if (unit.system === "old-world") {
     sections.push(renderOldWorldUnitInfoSection(unit));
     if (unit.oldWorldModelProfiles?.length > 1) {
@@ -10276,6 +10298,8 @@ function renderDetail(unit) {
       if (ranged.length) sections.push(renderKillTeamWeaponSection(ranged, "Ranged weapons"));
       if (melee.length) sections.push(renderKillTeamWeaponSection(melee, "Melee weapons"));
       if (unknown.length) sections.push(renderKillTeamWeaponSection(unknown, "Weapons"));
+    } else if (unit.system === "trench-crusade") {
+      sections.push(renderTrenchCrusadeProfileTable(unit.profiles, "Weapons"));
     } else if (unit.system === "old-world") {
       sections.push(renderOldWorldWeaponSection(unit.profiles, "Weapons"));
     } else if (unit.system === "heresy") {
@@ -10315,6 +10339,8 @@ function renderDetail(unit) {
             ? renderOprAbilitySection(unit.rules, "Abilities, actions & equipment")
             : unit.system === "heresy"
             ? renderOprAbilitySection(unit.rules, "Wargear, reactions & rules")
+            : unit.system === "trench-crusade"
+              ? renderOprAbilitySection(unit.rules, "Abilities & rules")
             : unit.system === "old-world"
               ? renderOprAbilitySection(unit.rules, "Rules, items & abilities")
             : unit.system === "aos"
@@ -10737,6 +10763,80 @@ function renderKillTeamWeaponSection(profiles, title = "Weapons") {
     '<div class="weapon-table-wrap"><table class="weapon-table compact-weapon-table kill-team-weapon-table">' +
     '<thead><tr><th class="weapon-name-column">Weapon</th>' + head + '</tr></thead>' +
     '<tbody>' + body + '</tbody></table></div></section>';
+}
+
+function renderTrenchCrusadeProfileTable(profiles = [], title = "Battlekit") {
+  if (!profiles.length) return "";
+
+  const columns = ["Type","Range","Keywords","Rules"];
+  const rows = profiles.map(profile => {
+    const values = new Map(
+      (profile.values || []).map(item => [normalize(item.label), item.value ?? ""])
+    );
+    return {
+      name:profile.name || "Item",
+      quantity:Number.isFinite(Number(profile.quantity)) ? Math.max(1, Number(profile.quantity)) : null,
+      values:columns.map(column => {
+        const value = values.get(normalize(column));
+        return value !== undefined && value !== "" ? value : "—";
+      })
+    };
+  });
+
+  return `
+    <section class="detail-section weapon-section trench-crusade-profile-section">
+      <div class="section-heading-row">
+        <h3>${escapeHtml(title)}</h3>
+        <span class="section-count">${rows.length}</span>
+      </div>
+      <div class="weapon-table-wrap">
+        <table class="weapon-table compact-weapon-table trench-crusade-profile-table">
+          <thead>
+            <tr>
+              <th class="weapon-name-column">Name</th>
+              ${columns.map(column => `<th>${escapeHtml(column)}</th>`).join("")}
+            </tr>
+          </thead>
+          <tbody>
+            ${rows.map(row => `
+              <tr class="weapon-row weapon-stat-row">
+                <td class="weapon-name">
+                  <div class="weapon-title-line">
+                    ${row.quantity != null ? `<span class="weapon-quantity">${row.quantity}×</span>` : ""}
+                    <strong>${escapeHtml(row.name)}</strong>
+                  </div>
+                </td>
+                ${row.values.map((value,index) => `
+                  <td data-label="${escapeHtml(columns[index])}" class="${index >= 2 ? "trench-crusade-profile-text" : "weapon-number"}">${formatRuleText(String(value))}</td>
+                `).join("")}
+              </tr>`).join("")}
+          </tbody>
+        </table>
+      </div>
+    </section>`;
+}
+
+function renderTrenchCrusadeCostSection(unit) {
+  const ducats = (unit?.stats || []).find(stat => normalize(stat.label) === "ducats")?.value;
+  const glory = (unit?.stats || []).find(stat => normalize(stat.label) === "glory")?.value;
+  const rows = [
+    ["Ducats", ducats],
+    ["Glory", glory]
+  ].filter(([,value]) => value !== undefined && value !== null && value !== "");
+
+  if (!rows.length) return "";
+
+  return `
+    <section class="detail-section trench-crusade-cost-section">
+      <div class="section-heading-row"><h3>Cost</h3></div>
+      <div class="stat-grid trench-crusade-cost-grid">
+        ${rows.map(([label,value]) => `
+          <div class="stat">
+            <span>${escapeHtml(label)}</span>
+            <strong>${escapeHtml(value)}</strong>
+          </div>`).join("")}
+      </div>
+    </section>`;
 }
 
 function renderOldWorldUnitInfoSection(unit) {
@@ -12981,6 +13081,8 @@ function renderQuickLists() {
     ? ["Heavy Ships","Medium Ships","Light Ships","Ships","Squadrons"]
     : isKillTeamMode()
       ? ["Leaders","Operatives"]
+      : isTrenchCrusadeMode()
+        ? ["Leaders","Elites","Troops","Mercenaries","Other Models"]
       : isNecromundaMode()
         ? ["Leaders","Champions","Gangers","Juves & Prospects","Brutes","Hangers-on","Vehicles","Pets","Fighters"]
         : isLegionsImperialisMode()
@@ -13064,6 +13166,18 @@ function renderQuickLists() {
         <div class="roster-unit-grid">
           ${entries.map(entry => {
             const pts = (entry.unit.stats || []).find(stat => normalize(stat.label) === "pts")?.value;
+            const ducats = entry.unit.system === "trench-crusade"
+              ? (entry.unit.stats || []).find(stat => normalize(stat.label) === "ducats")?.value
+              : null;
+            const glory = entry.unit.system === "trench-crusade"
+              ? (entry.unit.stats || []).find(stat => normalize(stat.label) === "glory")?.value
+              : null;
+            const trenchCost = entry.unit.system === "trench-crusade"
+              ? [
+                  ducats != null ? ducats + " Ducats" : "",
+                  glory != null ? glory + " Glory" : ""
+                ].filter(Boolean).join(" · ")
+              : "";
             const rating = entry.unit.system === "necromunda"
               ? (entry.unit.stats || []).find(stat => normalize(stat.label) === "rating")?.value
               : null;
@@ -13075,6 +13189,8 @@ function renderQuickLists() {
                 </span>
                 ${rating != null
                   ? `<small class="roster-unit-points">${escapeHtml(rating)}</small>`
+                  : trenchCost
+                    ? `<small class="roster-unit-points">${escapeHtml(trenchCost)}</small>`
                   : pts != null
                     ? `<small class="roster-unit-points">${escapeHtml(pts)} pts</small>`
                     : ""}
@@ -13092,6 +13208,8 @@ function renderQuickLists() {
           ? "No operatives were found in this kill team."
           : isNecromundaMode()
             ? "No fighters were found in this gang."
+            : isTrenchCrusadeMode()
+              ? "No models were found in this warband."
             : isLegionsImperialisMode()
               ? "No detachments were found in this army."
               : "No units were found in this data source.") +
